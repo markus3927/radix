@@ -40,6 +40,26 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 11. **NF ↔ HF pro Zeile:** Hat eine Kachel beide Blöcke, steht in der Vorschau «→ HF» bzw. «→ NF». So kann dieselbe Nummer einmal
     als NF und einmal als HF laufen. Auch während dem Lauf, aber nur für Programme nach dem laufenden.
 
+12. **Ablauf ab 0.4.4:** Tag im Kontrollblatt vorbereiten → «Heute aus Kontrollblatt» (oder Doppelklicks kommen von selbst in
+    die Liste) → **Start** oder **Startzeit + Start** von Hand. RADIX startet nie mehr selbst.
+    **Leeren** markiert alles, was heute schon im Kontrollblatt steht, als erledigt: «Heute aus Kontrollblatt» bringt danach
+    nur noch, was nach dem Leeren eingetragen wurde (gilt auch nach dem Neuladen).
+13. Karten stehen mittig (440–600 px breit, bei 1920 px drei nebeneinander); die Leiste mit den Generator-Nummern bleibt beim
+    Scrollen immer oben.
+
+14. **Zeitmarke** in der Programmliste: eine Zeile `um 06:00` (auch `ab 6:00`, `06:00`). Was darunter steht, startet erst zu dieser
+    Uhrzeit (am Abend geplant = am nächsten Morgen). Ist die Liste vorher fertig, wartet RADIX mit ausgeschalteten Ausgängen
+    (gelb). Läuft um diese Zeit noch ein Programm davor, wird es beendet und es geht pünktlich nach Zeitplan weiter.
+    «⏭ Nächstes Programm» während dem Warten startet sofort. Mehrere Marken pro Liste möglich.
+15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
+    Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
+
+## Stand Version 0.4.5
+- Zeitmarken, Nummer mit ◀ ▶, Test beenden
+
+## Stand Version 0.4.4
+- Doppelklick im Kontrollblatt startet nicht mehr selbst (Start von Hand), Leeren = Vergangenes erledigt, Layout mittig, Leiste immer oben
+
 ## Stand Version 0.4.3
 - Neu: Leeren, NF/HF pro Zeile umstellen
 

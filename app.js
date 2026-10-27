@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.4.3';
+const VERSION = '0.4.5';
 const $ = (s, el = document) => el.querySelector(s);
 const K = window.Kern;
 const SPEICHER = 'radix-generatoren-v2';   // { zuordnung: [Nummer je Anschluss], gen: { Nummer: Einstellungen } }
@@ -232,10 +232,30 @@ class Leitung {
 // ------------------------------------------------------------------ Programmliste -> Ablauf
 const NICHT_UNTERSTUETZT = /fehlt|Keine|nicht unterstützt|nicht gefunden|Unbekannter/;
 
+/** Zeitmarke «um 06:00» (auch «ab 6:00», «06:00», «um 6.00 Uhr»): die Programme darunter starten erst zu dieser Uhrzeit. */
+function deuteZeitmarke(zeile) {
+  const t = K.sauber(zeile).trim();
+  const m = t.match(/^(?:(?:um|ab)\s*(\d{1,2})[:.](\d{2})|(\d{1,2}):(\d{2}))\s*(?:uhr)?$/i);
+  if (!m) return null;
+  const h = +(m[1] ?? m[3]), min = +(m[2] ?? m[4]);
+  return h < 24 && min < 60 ? `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}` : null;
+}
+
+/** Nächster Zeitpunkt (ms) mit dieser Uhrzeit nach «ab». */
+function naechsteUhrzeit(hhmm, ab) {
+  const [h, m] = hhmm.split(':').map(Number);
+  const d = new Date(ab); d.setHours(h, m, 0, 0);
+  if (d.getTime() <= ab) d.setDate(d.getDate() + 1);
+  return d.getTime();
+}
+const fmtUhr = (ms) => new Date(ms).toLocaleString('de-CH', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+
 /** Programmliste einer Karte vorbereiten: Programme deuten, Presets zuordnen, gemeinsamen Ablauf bauen. */
 function bereiteListeVor(text, standardPreset) {
   const items = [];
   String(text || '').split('\n').forEach((zeile, zeilenNr) => {
+    const um = deuteZeitmarke(zeile);
+    if (um) { items.push({ zeile: zeile.trim(), zeilenNr, r: { art: 'zeit', um }, fehler: '' }); return; }
     const r = K.deuteListenZeile(zeile, daten.finder);
     if (r) items.push({ zeile: zeile.trim(), zeilenNr, r, fehler: r.art === 'fehler' ? r.text : '' });
   });
@@ -249,6 +269,13 @@ function bereiteListeVor(text, standardPreset) {
 
   const einst = [], einstIndex = new Map(), schritte = [], warnungen = [];
   items.forEach((it, pi) => {
+    if (it.r.art === 'zeit') {                                   // Zeitmarke: wartender Schritt ohne feste Dauer
+      it.code = '⏰'; it.name = `Start um ${it.r.um}`; it.sek = 0; it.warnungen = [];
+      it.start = schritte.length;
+      schritte.push({ sek: 0, pause: true, marke: true, um: it.r.um, ei: null, pi });
+      it.ende = schritte.length;
+      return;
+    }
     const p = it.r.art === 'finder' ? it.r.programm : null;
     it.code = p ? p.code : it.r.art === 'zeile' ? 'Zeile' : '?';
     it.name = p ? p.name.replace(/^(pa|sm)\d{2}\s+/i, '') : it.r.art === 'zeile' ? it.r.zeile : it.zeile;
@@ -278,6 +305,7 @@ function bereiteListeVor(text, standardPreset) {
   for (const it of items) if (it.fehler) warnungen.push(`${it.code !== '?' ? it.code : it.zeile.slice(0, 30)}: ${it.fehler}`);
   if (!items.length) warnungen.push('Keine Programme: Programmliste ausfüllen');
   else if (!schritte.some(s => !s.pause) && !warnungen.length) warnungen.push('Keine abspielbaren Frequenzen');
+  else if (schritte.length && schritte[schritte.length - 1].marke) warnungen.push('Nach der letzten Zeitmarke steht kein Programm');
   const blockiert = warnungen.length > 0;
   return { items, einst, plan: { schritte, gesamtSek: schritte.reduce((a, s) => a + s.sek, 0) }, warnungen, blockiert };
 }
@@ -319,7 +347,7 @@ class Generator {
     // Übernahme aus Version 0.1/0.2: Preset + Frequenzzeile
     this.einst = { nr, liste: g.liste ?? g.zeile ?? '', standardPreset: g.standardPreset ?? g.preset ?? '', durchlaeufe: g.durchlaeufe ?? 1, startUm: g.startUm || '', auto: g.auto ?? true };
     this.uebernommen = g.uebernommen || null;                              // { blatt, datum, anzahl } – bereits übernommene Einträge der heutigen Zeile
-    this.autoStart = false;                                                 // Kontrollblatt-Programm wartet auf Start (z. B. NF/HF fehlt)
+    this.geleert = g.geleert || null;                                      // { blatt, datum, anzahl } – beim Leeren: was bis dahin in der Zeile stand, gilt als erledigt
     this.fortsetzen = g.lauf && g.lauf.liste === this.einst.liste ? g.lauf : null;   // gespeicherter Stand nach Neuladen
   }
   /** Felder der Karte mit den Einstellungen füllen. */
@@ -345,16 +373,19 @@ class Generator {
     if (this.lauf) { feld.value = alt; this.setzeStatus('Nummer erst nach dem Stopp ändern', 'fehler'); return; }
     const anderer = generatoren.find(g => g !== this && g.einst.nr === neu);
     if (anderer && anderer.lauf) { feld.value = alt; this.setzeStatus(`Generator ${neu} läuft gerade – dort zuerst stoppen`, 'fehler'); return; }
+    const imTest = [this.imTest, anderer && anderer.imTest];
     speichereAlle();                                  // Stand unter den bisherigen Nummern sichern
     this.ladeEinst(neu); this.zeigeEinst();
     this.log(`Nummer ${alt} → ${neu}`);
     if (anderer) { anderer.ladeEinst(alt); anderer.zeigeEinst(); anderer.log(`Nummer ${neu} → ${alt} (getauscht)`); anderer.setzeStatus(`Nummer getauscht: jetzt Generator ${alt} – mit «Testen» prüfen`, 'warnung'); }
     speichereAlle();
     this.setzeStatus(`Jetzt Generator ${neu}${anderer ? ` (getauscht mit ${alt})` : ''} – mit «Testen» prüfen`, 'warnung');
+    if (imTest[0]) this.teste();                       // im Test: Display zeigt gleich die neue Nummer
+    if (imTest[1]) anderer.teste();
   }
   daten() {
     const l = this.lauf;
-    return { ...this.einst, uebernommen: this.uebernommen, lauf: l && l.status !== 'fertig' ? { schritt: l.schritt, tImSchritt: l.tImSchritt, durchlauf: l.durchlauf, status: l.status, startUm: l.startUmMs, liste: l.listeText } : null };
+    return { ...this.einst, uebernommen: this.uebernommen, geleert: this.geleert, lauf: l && l.status !== 'fertig' ? { schritt: l.schritt, tImSchritt: l.tImSchritt, durchlauf: l.durchlauf, status: l.status, startUm: l.startUmMs, liste: l.listeText } : null };
   }
   log(text, art = '') {
     this.protokoll.push(`${jetzt()}  ${text}`);
@@ -370,6 +401,8 @@ class Generator {
     $('.chip', k).textContent = info.usbVendorId === 0x1a86 ? 'CH340' : info.usbVendorId === 0x10c4 ? 'CP210x' : 'USB';
     const nr = $('.nr', k);
     nr.onchange = () => this.wechsleNummer(nr.value.trim());
+    $('.nr-zurueck', k).onclick = () => { const n = parseInt(this.einst.nr, 10) || 1; if (n > 1) this.wechsleNummer(String(n - 1)); };
+    $('.nr-weiter', k).onclick = () => { const n = parseInt(this.einst.nr, 10) || 0; if (n < 99) this.wechsleNummer(String(n + 1)); };
     const li = $('.liste', k);
     let warte = null;
     li.oninput = () => { clearTimeout(warte); warte = setTimeout(() => this.setzeListe(li.value), 350); };
@@ -381,8 +414,8 @@ class Generator {
     const st = $('.start-um', k);
     st.onchange = () => { this.einst.startUm = st.value; speichereAlle(); };
     $('.btn-start', k).onclick = () => this.starte();
-    $('.btn-stop', k).onclick = () => this.stoppe('gestoppt');
-    $('.btn-testen', k).onclick = () => this.teste();
+    $('.btn-stop', k).onclick = () => { if (this.lauf) this.stoppe('gestoppt'); else if (this.imTest) this.beendeTest(); };
+    $('.btn-testen', k).onclick = () => this.imTest ? this.beendeTest() : this.teste();
     $('.btn-weiter', k).onclick = () => this.starte(this.fortsetzen);
     $('.btn-naechste-f', k).onclick = () => this.springe('frequenz');
     $('.btn-naechstes-p', k).onclick = () => this.springe('programm');
@@ -420,7 +453,14 @@ class Generator {
 
   // ---------------------------------------------------------------- Kontrollblatt
   blatt() { const nr = parseInt(this.einst.nr, 10); return daten.kontrolle && Number.isFinite(nr) ? daten.kontrolle.blaetter[String(nr)] || null : null; }
-  heute() { const b = this.blatt(); return b ? K.kontrolleHeute(b) : { eintraege: [], hinweis: '' }; }
+  /** Ganze heutige Zeile des Kontrollblatts (für die Kopplung). */
+  heuteAlle() { const b = this.blatt(); return b ? K.kontrolleHeute(b) : { eintraege: [], hinweis: '' }; }
+  /** Heutige Zeile ohne das, was beim letzten «Leeren» schon drin stand (erledigt). */
+  heute() {
+    const h = this.heuteAlle(), g = this.geleert;
+    if (g && g.blatt === parseInt(this.einst.nr, 10) && g.datum === K.datumText(new Date())) h.eintraege = h.eintraege.slice(Math.min(g.anzahl, h.eintraege.length));
+    return h;
+  }
 
   aktualisiereKunde() {
     const b = this.blatt();
@@ -448,14 +488,15 @@ class Generator {
   }
 
   /**
-   * Kopplung: jeder neue Eintrag in der heutigen Zeile des Kontrollblatts (Doppelklick dort) geht auf diesen Generator.
-   * Läuft er, wird hinten angehängt; steht er still, startet er sofort mit den neuen Programmen.
+   * Kopplung: jeder neue Eintrag in der heutigen Zeile des Kontrollblatts (Doppelklick dort) geht auf diesen Generator
+   * und wird hinten an die Programmliste angehängt. Gestartet wird von Hand (Start oder Startzeit); läuft er schon,
+   * kommt das Neue nach dem laufenden Programm dran.
    */
   koppeln() {
     $('.neu', this.karte).hidden = true;
     const b = this.blatt(), nr = parseInt(this.einst.nr, 10);
     if (!b || !daten.finder || !daten.geladen) return;            // erst wenn Finder und Spooky2-Ordner da sind
-    const { eintraege, hinweis } = this.heute();
+    const { eintraege, hinweis } = this.heuteAlle();
     if (hinweis) return;
     const heute = K.datumText(new Date());
     let u = this.uebernommen;
@@ -469,18 +510,8 @@ class Generator {
     if (!neu.length) return;
     const zeilen = neu.map(x => K.kontrolleZeile(x, b, daten.finder));
     this.log(`Vom Kontrollblatt ${nr}: ${zeilen.map(z => z.split(/\s{2,}|\t/)[0]).join(', ')}`);
-    if (this.lauf) { this.fuegeZeilenAn(zeilen); return; }
-    const text = zeilen.join('\n');
-    $('.liste', this.karte).value = text;
-    this.autoStart = true;
-    this.setzeListe(text);
-    this.versucheAutoStart();
-  }
-
-  versucheAutoStart() {
-    if (!this.autoStart || this.lauf) return;
-    if (this.pruefe()) { this.autoStart = false; this.starte(null, true); }
-    else this.setzeStatus('Vom Kontrollblatt übernommen, wartet: ' + $('.warnungen', this.karte).textContent, 'warnung');
+    this.fuegeZeilenAn(zeilen);
+    if (!this.lauf) this.melde(`Vom Kontrollblatt übernommen: ${zeilen.map(z => z.split(/\s{2,}|\t/)[0]).join(', ')} – mit Start (oder Startzeit) starten`, 'ok');
   }
 
   /** NF oder HF für eine Zeile der Programmliste festlegen (Knopf in der Vorschau). */
@@ -496,7 +527,6 @@ class Generator {
     const text = zeilen.join('\n');
     $('.liste', this.karte).value = text;
     this.setzeListe(text);
-    this.versucheAutoStart();
   }
 
   /** Einträge der heutigen Kontrollblatt-Zeile, die noch nicht in der Programmliste stehen. */
@@ -519,7 +549,7 @@ class Generator {
 
   uebernehmeHeute() {
     const { eintraege, hinweis } = this.heute();
-    if (!eintraege.length) { this.setzeStatus(hinweis ? `Kontrollblatt: ${hinweis}` : 'Kontrollblatt: heute noch kein Programm eingetragen', 'warnung'); return; }
+    if (!eintraege.length) { this.setzeStatus(hinweis ? `Kontrollblatt: ${hinweis}` : this.geleert && this.heuteAlle().eintraege.length ? 'Kontrollblatt: seit dem Leeren nichts Neues eingetragen' : 'Kontrollblatt: heute noch kein Programm eingetragen', 'warnung'); return; }
     const b = this.blatt();
     const text = eintraege.map(x => K.kontrolleZeile(x, b, daten.finder)).join('\n');
     $('.liste', this.karte).value = text;
@@ -527,17 +557,23 @@ class Generator {
     this.log(`Aus Kontrollblatt ${parseInt(this.einst.nr, 10)} übernommen: ${eintraege.length} Programme`);
   }
 
-  /** Liste leeren; läuft der Generator, wird er nach Rückfrage gestoppt. Danach startet «Start» wieder von vorne. */
+  /**
+   * Liste leeren; läuft der Generator, wird er nach Rückfrage gestoppt. Alles, was jetzt in der heutigen Kontrollblatt-Zeile
+   * steht, gilt als erledigt: «Heute aus Kontrollblatt» bringt danach nur noch, was neu dazukommt.
+   */
   async leere() {
     if (this.lauf) {
       if (!confirm(`Generator ${this.einst.nr} stoppen und die Programmliste leeren?`)) return;
       await this.stoppe('Gestoppt, Liste geleert');
     }
-    this.autoStart = false;
+    const nr = parseInt(this.einst.nr, 10), heute = K.datumText(new Date()), anzahl = this.heuteAlle().eintraege.length;
+    this.geleert = { blatt: nr, datum: heute, anzahl };
+    this.uebernommen = { blatt: nr, datum: heute, anzahl };
     this.meldung = null;
     $('.liste', this.karte).value = '';
     this.setzeListe('');
-    this.log('Liste geleert');
+    this.log(`Liste geleert${anzahl ? ` – ${anzahl} Einträge von heute im Kontrollblatt gelten als erledigt` : ''}`);
+    speichereAlle();
   }
 
   haengeNeueAn() { if (this.neue.length) this.fuegeZeilenAn(this.neue.map(x => x.zeile)); }
@@ -578,11 +614,24 @@ class Generator {
       l.schritt = neu.start + (l.schritt - alt.start);
     }
     const aktiv = l.aktivEi != null && l.einst[l.aktivEi] ? l.einst[l.aktivEi].key : null;
+    if (s && s.marke && v.plan.schritte[l.schritt]) v.plan.schritte[l.schritt].zeitMs = s.zeitMs;
     l.plan = v.plan; l.items = v.items; l.einst = v.einst; l.listeText = text;
     l.warnungen = v.warnungen.filter(w => !/^Keine (Programme|abspielbaren)/.test(w));
     if (aktiv) l.aktivEi = v.einst.findIndex(x => x.key === aktiv);
+    this.rechneMarken();
     speichereAlle();
     return null;
+  }
+
+  /** Uhrzeit jeder Zeitmarke ab der aktuellen Stelle festlegen: jede die nächste nach der vorherigen (06:00 nach 22:00 = morgen). */
+  rechneMarken(ab = Date.now()) {
+    const l = this.lauf, s = l.plan.schritte;
+    let t = ab;
+    for (let k = l.schritt; k < s.length; k++) {
+      if (!s[k].marke) continue;
+      s[k].zeitMs = k === l.schritt && s[k].zeitMs ? s[k].zeitMs : naechsteUhrzeit(s[k].um, t);
+      t = s[k].zeitMs;
+    }
   }
 
   /** Meldung über der Vorschau, die der laufende Fortschritt nicht überschreibt (verschwindet nach 20 s). */
@@ -599,6 +648,11 @@ class Generator {
     const anzeigen = this.lauf ? { items: this.lauf.items, plan: this.lauf.plan, warnungen: this.lauf.warnungen || [], blockiert: false, einst: this.lauf.einst } : bereiteListeVor(this.einst.liste, this.einst.standardPreset);
     const aktPi = this.lauf && this.lauf.plan.schritte[this.lauf.schritt] ? this.lauf.plan.schritte[this.lauf.schritt].pi : -1;
     vs.innerHTML = anzeigen.items.map((it, i) => {
+      if (it.r.art === 'zeit') {
+        const st = this.lauf && this.lauf.plan.schritte[it.start], wann = st && st.zeitMs ? ` (${fmtUhr(st.zeitMs)})` : '';
+        return `<div class="p marke" data-pi="${i}"><code>⏰</code><span class="name">Start um ${it.r.um}${wann}</span><span class="zeit"></span>` +
+          `<span class="pinfo">Was darunter steht, startet erst um ${it.r.um}. Läuft dann noch ein Programm davor, wird es beendet.</span></div>`;
+      }
       const nv = /^(pr\d{4}) (NF|HF)$/.exec(it.code || ''), andere = nv && (nv[2] === 'NF' ? 'HF' : 'NF');
       const wechsel = nv && !it.fehler && i > aktPi && daten.finder && daten.finder.programme.has(`${nv[1]} ${andere}`)
         ? ` <button class="ghost klein wechsel" data-z="${it.zeilenNr}" data-v="${andere}" title="Dieses Programm als ${andere} spielen">→ ${andere}</button>` : '';
@@ -612,8 +666,8 @@ class Generator {
     const m = this.meldung && this.meldung.bis > Date.now() ? this.meldung : null;
     w.textContent = [m ? m.text : '', ...anzeigen.warnungen.map(x => this.lauf ? 'Übersprungen, bis geklärt – ' + x : x)].filter(Boolean).join(' · ');
     w.className = 'warnungen' + (m && m.art === 'ok' && !anzeigen.warnungen.length ? ' ok' : '');
-    const d = this.einst.durchlaeufe, n = anzeigen.items.length;
-    z.textContent = !daten.geladen ? 'Zuerst den Spooky2-Ordner wählen.' : n ? `${n} Programm${n === 1 ? '' : 'e'} · ${anzeigen.einst.length} Preset${anzeigen.einst.length === 1 ? '' : 's'} · ${fmtZeit(anzeigen.plan.gesamtSek)} pro Durchlauf` + (d ? ` · ${d} × = ${fmtZeit(anzeigen.plan.gesamtSek * d)}` : ' · endlos') : '';
+    const d = this.einst.durchlaeufe, n = anzeigen.items.filter(it => it.r.art !== 'zeit').length, nm = anzeigen.items.length - n;
+    z.textContent = !daten.geladen ? 'Zuerst den Spooky2-Ordner wählen.' : n ? `${n} Programm${n === 1 ? '' : 'e'} · ${anzeigen.einst.length} Preset${anzeigen.einst.length === 1 ? '' : 's'} · ${fmtZeit(anzeigen.plan.gesamtSek)} pro Durchlauf` + (d ? ` · ${d} × = ${fmtZeit(anzeigen.plan.gesamtSek * d)}` : ' · endlos') + (nm ? ` · ${nm} Zeitmarke${nm === 1 ? '' : 'n'} (Wartezeit nicht eingerechnet)` : '') : '';
     if (this.lauf) { this.markiereAktiv(); return this.lauf; }
     this.vorbereitet = anzeigen.blockiert ? null : anzeigen;
     $('.btn-start', this.karte).disabled = !this.vorbereitet;
@@ -626,9 +680,9 @@ class Generator {
   }
 
   sperre(laufend) {
-    for (const s of ['.nr', '.preset', '.durchlaeufe', '.start-um', '.btn-testen', '.btn-heute']) $(s, this.karte).disabled = laufend;
+    for (const s of ['.nr', '.nr-zurueck', '.nr-weiter', '.preset', '.durchlaeufe', '.start-um', '.btn-testen', '.btn-heute']) $(s, this.karte).disabled = laufend;
     $('.btn-start', this.karte).disabled = laufend || !this.vorbereitet;
-    $('.btn-stop', this.karte).disabled = !laufend;
+    $('.btn-stop', this.karte).disabled = !laufend && !this.imTest;
     $('.btn-naechste-f', this.karte).disabled = !laufend;
     $('.btn-naechstes-p', this.karte).disabled = !laufend;
     this.karte.classList.toggle('laeuft', laufend);
@@ -650,14 +704,31 @@ class Generator {
       const nr = parseInt(this.einst.nr, 10);
       const z = K.neuerZustand();
       await this.sende([['Ausgang 1 aus', K.Befehl.ausgang(0, false)], ['Ausgang 2 aus', K.Befehl.ausgang(1, false)], ...K.frequenzBefehle(nr, nr, z)]);
-      this.setzeStatus(`Test: Display zeigt ${nr} Hz. Steht am Generator die Nummer ${nr}? Sonst oben links die Nummer des Generators eintragen.`, 'warnung');
+      this.setzeStatus(`Test: Display zeigt ${nr} Hz. Steht am Generator die Nummer ${nr}? Sonst mit ◀ ▶ die Nummer des Generators einstellen. Ende mit «Test beenden» oder Stopp.`, 'warnung');
       this.log(`Test: ${nr} Hz auf dem Display`);
+      this.setzeTest(true);
     } catch (e) { this.setzeStatus('Test fehlgeschlagen: ' + e.message + ' (Spooky2 geschlossen? Kabel?)', 'fehler'); }
+  }
+
+  /** Test-Zustand: Knopf heisst «Test beenden», Stopp ist aktiv. */
+  setzeTest(an) {
+    this.imTest = an;
+    $('.btn-testen', this.karte).textContent = an ? 'Test beenden' : 'Testen';
+    $('.btn-testen', this.karte).classList.toggle('aktiv', an);
+    if (!this.lauf) $('.btn-stop', this.karte).disabled = !an;
+  }
+  /** Test beenden: Ausgänge sicher aus, Karte wieder bereit. (Die Zahl bleibt auf dem Display, bis ein Programm startet.) */
+  async beendeTest() {
+    this.setzeTest(false);
+    try { await this.sende([['Ausgang 1 aus', K.Befehl.ausgang(0, false)], ['Ausgang 2 aus', K.Befehl.ausgang(1, false)]]); } catch (e) { /* Gerät weg */ }
+    this.setzeStatus('Test beendet – bereit');
+    this.log('Test beendet');
   }
 
   // ---------------------------------------------------------------- Ablauf
   async starte(stand = null, sofort = false) {
     if (this.lauf) return;
+    if (this.imTest) this.setzeTest(false);
     const v = this.pruefe();
     if (!v) return;
     if (stand && stand.liste !== this.einst.liste) stand = null;
@@ -678,10 +749,11 @@ class Generator {
       durchlaeufe: this.einst.durchlaeufe, zustand: K.neuerZustand(), status: startUmMs ? 'wartet' : 'einrichten',
       startUmMs, letzterTick: null, letzterTakt: null, beschaeftigt: false, aktivEi: null, aktivPi: null,
     };
+    this.rechneMarken(startUmMs || Date.now());
     this.sperre(true);
     this.pruefe();
     speichereAlle();
-    if (startUmMs) this.setzeStatus(`Wartet bis ${new Date(startUmMs).toLocaleString('de-CH', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}`, 'warnung');
+    if (startUmMs) this.setzeStatus(`Wartet bis ${fmtUhr(startUmMs)}`, 'warnung');
   }
 
   /** Generator auf das Preset des aktuellen (bzw. nächsten klingenden) Schritts einrichten. */
@@ -728,7 +800,7 @@ class Generator {
     try { if (b.length) await this.sende(b); } finally { this.leise = false; }
     if (neu) {
       if (s.pi !== l.aktivPi) { l.aktivPi = s.pi; const it = l.items[s.pi]; this.log(`Programm ${s.pi + 1}/${l.items.length}: ${it.code} ${it.name}`); this.markiereAktiv(); }
-      this.log(`Schritt ${l.schritt + 1}/${l.plan.schritte.length}: ${s.pause ? 'Pause' : `${fmtHz(l.f1)} / ${fmtHz(l.f2)}`} für ${s.sek} s`);
+      this.log(s.marke ? `Schritt ${l.schritt + 1}/${l.plan.schritte.length}: Ausgänge aus, warten bis ${fmtUhr(s.zeitMs)}` : `Schritt ${l.schritt + 1}/${l.plan.schritte.length}: ${s.pause ? 'Pause' : `${fmtHz(l.f1)} / ${fmtHz(l.f2)}`} für ${s.sek} s`);
     }
   }
 
@@ -742,6 +814,12 @@ class Generator {
   /** Sprung ausführen: Zeit im Schritt ans Ende setzen, der normale Ablauf geht dann zum nächsten Schritt bzw. Programm. */
   fuehreSprungAus(art) {
     const l = this.lauf, s = l.plan.schritte, i = l.schritt, it = l.items[s[i].pi];
+    if (s[i].marke) {                                             // Warten auf Zeitmarke abbrechen: sofort weiter
+      s[i].zeitMs = Date.now();
+      this.log(`⏭ Zeitmarke ${s[i].um} übersprungen – startet sofort`);
+      this.melde(`Zeitmarke ${s[i].um} übersprungen`, 'ok');
+      return;
+    }
     if (art === 'programm') {
       let j = i;
       while (j + 1 < s.length && s[j + 1].pi === s[i].pi) j++;
@@ -770,8 +848,25 @@ class Generator {
     try {
       if (l.sprung) { const art = l.sprung; l.sprung = null; this.fuehreSprungAus(art); }
       let gewechselt = false;
-      while (l.tImSchritt >= l.plan.schritte[l.schritt].sek) {
-        l.tImSchritt -= l.plan.schritte[l.schritt].sek;
+      // Zeitmarke weiter unten ist fällig: laufendes Programm beenden, dorthin springen
+      const jetztMs = Date.now(), alle = l.plan.schritte;
+      let faellig = -1;
+      for (let k = l.schritt + 1; k < alle.length; k++) if (alle[k].marke && jetztMs >= alle[k].zeitMs) faellig = k;
+      if (faellig >= 0) {
+        const vorher = l.items[alle[l.schritt].pi];
+        this.log(`⏰ ${alle[faellig].um}: ${alle[l.schritt].marke ? 'Warten' : vorher.code + ' ' + vorher.name} beendet, weiter nach Zeitplan`);
+        l.schritt = faellig; l.tImSchritt = 0; gewechselt = true;
+      }
+      for (;;) {
+        const st = l.plan.schritte[l.schritt];
+        if (st.marke) {
+          if (Date.now() < st.zeitMs) { l.tImSchritt = 0; break; }      // warten, Ausgänge sind aus
+          l.tImSchritt = 0;
+          this.log(`⏰ ${st.um}: Start nach Zeitplan`);
+        } else {
+          if (l.tImSchritt < st.sek) break;
+          l.tImSchritt -= st.sek;
+        }
         l.schritt++;
         gewechselt = true;
         if (l.schritt >= l.plan.schritte.length) {
@@ -779,6 +874,7 @@ class Generator {
           if (l.durchlaeufe && l.durchlauf >= l.durchlaeufe) { await this.stoppe('fertig'); return; }
           l.durchlauf++;
           this.log(`Durchlauf ${l.durchlauf} beginnt`);
+          this.rechneMarken();
         }
       }
       const s = l.plan.schritte[l.schritt];
@@ -798,6 +894,7 @@ class Generator {
   zeigeFortschritt() {
     const l = this.lauf; if (!l) return;
     const s = l.plan.schritte[l.schritt], it = l.items[s.pi];
+    if (s.marke) { this.setzeStatus(`Wartet bis ${fmtUhr(s.zeitMs)} (Zeitmarke ${s.um}), Ausgänge aus`, 'warnung'); return; }
     const vorher = l.plan.schritte.slice(0, l.schritt).reduce((a, x) => a + x.sek, 0) + l.tImSchritt;
     const rest = l.plan.gesamtSek - vorher + (l.durchlaeufe ? (l.durchlaeufe - l.durchlauf) * l.plan.gesamtSek : 0);
     this.setzeStatus(`${it.code} · ${s.pause ? 'Pause' : `Out1 ${fmtHz(l.f1)} · Out2 ${fmtHz(l.f2)}`} · Programm ${s.pi + 1}/${l.items.length} · Durchlauf ${l.durchlauf}${l.durchlaeufe ? '/' + l.durchlaeufe : ''} · ${l.durchlaeufe ? 'noch ' + fmtZeit(rest) : 'endlos'}`, 'ok');
@@ -829,6 +926,8 @@ function zustand(g) {
   const l = g.lauf, st = $('.status', g.karte);
   if (l) {
     if (l.status !== 'laeuft') return { art: 'w', text: l.status === 'wartet' ? 'wartet auf Startzeit' : 'wird eingerichtet' };
+    const st = l.plan.schritte[l.schritt];
+    if (st && st.marke) return { art: 'w', text: `wartet bis ${st.um}` };
     const e = l.einst[l.aktivEi], name = e ? e.e.name : '';
     return { art: /killing/i.test(name) ? 'k' : 'h', text: `läuft · ${name}` };
   }
@@ -849,7 +948,7 @@ function aktualisiereLeiste() {
   leistenStand = stand;
   nav.hidden = liste.length < 1;
   nav.innerHTML = liste.map(x => `<button class="lg ${x.art}${x.nr === aktiv ? ' aktiv' : ''}" data-nr="${x.nr}" title="${esc(x.titel)}">${x.nr}</button>`).join('') +
-    '<span class="legende">rot Killing · blau Healing · gelb stellt um · weiss steht</span>';
+    '<span class="legende">rot Killing · blau Healing · gelb stellt um oder wartet · weiss steht</span>';
   setzeKopfHoehe();
 }
 
@@ -861,10 +960,10 @@ function springeZu(nr) {
   g.karte.classList.remove('markiert'); void g.karte.offsetWidth; g.karte.classList.add('markiert');
 }
 
-/** Höhe des (am grossen Bildschirm stehenbleibenden) Kopfs, damit die Karte beim Springen nicht darunter verschwindet. */
+/** Höhe der stehenbleibenden Leiste, damit die Karte beim Springen nicht darunter verschwindet. */
 function setzeKopfHoehe() {
-  const h = $('header');
-  document.documentElement.style.setProperty('--kopf', getComputedStyle(h).position === 'sticky' ? h.offsetHeight + 'px' : '0px');
+  const n = $('#leiste');
+  document.documentElement.style.setProperty('--kopf', n.hidden ? '0px' : n.offsetHeight + 'px');
 }
 
 // ------------------------------------------------------------------ Taktgeber (Web Worker, läuft auch im Hintergrund)
@@ -896,7 +995,7 @@ async function init() {
   $('#btn-ordner').onclick = waehleOrdner;
   $('#btn-hinzu').onclick = async () => { try { await fuegeHinzu(await navigator.serial.requestPort()); } catch (e) { /* abgebrochen */ } };
   $('#btn-alle-testen').onclick = () => { for (const g of generatoren) if (!g.lauf) g.teste(); };
-  $('#btn-alle-stopp').onclick = () => { for (const g of generatoren) if (g.lauf) g.stoppe('gestoppt'); };
+  $('#btn-alle-stopp').onclick = () => { for (const g of generatoren) { if (g.lauf) g.stoppe('gestoppt'); else if (g.imTest) g.beendeTest(); } };
   $('#leiste').onclick = (ev) => { const b = ev.target.closest('button[data-nr]'); if (b) springeZu(b.dataset.nr); };
   window.addEventListener('resize', setzeKopfHoehe);
   navigator.serial.addEventListener('connect', (ev) => fuegeHinzu(ev.target));

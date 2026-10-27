@@ -25,7 +25,6 @@
   .marke b{display:block;font-size:28px;letter-spacing:.16em;color:#fff;line-height:1;font-weight:700;text-shadow:0 2px 4px rgba(8,42,74,.45)}
   .marke span{display:block;font-size:13px;color:#D6E8F7;letter-spacing:.05em;margin-top:4px}
   .marke small{display:block;font-size:12px;color:#D6E8F7;opacity:.85;font-style:italic;margin-top:1px}
-  @media (min-width:900px) and (min-height:760px){header{position:sticky;top:0}}
   .kopf-knoepfe{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:10px 12px}
   header .info{color:#D6E8F7;font-size:13px;background:rgba(255,255,255,.12);border-radius:12px;padding:3px 10px}
   .spacer{flex:1}
@@ -56,7 +55,7 @@
   header button.ghost:active:not(:disabled){box-shadow:0 0 0 #0F1F5C}
   header button.stop{box-shadow:0 3px 0 #5E0B0B,0 5px 10px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.3)}
   button:disabled{opacity:.4;cursor:not-allowed;box-shadow:none}
-  main{padding:14px 18px 18px;display:grid;grid-template-columns:repeat(auto-fill,minmax(400px,1fr));gap:14px}
+  main{padding:14px 18px 18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),600px));justify-content:center;gap:16px}   /* Karten mittig, 440–600 px breit (3 nebeneinander bei 1920 px) */
   @media (max-width:460px){main{grid-template-columns:1fr;padding:12px} .quellen{padding:10px 12px 0} header{padding:10px 12px}}
   .leer{grid-column:1/-1;color:var(--text-light);padding:36px 0;text-align:center}
   .gen{background:var(--page);border:1px solid var(--divider);border-top:4px solid var(--royal-light);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;box-shadow:0 1px 3px rgba(13,62,106,.06);min-width:0}
@@ -65,16 +64,20 @@
   .gen.markiert{animation:markiert 2.6s ease-out}
   @keyframes markiert{0%,55%{box-shadow:0 0 0 4px #42A5F5,0 6px 22px rgba(21,101,192,.45)}100%{box-shadow:0 1px 3px rgba(13,62,106,.06)}}
   /* Übersicht im Kopf: ein Knopf pro Generator, Farbe = Zustand */
-  #leiste{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:10px}
+  /* Leiste bleibt beim Scrollen immer oben stehen (Kopf mit Logo scrollt weg) */
+  #leiste{position:sticky;top:0;z-index:3;display:flex;flex-wrap:wrap;justify-content:center;gap:6px;padding:8px 12px 9px;background:linear-gradient(180deg,#2c49b3,#182f83);border-bottom:2px solid #42A5F5;box-shadow:0 3px 10px rgba(24,47,131,.3)}
   #leiste button.lg{min-width:40px;padding:4px 8px;font-size:14px;border-radius:8px;color:var(--royal-dark);background:#fff;border-color:#9DBBE0;box-shadow:0 2px 0 #9DBBE0}
   #leiste button.lg.k{background:var(--kill);border-color:#8E0B20;color:#fff;box-shadow:0 2px 0 #8E0B20}
   #leiste button.lg.h{background:var(--heal);border-color:#1A3690;color:#fff;box-shadow:0 2px 0 #1A3690}
   #leiste button.lg.w{background:#FFD966;border-color:#9A6A00;color:#5A3E00;box-shadow:0 2px 0 #9A6A00}
   #leiste button.lg.f{background:#fff;border:2px solid var(--rot);color:var(--rot);box-shadow:0 2px 0 var(--rot)}
   #leiste button.lg.aktiv{outline:3px solid #fff;outline-offset:2px}
-  #leiste .legende{font-size:12px;color:#D6E8F7;align-self:center;margin-left:6px}
+  #leiste .legende{flex-basis:100%;text-align:center;font-size:11.5px;color:#D6E8F7;margin-top:-1px}   /* eigene Zeile, damit die Nummern mittig stehen */
   .kopf{display:flex;align-items:center;gap:8px;min-width:0}
-  .kopf .nr{width:56px;flex:none;font-weight:700;font-size:18px;color:var(--royal-dark)}
+  .kopf .nr{width:52px;flex:none;font-weight:700;font-size:18px;color:var(--royal-dark);text-align:center;padding:5px 2px}
+  .nr-wahl{display:flex;align-items:center;gap:4px;flex:none}
+  .nr-wahl button{padding:5px 7px;font-size:13px;line-height:1}
+  button.btn-testen.aktiv{background:var(--gold-bg);color:var(--gold);border-color:var(--gold)}
   .kunde{font-weight:600;color:var(--royal-dark);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
   .kunde:empty{display:none}
   .preset-aktiv{font-size:15px;font-weight:700;border-radius:8px;padding:5px 10px;overflow-wrap:anywhere}
@@ -111,6 +114,7 @@
   .vorschau div.p:first-child{border-top:none}
   .vorschau div.p.aktiv{background:var(--ok-bg);box-shadow:inset 3px 0 var(--ok)}
   .vorschau div.p.fehler{background:var(--rot-bg);color:var(--rot)}
+  .vorschau div.p.marke{background:var(--gold-bg)} .vorschau div.p.marke .name{font-weight:700;color:var(--gold)}
   .vorschau code{font:600 12px Consolas,monospace;color:var(--royal-dark)}
   .vorschau .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
   .vorschau .zeit{color:var(--text-light);text-align:right}
@@ -143,8 +147,8 @@
   <button id="btn-alle-testen" class="ghost" title="Jeder stehende Generator zeigt seine Kartennummer auf dem Display">Alle testen</button>
   <button id="btn-alle-stopp" class="stop">Alle stoppen</button>
   </div>
-  <nav id="leiste" hidden aria-label="Generatoren"></nav>
 </header>
+<nav id="leiste" hidden aria-label="Generatoren"></nav>
 
 <div class="quellen">
   <div class="quelle"><span class="titel">Spooky2</span><span class="stand" id="ordner-status">C:\Spooky2 noch nicht gewählt</span><button id="btn-ordner" class="ghost">Ordner wählen</button></div>
@@ -163,21 +167,25 @@
 <template id="vorlage-generator">
   <section class="gen">
     <div class="kopf">
-      <input class="nr" inputmode="numeric" title="Generator-Nummer = Nummer am Gerät = Nummer des Kontrollblatts. Ändern tauscht mit der Karte, die diese Nummer hat.">
+      <span class="nr-wahl">
+        <button class="ghost klein nr-zurueck" title="Eine Nummer zurück (tauscht mit der Karte, die diese Nummer hat)">◀</button>
+        <input class="nr" inputmode="numeric" title="Generator-Nummer = Nummer am Gerät = Nummer des Kontrollblatts. Ändern tauscht mit der Karte, die diese Nummer hat.">
+        <button class="ghost klein nr-weiter" title="Eine Nummer weiter (tauscht mit der Karte, die diese Nummer hat)">▶</button>
+      </span>
       <span class="kunde"></span>
       <span class="chip"></span>
       <span class="spacer"></span>
       <button class="ghost klein btn-testen" title="Zeigt die Kartennummer als Frequenz auf dem Display des angeschlossenen Generators (Ausgänge bleiben aus)">Testen</button>
     </div>
     <div class="preset-aktiv"></div>
-    <label class="auto"><input type="checkbox" class="auto-cb"> Doppelklick im Kontrollblatt startet hier</label>
+    <label class="auto"><input type="checkbox" class="auto-cb"> Doppelklick im Kontrollblatt kommt hierher (Start von Hand)</label>
     <div>
       <div class="label-reihe">
         <label title="Eine Zeile pro Programm: pr0245 NF · pa60 · sm15 · eigene Frequenzzeile">Programme (eine Zeile pro Programm)</label>
         <button class="ghost klein btn-heute" title="Ersetzt die Liste durch die heutige Zeile des Kontrollblatts">Heute aus Kontrollblatt</button>
         <button class="ghost klein btn-leeren" title="Liste leeren (läuft der Generator, wird er zuerst gestoppt). Danach mit Start wieder von vorne.">Leeren</button>
       </div>
-      <textarea class="liste" spellcheck="false" wrap="off" placeholder="pr0001&#10;pr2262 NF&#10;pa30&#10;pr0409 HF&#10;sm60&#10;437=240, 727=420"></textarea>
+      <textarea class="liste" spellcheck="false" wrap="off" placeholder="pr0001&#10;pr2262 NF&#10;pa30&#10;um 06:00&#10;pr0409 HF&#10;437=240, 727=420"></textarea>
     </div>
     <div class="neu" hidden><span class="neu-text"></span><button class="ghost klein btn-anhaengen">Anhängen</button></div>
     <details class="menue" hidden><summary>Programme des Kunden (Kontrollblatt)</summary><div class="menue-liste"></div></details>
