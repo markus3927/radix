@@ -31,6 +31,13 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
    Generators – sobald das Kontrollblatt beim Blattwechsel `"aktiv": <Nummer>` und `"aktivZeit": <Zeitstempel>` in die
    Sicherungsdatei schreibt.
 
+9. **Vorspulen** (nur während dem Lauf): «⏭ Nächste Frequenz» beendet die laufende Frequenz bzw. Pause, «⏭ Nächstes Programm»
+   springt zum nächsten Programm der Liste (Preset wird bei Bedarf umgestellt; beim letzten Programm: nächster Durchlauf bzw. fertig).
+   Jeder Sprung steht im Protokoll.
+
+## Stand Version 0.4.2
+- Neu: Vorspulen (nächste Frequenz, nächstes Programm)
+
 ## Stand Version 0.4.1
 - Neu: Programmliste während dem Lauf änderbar, Leiste 1–24, Sprung vom Kontrollblatt, Kontrollblatt-Datei jede Sekunde geprüft
 - Korrigiert: Meldungen beim Anhängen wurden sofort vom Fortschritt überschrieben; Programmnamen wie «Fünf» galten als NF

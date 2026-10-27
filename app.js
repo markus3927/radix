@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.4.1';
+const VERSION = '0.4.2';
 const $ = (s, el = document) => el.querySelector(s);
 const K = window.Kern;
 const SPEICHER = 'radix-generatoren-v2';   // { zuordnung: [Nummer je Anschluss], gen: { Nummer: Einstellungen } }
@@ -384,6 +384,8 @@ class Generator {
     $('.btn-stop', k).onclick = () => this.stoppe('gestoppt');
     $('.btn-testen', k).onclick = () => this.teste();
     $('.btn-weiter', k).onclick = () => this.starte(this.fortsetzen);
+    $('.btn-naechste-f', k).onclick = () => this.springe('frequenz');
+    $('.btn-naechstes-p', k).onclick = () => this.springe('programm');
     $('.btn-heute', k).onclick = () => this.uebernehmeHeute();
     $('.btn-anhaengen', k).onclick = () => this.haengeNeueAn();
     const au = $('.auto-cb', k);
@@ -604,6 +606,8 @@ class Generator {
     for (const s of ['.nr', '.preset', '.durchlaeufe', '.start-um', '.btn-testen', '.btn-heute']) $(s, this.karte).disabled = laufend;
     $('.btn-start', this.karte).disabled = laufend || !this.vorbereitet;
     $('.btn-stop', this.karte).disabled = !laufend;
+    $('.btn-naechste-f', this.karte).disabled = !laufend;
+    $('.btn-naechstes-p', this.karte).disabled = !laufend;
     this.karte.classList.toggle('laeuft', laufend);
     if (!laufend) $('.btn-heute', this.karte).disabled = !this.blatt();
   }
@@ -705,6 +709,28 @@ class Generator {
     }
   }
 
+  /** Vorspulen: der Taktgeber führt den Sprung beim nächsten Takt aus (nie mitten in einem Befehl an den Generator). */
+  springe(art) {
+    const l = this.lauf;
+    if (!l) return;
+    if (l.status === 'wartet') { this.melde('Wartet noch auf die Startzeit – nichts zu überspringen', 'fehler'); return; }
+    l.sprung = art;
+  }
+  /** Sprung ausführen: Zeit im Schritt ans Ende setzen, der normale Ablauf geht dann zum nächsten Schritt bzw. Programm. */
+  fuehreSprungAus(art) {
+    const l = this.lauf, s = l.plan.schritte, i = l.schritt, it = l.items[s[i].pi];
+    if (art === 'programm') {
+      let j = i;
+      while (j + 1 < s.length && s[j + 1].pi === s[i].pi) j++;
+      l.schritt = j;
+      this.log(`⏭ Programm übersprungen: ${it.code} ${it.name}`);
+      this.melde(`Übersprungen: ${it.code}`, 'ok');
+    } else {
+      this.log(`⏭ Schritt ${i + 1} übersprungen (${s[i].pause ? 'Pause' : fmtHz(l.f1)})`);
+    }
+    l.tImSchritt = s[l.schritt].sek;
+  }
+
   /** Wird regelmässig vom Taktgeber aufgerufen. */
   async tick() {
     const l = this.lauf;
@@ -719,6 +745,7 @@ class Generator {
     l.letzterTick = t;
     l.beschaeftigt = true;
     try {
+      if (l.sprung) { const art = l.sprung; l.sprung = null; this.fuehreSprungAus(art); }
       let gewechselt = false;
       while (l.tImSchritt >= l.plan.schritte[l.schritt].sek) {
         l.tImSchritt -= l.plan.schritte[l.schritt].sek;

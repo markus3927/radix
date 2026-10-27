@@ -126,6 +126,7 @@
   .balken{height:6px;background:var(--royal-light);border-radius:3px;overflow:hidden}
   .balken > div{height:100%;width:0;background:var(--royal);transition:width .25s}
   .knoepfe{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;padding-bottom:3px}
+  .knoepfe.sprung{gap:8px;margin-top:-2px}
   details.protokoll summary{font-size:12.5px;color:var(--text-light);cursor:pointer}
   details.protokoll pre{font:12px/1.4 Consolas,monospace;background:var(--royal-deep);color:#d7e6f5;border-radius:8px;padding:8px;max-height:180px;overflow:auto;white-space:pre-wrap;margin:6px 0 0}
   #kein-chrome{margin:16px;padding:14px;border:1px solid var(--rot);background:var(--rot-bg);border-radius:8px;color:var(--rot)}
@@ -194,6 +195,10 @@
       <button class="btn-start">Start</button>
       <button class="btn-weiter ghost" hidden>Fortsetzen</button>
       <button class="btn-stop stop" disabled>Stopp</button>
+    </div>
+    <div class="knoepfe sprung">
+      <button class="ghost klein btn-naechste-f" disabled title="Laufende Frequenz (bzw. Pause) beenden und mit der nächsten weitermachen">⏭ Nächste Frequenz</button>
+      <button class="ghost klein btn-naechstes-p" disabled title="Laufendes Programm beenden und mit dem nächsten in der Liste weitermachen">⏭ Nächstes Programm</button>
     </div>
     <details class="protokoll"><summary>Protokoll</summary><pre></pre></details>
   </section>
