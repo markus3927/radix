@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Generator-Steuerung</title>
+<meta name="description" content="Steuerung der Spooky2-Generatoren im Remote-Betrieb">
+<meta name="theme-color" content="#1f5f5b">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<style>
+  :root{
+    --bg:#f4f1ec; --card:#fffdf9; --ink:#1f2328; --muted:#6b6f76; --line:#ddd6cb;
+    --accent:#1f5f5b; --accent-ink:#fff; --ok:#2e7d32; --warn:#9a6a00; --err:#a4471c; --run:#e3f0ee;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{--bg:#16181b;--card:#1e2125;--ink:#e8e6e3;--muted:#9aa0a6;--line:#33373c;--accent:#4fa39d;--accent-ink:#0d1214;--ok:#7cc47f;--warn:#e0b14a;--err:#f08a68;--run:#1d2b2a}
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 "Segoe UI",system-ui,sans-serif}
+  header{position:sticky;top:0;z-index:2;background:var(--bg);border-bottom:1px solid var(--line);padding:12px 16px;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center}
+  header h1{font-size:20px;margin:0 12px 0 0;letter-spacing:-.01em}
+  header .info{color:var(--muted);font-size:13.5px}
+  #ordner-status.ok{color:var(--ok)} #ordner-status.fehler{color:var(--err)}
+  .spacer{flex:1}
+  button{font:inherit;padding:7px 13px;border-radius:7px;border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);cursor:pointer}
+  button.ghost{background:transparent;color:var(--accent)}
+  button.stop{background:var(--err);border-color:var(--err);color:#fff}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  main{padding:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:14px}
+  @media (max-width:440px){main{grid-template-columns:1fr}}
+  .leer{grid-column:1/-1;color:var(--muted);padding:30px 0;text-align:center}
+  .gen{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+  .gen.laeuft{background:var(--run);border-color:var(--accent)}
+  .kopf{display:flex;align-items:center;gap:8px}
+  .kopf .nr{width:56px;font-weight:600;font-size:17px}
+  .chip{font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:10px;padding:1px 7px}
+  input,textarea{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink);width:100%}
+  textarea{font-family:Consolas,monospace;font-size:13px;min-height:52px;resize:vertical}
+  input:disabled,textarea:disabled{opacity:.7}
+  label{font-size:12.5px;color:var(--muted);display:block}
+  .reihe{display:flex;gap:8px;align-items:flex-end}
+  .reihe > div{flex:1}
+  .zusammenfassung{font-size:12.5px;color:var(--muted)}
+  .warnungen{font-size:12.5px;color:var(--err)}
+  .warnungen:empty{display:none}
+  .status{font-size:13.5px;font-weight:600;min-height:20px}
+  .status.ok{color:var(--ok)} .status.fehler{color:var(--err)} .status.warnung{color:var(--warn)}
+  .balken{height:5px;background:var(--line);border-radius:3px;overflow:hidden}
+  .balken > div{height:100%;width:0;background:var(--accent);transition:width .25s}
+  .knoepfe{display:flex;gap:8px;flex-wrap:wrap}
+  details.protokoll summary{font-size:12.5px;color:var(--muted);cursor:pointer}
+  details.protokoll pre{font:12px/1.4 Consolas,monospace;background:#0f1720;color:#d7e3ea;border-radius:6px;padding:8px;max-height:180px;overflow:auto;white-space:pre-wrap;margin:6px 0 0}
+  #kein-chrome{margin:16px;padding:14px;border:1px solid var(--err);border-radius:8px;color:var(--err)}
+  footer{color:var(--muted);font-size:12.5px;text-align:center;padding:18px 16px 26px;line-height:1.6}
+</style>
+</head>
+<body>
+<header>
+  <h1>Generator-Steuerung</h1>
+  <button id="btn-ordner">Spooky2-Ordner wählen</button>
+  <span class="info" id="ordner-status">C:\Spooky2 noch nicht gewählt</span>
+  <span class="spacer"></span>
+  <span class="info" id="anzahl">0 Generatoren</span>
+  <button id="btn-hinzu" class="ghost">Generator hinzufügen</button>
+  <button id="btn-alle-stopp" class="stop">Alle stoppen</button>
+</header>
+
+<div id="kein-chrome" hidden>Diese App braucht Google Chrome oder Microsoft Edge auf einem Computer.</div>
+
+<main id="generatoren">
+  <div class="leer">Spooky2 schliessen, dann «Generator hinzufügen» und den COM-Anschluss wählen. Bereits erlaubte Generatoren verbinden sich beim Start von selbst.</div>
+</main>
+
+<datalist id="preset-liste"></datalist>
+
+<template id="vorlage-generator">
+  <section class="gen">
+    <div class="kopf">
+      <input class="nr" title="Generator-Nummer">
+      <span class="chip"></span>
+      <span class="spacer"></span>
+      <button class="ghost btn-erkennen" title="Zeigt die Generator-Nummer als Frequenz auf dem Display">Erkennen</button>
+    </div>
+    <div>
+      <label>Preset</label>
+      <input class="preset" list="preset-liste" placeholder="z. B. Healing (R) - JW" autocomplete="off">
+    </div>
+    <div>
+      <label>Frequenzzeile (leer = Frequenzen aus dem Preset)</label>
+      <textarea class="zeile" placeholder="437=240, 727=420, 120-128=600"></textarea>
+    </div>
+    <div class="reihe">
+      <div><label>Durchläufe (0 = endlos)</label><input class="durchlaeufe" type="number" min="0" step="1"></div>
+      <div><label>Start um (leer = sofort)</label><input class="start-um" type="time"></div>
+    </div>
+    <div class="zusammenfassung"></div>
+    <div class="warnungen"></div>
+    <div class="status"></div>
+    <div class="balken"><div></div></div>
+    <div class="knoepfe">
+      <button class="btn-start">Start</button>
+      <button class="btn-weiter ghost" hidden>Fortsetzen</button>
+      <button class="btn-stop stop" disabled>Stopp</button>
+    </div>
+    <details class="protokoll"><summary>Protokoll</summary><pre></pre></details>
+  </section>
+</template>
+
+<footer>
+  Idee, Konzept &amp; Architektur Markus Rufer<br>
+  Technische Umsetzung. Claude by Anthropic<br>
+  Version <span id="version"></span>
+</footer>
+
+<script src="kern.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
