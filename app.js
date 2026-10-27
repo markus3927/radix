@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.4.0';
+const VERSION = '0.4.1';
 const $ = (s, el = document) => el.querySelector(s);
 const K = window.Kern;
 const SPEICHER = 'radix-generatoren-v2';   // { zuordnung: [Nummer je Anschluss], gen: { Nummer: Einstellungen } }
@@ -123,14 +123,17 @@ const quellen = {
     },
   },
   kontrolle: {
-    titel: 'Kontrollblatt', status: '#kontrolle-status', knopf: '#btn-kontrolle', alleMs: 3000,
+    titel: 'Kontrollblatt', status: '#kontrolle-status', knopf: '#btn-kontrolle', alleMs: 1000,
     typen: [{ description: 'Kontrollblatt-Sicherung (JSON)', accept: { 'application/json': ['.json'] } }],
     verarbeite(text, datei) {
       const k = K.leseKontrolle(text);
+      const vorher = daten.kontrolle;
       daten.kontrolle = { ...k, zeit: datei.lastModified, name: datei.name };
       const stand = new Date(datei.lastModified).toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
       setzeQuelle(this.status, `Stand ${stand} · ${Object.keys(k.blaetter).length} Blätter · ${datei.name}`, 'ok');
       alleKarten(g => g.aktualisiereKunde());
+      // Blatt im Kontrollblatt angeklickt -> zur Karte dieses Generators springen (nicht beim ersten Lesen)
+      if (vorher && k.aktiv != null && (k.aktiv !== vorher.aktiv || k.aktivZeit !== vorher.aktivZeit)) springeZu(k.aktiv);
     },
   },
 };
@@ -260,7 +263,7 @@ function bereiteListeVor(text, standardPreset) {
       if (fehlt) w.unshift(`Basis-Preset fehlt: ${fehlt}`);
       for (const welle of [e.out1.welle, e.out2.welle]) if (welle && !K.findeWelle(daten.wellen, welle.datei)) w.push(`Wellenform «${welle.datei}» fehlt im Ordner Waveforms`);
       einstIndex.set(it.preset, einst.length);
-      einst.push({ e, roh: preset, warnungen: w });
+      einst.push({ key: it.preset, e, roh: preset, warnungen: w });
     }
     const ei = einstIndex.get(it.preset), ein = einst[ei];
     it.wobble = p && p.wobbleProzent ? K.wobbleAus(p.wobbleProzent, ein.roh) : ein.e.wobble;
@@ -400,6 +403,13 @@ class Generator {
   setzeStatus(text, art = '') { const s = $('.status', this.karte); s.textContent = text; s.className = 'status ' + art; }
   setzeListe(text) {
     if (text === this.einst.liste) return;
+    if (this.lauf) {                                   // während dem Lauf: nur ab dem nächsten Programm änderbar
+      const f = this.uebernimmImLauf(text);
+      if (f) { $('.liste', this.karte).value = this.einst.liste; this.melde(f, 'fehler'); this.pruefe(); return; }
+      this.einst.liste = text;
+      speichereAlle(); this.pruefe(); this.aktualisiereKunde();
+      return;
+    }
     this.einst.liste = text;
     if (this.fortsetzen) { this.fortsetzen = null; $('.btn-weiter', this.karte).hidden = true; this.setzeStatus('bereit'); }
     speichereAlle(); this.pruefe(); this.aktualisiereKunde();
@@ -516,30 +526,67 @@ class Generator {
     const basis = this.einst.liste.replace(/\s+$/, '');
     const text = (basis ? basis + '\n' : '') + zeilen.join('\n');
     if (this.lauf) {
-      const v = bereiteListeVor(text, this.einst.standardPreset);
-      if (v.blockiert) { this.setzeStatus('Nicht angehängt: ' + v.warnungen.join(' · '), 'fehler'); return; }
-      const l = this.lauf;
-      l.plan = v.plan; l.items = v.items; l.einst = v.einst; l.listeText = text;
-      this.log(`Angehängt: ${zeilen.map(z => z.split(/\s{2,}|\t/)[0]).join(', ')}`);
+      const f = this.uebernimmImLauf(text);
+      if (f) { this.melde('Nicht angehängt: ' + f, 'fehler'); return; }
+      const codes = zeilen.map(z => z.split(/\s{2,}|\t/)[0]).join(', ');
+      this.log(`Angehängt: ${codes}`);
+      this.melde(`Angehängt: ${codes}`, 'ok');
     }
     $('.liste', this.karte).value = text;
     this.einst.liste = text;
     speichereAlle(); this.pruefe(); this.pruefeNeue();
   }
 
+  /**
+   * Neue Programmliste in den laufenden Ablauf übernehmen. Das laufende und die schon gelaufenen Programme müssen gleich
+   * bleiben; alles danach darf neu sein, sich ändern oder wegfallen. Programme mit offenem Punkt (z. B. NF/HF fehlt) werden
+   * übersprungen, bis er geklärt ist. Rückgabe: Fehlertext oder null.
+   */
+  uebernimmImLauf(text) {
+    const l = this.lauf;
+    const v = bereiteListeVor(text, this.einst.standardPreset);
+    const s = l.plan.schritte[l.schritt], pi = s ? s.pi : -1;
+    for (let i = 0; i <= pi; i++) {
+      const alt = l.items[i], neu = v.items[i];
+      if (alt.fehler) continue;                                    // war übersprungen: darf nachträglich geklärt werden
+      if (!neu || neu.zeile !== alt.zeile) return i === pi ? `${alt.code} läuft gerade – das laufende Programm lässt sich nicht ändern` : `${alt.code} ist schon gelaufen – nur Programme nach dem laufenden ändern`;
+    }
+    if (s) {
+      const alt = l.items[pi], neu = v.items[pi];
+      if (neu.fehler || neu.ende - neu.start !== alt.ende - alt.start) return `${alt.code} läuft gerade – das laufende Programm lässt sich nicht ändern`;
+      l.schritt = neu.start + (l.schritt - alt.start);
+    }
+    const aktiv = l.aktivEi != null && l.einst[l.aktivEi] ? l.einst[l.aktivEi].key : null;
+    l.plan = v.plan; l.items = v.items; l.einst = v.einst; l.listeText = text;
+    l.warnungen = v.warnungen.filter(w => !/^Keine (Programme|abspielbaren)/.test(w));
+    if (aktiv) l.aktivEi = v.einst.findIndex(x => x.key === aktiv);
+    speichereAlle();
+    return null;
+  }
+
+  /** Meldung über der Vorschau, die der laufende Fortschritt nicht überschreibt (verschwindet nach 20 s). */
+  melde(text, art = '') {
+    this.meldung = { text, art, bis: Date.now() + 20000 };
+    clearTimeout(this.meldeUhr);
+    this.meldeUhr = setTimeout(() => { this.meldung = null; this.pruefe(); }, 20000);
+    this.pruefe();
+  }
+
   // ---------------------------------------------------------------- Prüfen und Vorschau
   pruefe() {
     const w = $('.warnungen', this.karte), z = $('.zusammenfassung', this.karte), vs = $('.vorschau', this.karte);
-    const anzeigen = this.lauf ? { items: this.lauf.items, plan: this.lauf.plan, warnungen: [], blockiert: false, einst: this.lauf.einst } : bereiteListeVor(this.einst.liste, this.einst.standardPreset);
+    const anzeigen = this.lauf ? { items: this.lauf.items, plan: this.lauf.plan, warnungen: this.lauf.warnungen || [], blockiert: false, einst: this.lauf.einst } : bereiteListeVor(this.einst.liste, this.einst.standardPreset);
     vs.innerHTML = anzeigen.items.map((it, i) => {
       const preset = it.preset ? `<b class="${/killing/i.test(it.preset) ? 'k' : 'h'}">${esc(it.preset)}</b>` : '';
       const wob = it.wobble ? ` · <span class="w" title="Frequency Wobble, Dreieck ${it.wobble.stufen} Stufen, ${it.wobble.hz} Stufen/s – am Gerät noch nicht gegen Spooky2 geprüft">Wobble ${String(it.wobble.prozent).replace('.', ',')} % (vorläufig)</span>` : '';
-      const wahl = /NF oder HF/.test(it.fehler || '') && !this.lauf ? ` <button class="ghost klein" data-z="${it.zeilenNr}" data-v="NF">NF</button> <button class="ghost klein" data-z="${it.zeilenNr}" data-v="HF">HF</button>` : '';
+      const wahl = /NF oder HF/.test(it.fehler || '') ? ` <button class="ghost klein" data-z="${it.zeilenNr}" data-v="NF">NF</button> <button class="ghost klein" data-z="${it.zeilenNr}" data-v="HF">HF</button>` : '';
       const hinweis = it.fehler ? esc(it.fehler) + wahl : (it.warnungen || []).filter(x => !NICHT_UNTERSTUETZT.test(x)).map(esc).join(' · ');
       return `<div class="p${it.fehler ? ' fehler' : ''}" data-pi="${i}"><code>${esc(it.code)}</code><span class="name" title="${esc(it.zeile)}">${esc(it.name)}</span><span class="zeit">${it.sek != null ? fmtZeit(it.sek) : ''}</span>` +
         `<span class="pinfo">${preset}${wob}${hinweis ? (preset ? ' · ' : '') + hinweis : ''}</span></div>`;
     }).join('');
-    w.textContent = anzeigen.warnungen.join(' · ');
+    const m = this.meldung && this.meldung.bis > Date.now() ? this.meldung : null;
+    w.textContent = [m ? m.text : '', ...anzeigen.warnungen.map(x => this.lauf ? 'Übersprungen, bis geklärt – ' + x : x)].filter(Boolean).join(' · ');
+    w.className = 'warnungen' + (m && m.art === 'ok' && !anzeigen.warnungen.length ? ' ok' : '');
     const d = this.einst.durchlaeufe, n = anzeigen.items.length;
     z.textContent = !daten.geladen ? 'Zuerst den Spooky2-Ordner wählen.' : n ? `${n} Programm${n === 1 ? '' : 'e'} · ${anzeigen.einst.length} Preset${anzeigen.einst.length === 1 ? '' : 's'} · ${fmtZeit(anzeigen.plan.gesamtSek)} pro Durchlauf` + (d ? ` · ${d} × = ${fmtZeit(anzeigen.plan.gesamtSek * d)}` : ' · endlos') : '';
     if (this.lauf) { this.markiereAktiv(); return this.lauf; }
@@ -554,7 +601,7 @@ class Generator {
   }
 
   sperre(laufend) {
-    for (const s of ['.nr', '.liste', '.preset', '.durchlaeufe', '.start-um', '.btn-testen', '.btn-heute']) $(s, this.karte).disabled = laufend;
+    for (const s of ['.nr', '.preset', '.durchlaeufe', '.start-um', '.btn-testen', '.btn-heute']) $(s, this.karte).disabled = laufend;
     $('.btn-start', this.karte).disabled = laufend || !this.vorbereitet;
     $('.btn-stop', this.karte).disabled = !laufend;
     this.karte.classList.toggle('laeuft', laufend);
@@ -599,7 +646,7 @@ class Generator {
     }
     const schritt = stand && stand.schritt < v.plan.schritte.length ? stand.schritt : 0;
     this.lauf = {
-      plan: v.plan, items: v.items, einst: v.einst, listeText: this.einst.liste,
+      plan: v.plan, items: v.items, einst: v.einst, listeText: this.einst.liste, warnungen: [],
       schritt, tImSchritt: stand && schritt === stand.schritt ? stand.tImSchritt ?? 0 : 0, durchlauf: stand?.durchlauf ?? 1,
       durchlaeufe: this.einst.durchlaeufe, zustand: K.neuerZustand(), status: startUmMs ? 'wartet' : 'einrichten',
       startUmMs, letzterTick: null, letzterTakt: null, beschaeftigt: false, aktivEi: null, aktivPi: null,
@@ -618,13 +665,13 @@ class Generator {
       const s = l.plan.schritte;
       let ei = s[l.schritt].ei;
       if (s[l.schritt].pause) { const n = s.slice(l.schritt).find(x => !x.pause) || s.find(x => !x.pause); if (n) ei = n.ei; }
-      const ein = l.einst[ei];
+      const ein = l.einst[ei], key = ein.key;
       this.zeigePreset(ein.e.name, true);
       this.setzeStatus(`Generator wird eingerichtet: ${ein.e.name || 'Preset'} …`);
       await this.leitung.oeffne();
       await this.sende(K.einrichtung(ein.e, daten.wellen));
       if (!this.lauf) return;
-      l.aktivEi = ei;
+      l.aktivEi = l.einst.findIndex(x => x.key === key);
       this.zeigePreset(ein.e.name);
       this.log(`Preset aktiv: ${ein.e.name}`);
       l.status = 'laeuft';
@@ -724,13 +771,60 @@ class Generator {
   }
 }
 
+// ------------------------------------------------------------------ Übersicht: ein Knopf pro Generator im Kopf
+const zahl = (g) => parseInt(g.einst.nr, 10) || 0;
+
+/** Zustand für die Leiste: k = Killing läuft, h = übriges Preset läuft, w = wartet/stellt um, f = Fehler, '' = steht. */
+function zustand(g) {
+  const l = g.lauf, st = $('.status', g.karte);
+  if (l) {
+    if (l.status !== 'laeuft') return { art: 'w', text: l.status === 'wartet' ? 'wartet auf Startzeit' : 'wird eingerichtet' };
+    const e = l.einst[l.aktivEi], name = e ? e.e.name : '';
+    return { art: /killing/i.test(name) ? 'k' : 'h', text: `läuft · ${name}` };
+  }
+  if (st.classList.contains('fehler')) return { art: 'f', text: st.textContent };
+  return { art: '', text: st.textContent || 'steht' };
+}
+
+let leistenStand = '';
+function aktualisiereLeiste() {
+  const nav = $('#leiste');
+  const aktiv = daten.kontrolle ? daten.kontrolle.aktiv : null;
+  const liste = [...generatoren].sort((a, b) => zahl(a) - zahl(b)).map(g => {
+    const z = zustand(g), kunde = $('.kunde', g.karte).textContent;
+    return { nr: zahl(g), art: z.art, titel: `Generator ${g.einst.nr}${kunde ? ' · ' + kunde : ''} · ${z.text}` };
+  });
+  const stand = JSON.stringify([liste, aktiv]);
+  if (stand === leistenStand) return;
+  leistenStand = stand;
+  nav.hidden = liste.length < 1;
+  nav.innerHTML = liste.map(x => `<button class="lg ${x.art}${x.nr === aktiv ? ' aktiv' : ''}" data-nr="${x.nr}" title="${esc(x.titel)}">${x.nr}</button>`).join('') +
+    '<span class="legende">rot Killing · blau Healing · gelb stellt um · weiss steht</span>';
+  setzeKopfHoehe();
+}
+
+/** Zur Karte des Generators mit dieser Nummer scrollen und sie kurz hervorheben. */
+function springeZu(nr) {
+  const g = generatoren.find(x => zahl(x) === Number(nr));
+  if (!g) { setzeQuelle('#kontrolle-status', `Blatt ${nr} angeklickt – kein Generator mit Nummer ${nr} verbunden`, 'fehler'); return; }
+  g.karte.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  g.karte.classList.remove('markiert'); void g.karte.offsetWidth; g.karte.classList.add('markiert');
+}
+
+/** Höhe des (am grossen Bildschirm stehenbleibenden) Kopfs, damit die Karte beim Springen nicht darunter verschwindet. */
+function setzeKopfHoehe() {
+  const h = $('header');
+  document.documentElement.style.setProperty('--kopf', getComputedStyle(h).position === 'sticky' ? h.offsetHeight + 'px' : '0px');
+}
+
 // ------------------------------------------------------------------ Taktgeber (Web Worker, läuft auch im Hintergrund)
 function starteTakt() {
   const code = 'setInterval(() => postMessage(0), 50);';
   const w = new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
-  let letztesSpeichern = 0;
+  let letztesSpeichern = 0, letzteLeiste = 0;
   w.onmessage = () => {
     for (const g of generatoren) g.tick();
+    if (Date.now() - letzteLeiste > 500) { letzteLeiste = Date.now(); aktualisiereLeiste(); }
     if (Date.now() - letztesSpeichern > 5000) { letztesSpeichern = Date.now(); if (generatoren.some(g => g.lauf)) speichereAlle(); }
   };
 }
@@ -753,6 +847,8 @@ async function init() {
   $('#btn-hinzu').onclick = async () => { try { await fuegeHinzu(await navigator.serial.requestPort()); } catch (e) { /* abgebrochen */ } };
   $('#btn-alle-testen').onclick = () => { for (const g of generatoren) if (!g.lauf) g.teste(); };
   $('#btn-alle-stopp').onclick = () => { for (const g of generatoren) if (g.lauf) g.stoppe('gestoppt'); };
+  $('#leiste').onclick = (ev) => { const b = ev.target.closest('button[data-nr]'); if (b) springeZu(b.dataset.nr); };
+  window.addEventListener('resize', setzeKopfHoehe);
   navigator.serial.addEventListener('connect', (ev) => fuegeHinzu(ev.target));
   window.addEventListener('beforeunload', (ev) => { speichereAlle(); if (generatoren.some(g => g.lauf)) { ev.preventDefault(); ev.returnValue = ''; } });
   for (const p of await navigator.serial.getPorts()) await fuegeHinzu(p);

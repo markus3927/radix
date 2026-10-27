@@ -380,7 +380,7 @@
       if (!katalog) return { art: 'fehler', text: 'Frequenz-Finder nicht geladen' };
       const nr = pr[1].padStart(4, '0'), rest = pr[2];
       let v = '';
-      const mv = rest.match(/\b(NF|HF)\b(?!.*\b(?:NF|HF)\b)/i);   // letzte Angabe zählt («… - HF (kHz)»)
+      const mv = rest.match(/(?<![\p{L}\d])(NF|HF)(?![\p{L}\d])(?!.*(?<![\p{L}\d])(?:NF|HF)(?![\p{L}\d]))/iu);   // letzte Angabe zählt («… - HF (kHz)»)
       if (mv) v = mv[1].toUpperCase();
       const kandidaten = v ? [`pr${nr} ${v}`] : [`pr${nr}`, `pr${nr} NF`, `pr${nr} HF`];
       const gefunden = kandidaten.filter(c => katalog.programme.has(c));
@@ -410,7 +410,7 @@
       e.dauer = /^(\d+h)?\s*(\d+\s*(min|s))?$/.test(teile[1] || '') && /\d/.test(teile[1] || '') ? teile[1] : '';   // «1h 09min», «54min»
       e.name = teile.slice(e.dauer ? 2 : 1).filter(x => !/^(morgens|tagsüber|nachts|abends|mittags|vor Essen|nach Essen)$/i.test(x)).join(' ').replace(/\s+/g, ' ').trim();
       e.tageszeit = teile.find(x => /^(morgens|tagsüber|nachts|abends|mittags|vor Essen|nach Essen)$/i.test(x)) || '';
-      const v = e.code.startsWith('pr') ? (e.text.match(/\b(NF|HF)\b(?!.*\b(?:NF|HF)\b)/) || [])[1] : '';
+      const v = e.code.startsWith('pr') ? (e.text.match(/(?<![\p{L}\d])(NF|HF)(?![\p{L}\d])(?!.*(?<![\p{L}\d])(?:NF|HF)(?![\p{L}\d]))/u) || [])[1] : '';
       e.variante = v || '';
       e.zeile = `${e.code}${v ? ' ' + v : ''}  ${e.name}`.trim();   // so landet der Eintrag in der Programmliste
     }
@@ -445,7 +445,9 @@
     const blaetter = {};
     for (const [k, v] of Object.entries(d)) if (/^\d+$/.test(k) && v && Array.isArray(v.days)) blaetter[k] = v;
     if (!Object.keys(blaetter).length) throw new Error('Keine Kontrollblätter in der Datei');
-    return { blaetter };
+    // Gerade angeklicktes Blatt (schreibt das Kontrollblatt beim Blattwechsel): «aktiv»: 5, «aktivZeit»: Zeitstempel
+    const a = parseInt(d.aktiv, 10);
+    return { blaetter, aktiv: Number.isFinite(a) ? a : null, aktivZeit: d.aktivZeit ?? null };
   }
 
   /** Heutige Zeile eines Blatts (Zeile = Monatstag, wie im Kontrollblatt). */

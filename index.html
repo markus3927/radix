@@ -61,6 +61,18 @@
   .leer{grid-column:1/-1;color:var(--text-light);padding:36px 0;text-align:center}
   .gen{background:var(--page);border:1px solid var(--divider);border-top:4px solid var(--royal-light);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;box-shadow:0 1px 3px rgba(13,62,106,.06);min-width:0}
   .gen.laeuft{border-top-color:var(--ok);background:var(--royal-soft)}
+  .gen{scroll-margin-top:calc(var(--kopf,0px) + 12px)}
+  .gen.markiert{animation:markiert 2.6s ease-out}
+  @keyframes markiert{0%,55%{box-shadow:0 0 0 4px #42A5F5,0 6px 22px rgba(21,101,192,.45)}100%{box-shadow:0 1px 3px rgba(13,62,106,.06)}}
+  /* Übersicht im Kopf: ein Knopf pro Generator, Farbe = Zustand */
+  #leiste{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:10px}
+  #leiste button.lg{min-width:40px;padding:4px 8px;font-size:14px;border-radius:8px;color:var(--royal-dark);background:#fff;border-color:#9DBBE0;box-shadow:0 2px 0 #9DBBE0}
+  #leiste button.lg.k{background:var(--kill);border-color:#8E0B20;color:#fff;box-shadow:0 2px 0 #8E0B20}
+  #leiste button.lg.h{background:var(--heal);border-color:#1A3690;color:#fff;box-shadow:0 2px 0 #1A3690}
+  #leiste button.lg.w{background:#FFD966;border-color:#9A6A00;color:#5A3E00;box-shadow:0 2px 0 #9A6A00}
+  #leiste button.lg.f{background:#fff;border:2px solid var(--rot);color:var(--rot);box-shadow:0 2px 0 var(--rot)}
+  #leiste button.lg.aktiv{outline:3px solid #fff;outline-offset:2px}
+  #leiste .legende{font-size:12px;color:#D6E8F7;align-self:center;margin-left:6px}
   .kopf{display:flex;align-items:center;gap:8px;min-width:0}
   .kopf .nr{width:56px;flex:none;font-weight:700;font-size:18px;color:var(--royal-dark)}
   .kunde{font-weight:600;color:var(--royal-dark);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
@@ -108,6 +120,7 @@
   .zusammenfassung{font-size:12.5px;color:var(--text-light)}
   .warnungen{font-size:12.5px;color:var(--rot);background:var(--rot-bg);border-radius:6px;padding:5px 8px}
   .warnungen:empty{display:none}
+  .warnungen.ok{color:var(--royal-dark);background:var(--royal-light)}
   .status{font-size:13.5px;font-weight:600;min-height:20px;color:var(--royal-dark);overflow-wrap:anywhere}
   .status.ok{color:var(--ok)} .status.fehler{color:var(--rot)} .status.warnung{color:var(--gold)}
   .balken{height:6px;background:var(--royal-light);border-radius:3px;overflow:hidden}
@@ -128,6 +141,7 @@
   <button id="btn-alle-testen" class="ghost" title="Jeder stehende Generator zeigt seine Kartennummer auf dem Display">Alle testen</button>
   <button id="btn-alle-stopp" class="stop">Alle stoppen</button>
   </div>
+  <nav id="leiste" hidden aria-label="Generatoren"></nav>
 </header>
 
 <div class="quellen">
