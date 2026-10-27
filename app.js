@@ -1,11 +1,12 @@
-/* Generator-Steuerung – Oberfläche, Verbindung, Ablauf
+/* RADIX Frequenzsteuerung – Oberfläche, Verbindung, Ablauf
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.1.0';
+const VERSION = '0.4.0';
 const $ = (s, el = document) => el.querySelector(s);
 const K = window.Kern;
-const SPEICHER = 'gs-generatoren-v1';
+const SPEICHER = 'radix-generatoren-v2';   // { zuordnung: [Nummer je Anschluss], gen: { Nummer: Einstellungen } }
+const STD_PRESET = 'Healing (R) - JW';
 
 // ------------------------------------------------------------------ Hilfen
 const fmtZeit = (sek) => {
@@ -15,10 +16,12 @@ const fmtZeit = (sek) => {
 };
 const fmtHz = (hz) => hz == null ? '–' : (hz >= 1000 ? `${(+hz.toFixed(3)).toLocaleString('de-CH')} Hz` : `${+hz.toFixed(4)} Hz`);
 const jetzt = () => new Date().toLocaleTimeString('de-CH');
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 function lade(key, std) { try { return JSON.parse(localStorage.getItem(key)) ?? std; } catch (e) { return std; } }
 function speichere(key, wert) { try { localStorage.setItem(key, JSON.stringify(wert)); } catch (e) { /* voll oder gesperrt */ } }
+function setzeQuelle(sel, text, art = '') { const s = $(sel); s.textContent = text; s.title = text; s.className = 'stand ' + art; }
 
-// ------------------------------------------------------------------ Ordner C:\Spooky2 (Handle in IndexedDB)
+// ------------------------------------------------------------------ Gemerkte Ordner und Dateien (Handles in IndexedDB)
 const db = {
   async offen() {
     return new Promise((ok, nein) => {
@@ -31,8 +34,10 @@ const db = {
   async set(k, v) { try { const d = await this.offen(); return await new Promise(ok => { const t = d.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = ok; t.onerror = ok; }); } catch (e) { /* nicht speicherbar: beim nächsten Start neu wählen */ } },
 };
 
-const daten = { katalog: new Map(), presets: [], wellen: new Map(), geladen: false };
+const daten = { katalog: new Map(), presets: [], wellen: new Map(), geladen: false, finder: null, kontrolle: null };
+const alleKarten = (fn) => { for (const g of generatoren) fn(g); };
 
+// ------------------------------------------------------------------ Spooky2-Ordner
 async function* dateienIn(ordner, pfad = '') {
   for await (const [name, h] of ordner.entries()) {
     if (h.kind === 'directory') yield* dateienIn(h, pfad ? `${pfad}\\${name}` : name);
@@ -41,7 +46,6 @@ async function* dateienIn(ordner, pfad = '') {
 }
 
 async function ladeSpooky2(wurzel) {
-  const status = $('#ordner-status');
   let presetOrdner = null, wellenOrdner = null;
   for await (const [name, h] of wurzel.entries()) {
     if (h.kind !== 'directory') continue;
@@ -55,7 +59,7 @@ async function ladeSpooky2(wurzel) {
   for await (const d of dateienIn(presetOrdner)) {
     if (!/\.txt$/i.test(d.pfad)) continue;
     dateien.push({ pfad: d.pfad, text: dec.decode(await (await d.handle.getFile()).arrayBuffer()) });
-    if (++n % 200 === 0) status.textContent = `Lese Presets … ${n}`;
+    if (++n % 200 === 0) setzeQuelle('#ordner-status', `Lese Presets … ${n}`);
   }
   const wellen = new Map();
   for await (const d of dateienIn(wellenOrdner)) {
@@ -81,9 +85,8 @@ async function ladeSpooky2(wurzel) {
     gesehen.add(p.name);
     const o = document.createElement('option'); o.value = p.name; o.label = p.ordner; dl.appendChild(o);
   }
-  status.textContent = `${gesehen.size} Remote-Presets, ${wellen.size} Wellenformen geladen`;
-  status.className = 'ok';
-  for (const g of generatoren) g.pruefePreset();
+  setzeQuelle('#ordner-status', `${gesehen.size} Remote-Presets, ${wellen.size} Wellenformen`, 'ok');
+  alleKarten(g => { g.pruefe(); g.aktualisiereKunde(); });
 }
 
 async function waehleOrdner() {
@@ -91,23 +94,94 @@ async function waehleOrdner() {
     const h = await window.showDirectoryPicker({ id: 'spooky2', mode: 'read' });
     await db.set('spooky2', h);
     await ladeSpooky2(h);
-  } catch (e) { if (e.name !== 'AbortError') zeigeFehler(e); }
+  } catch (e) { if (e.name !== 'AbortError') setzeQuelle('#ordner-status', e.message || String(e), 'fehler'); }
 }
 
 async function ordnerBeimStart() {
   const h = await db.get('spooky2').catch(() => null);
   if (!h) return;
-  const recht = await h.queryPermission({ mode: 'read' });
-  if (recht === 'granted') { await ladeSpooky2(h).catch(zeigeFehler); return; }
+  const fehler = (e) => setzeQuelle('#ordner-status', e.message || String(e), 'fehler');
+  if (await h.queryPermission({ mode: 'read' }) === 'granted') { await ladeSpooky2(h).catch(fehler); return; }
   const b = $('#btn-ordner');
-  b.textContent = 'Zugriff auf C:\\Spooky2 erlauben';
+  b.textContent = 'Zugriff erlauben';
+  setzeQuelle('#ordner-status', 'C:\\Spooky2 gemerkt – Zugriff bestätigen', 'fehler');
   b.onclick = async () => {
-    if (await h.requestPermission({ mode: 'read' }) === 'granted') { b.textContent = 'Spooky2-Ordner wählen'; b.onclick = waehleOrdner; await ladeSpooky2(h).catch(zeigeFehler); }
+    if (await h.requestPermission({ mode: 'read' }) === 'granted') { b.textContent = 'Ordner wählen'; b.onclick = waehleOrdner; await ladeSpooky2(h).catch(fehler); }
   };
 }
 
-function zeigeFehler(e) {
-  const s = $('#ordner-status'); s.textContent = e.message || String(e); s.className = 'fehler';
+// ------------------------------------------------------------------ Frequenz-Finder und Kontrollblatt (Dateien, nur lesen)
+const quellen = {
+  finder: {
+    titel: 'Frequenz-Finder', status: '#finder-status', knopf: '#btn-finder', alleMs: 60000,
+    typen: [{ description: 'Frequenz-Finder (HTML)', accept: { 'text/html': ['.html', '.htm'] } }],
+    verarbeite(text, datei) {
+      const k = K.finderKatalog(text);
+      daten.finder = k;
+      setzeQuelle(this.status, `${k.version || 'Finder'} · ${k.programme.size} Programme · ${datei.name}`, 'ok');
+      alleKarten(g => { g.pruefe(); g.aktualisiereKunde(); });
+    },
+  },
+  kontrolle: {
+    titel: 'Kontrollblatt', status: '#kontrolle-status', knopf: '#btn-kontrolle', alleMs: 3000,
+    typen: [{ description: 'Kontrollblatt-Sicherung (JSON)', accept: { 'application/json': ['.json'] } }],
+    verarbeite(text, datei) {
+      const k = K.leseKontrolle(text);
+      daten.kontrolle = { ...k, zeit: datei.lastModified, name: datei.name };
+      const stand = new Date(datei.lastModified).toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+      setzeQuelle(this.status, `Stand ${stand} · ${Object.keys(k.blaetter).length} Blätter · ${datei.name}`, 'ok');
+      alleKarten(g => g.aktualisiereKunde());
+    },
+  },
+};
+
+async function ladeQuelle(name, nurWennNeu = false) {
+  const q = quellen[name];
+  if (!q.handle) return;
+  const f = await q.handle.getFile();
+  if (nurWennNeu && q.zuletzt === f.lastModified && q.groesse === f.size) return;
+  const text = await f.text();
+  try { q.verarbeite(text, f); q.zuletzt = f.lastModified; q.groesse = f.size; }
+  catch (e) {
+    // Datei wird evtl. gerade geschrieben: alten Stand behalten, nur melden
+    if (!nurWennNeu) setzeQuelle(q.status, `${f.name}: ${e.message}`, 'fehler');
+  }
+}
+
+async function waehleDatei(name) {
+  const q = quellen[name];
+  try {
+    const [h] = await window.showOpenFilePicker({ id: name, types: q.typen, multiple: false });
+    q.handle = h; q.zuletzt = null;
+    await db.set(name, h);
+    await ladeQuelle(name);
+  } catch (e) { if (e.name !== 'AbortError') setzeQuelle(q.status, e.message || String(e), 'fehler'); }
+}
+
+async function quelleBeimStart(name) {
+  const q = quellen[name];
+  $(q.knopf).onclick = () => waehleDatei(name);
+  const h = await db.get(name).catch(() => null);
+  if (!h) return;
+  q.handle = h;
+  if (await h.queryPermission({ mode: 'read' }) === 'granted') { await ladeQuelle(name).catch(e => setzeQuelle(q.status, e.message, 'fehler')); }
+  else {
+    const b = $(q.knopf);
+    b.textContent = 'Zugriff erlauben';
+    setzeQuelle(q.status, `${h.name} gemerkt – Zugriff bestätigen`, 'fehler');
+    b.onclick = async () => {
+      if (await h.requestPermission({ mode: 'read' }) === 'granted') { b.textContent = 'Datei wählen'; b.onclick = () => waehleDatei(name); await ladeQuelle(name).catch(e => setzeQuelle(q.status, e.message, 'fehler')); }
+    };
+  }
+}
+
+/** Änderungen der Dateien laufend übernehmen (das Kontrollblatt speichert automatisch). */
+function beobachteQuellen() {
+  for (const [name, q] of Object.entries(quellen)) {
+    setInterval(async () => {
+      try { if (q.handle && await q.handle.queryPermission({ mode: 'read' }) === 'granted') await ladeQuelle(name, true); } catch (e) { /* Datei kurz nicht lesbar */ }
+    }, q.alleMs);
+  }
 }
 
 // ------------------------------------------------------------------ Serielle Verbindung
@@ -152,29 +226,136 @@ class Leitung {
   }
 }
 
+// ------------------------------------------------------------------ Programmliste -> Ablauf
+const NICHT_UNTERSTUETZT = /fehlt|Keine|nicht unterstützt|nicht gefunden|Unbekannter/;
+
+/** Programmliste einer Karte vorbereiten: Programme deuten, Presets zuordnen, gemeinsamen Ablauf bauen. */
+function bereiteListeVor(text, standardPreset) {
+  const items = [];
+  String(text || '').split('\n').forEach((zeile, zeilenNr) => {
+    const r = K.deuteListenZeile(zeile, daten.finder);
+    if (r) items.push({ zeile: zeile.trim(), zeilenNr, r, fehler: r.art === 'fehler' ? r.text : '' });
+  });
+  // Preset je Programm: Finder-Kachel; Pause/Schumann übernehmen das Preset davor (sonst danach); eigene Zeilen das Karten-Preset
+  const std = standardPreset || STD_PRESET;
+  const eigenes = (it) => it.r.art === 'finder' && it.r.programm.art === 'pr' ? it.r.programm.preset : it.r.art === 'zeile' ? std : null;
+  let letztes = null;
+  for (const it of items) { if (it.fehler) continue; it.preset = eigenes(it) || letztes; if (eigenes(it)) letztes = it.preset; }
+  for (let i = items.length - 1, naechstes = null; i >= 0; i--) { const it = items[i]; if (it.fehler) continue; if (!it.preset) it.preset = naechstes; if (eigenes(it)) naechstes = it.preset; }
+  for (const it of items) if (!it.fehler && !it.preset) it.preset = std;
+
+  const einst = [], einstIndex = new Map(), schritte = [], warnungen = [];
+  items.forEach((it, pi) => {
+    const p = it.r.art === 'finder' ? it.r.programm : null;
+    it.code = p ? p.code : it.r.art === 'zeile' ? 'Zeile' : '?';
+    it.name = p ? p.name.replace(/^(pa|sm)\d{2}\s+/i, '') : it.r.art === 'zeile' ? it.r.zeile : it.zeile;
+    if (it.fehler) return;
+    if (!daten.geladen) { it.fehler = 'Spooky2-Ordner noch nicht gewählt'; return; }
+    const roh = daten.katalog.get(it.preset.toLowerCase());
+    if (!roh) { it.fehler = `Preset «${it.preset}» nicht gefunden`; return; }
+    if (!einstIndex.has(it.preset)) {
+      const { preset, fehlt } = K.loeseBasis(roh, daten.katalog);
+      const e = K.einstellungen(preset);
+      const w = [...e.warnungen];
+      if (fehlt) w.unshift(`Basis-Preset fehlt: ${fehlt}`);
+      for (const welle of [e.out1.welle, e.out2.welle]) if (welle && !K.findeWelle(daten.wellen, welle.datei)) w.push(`Wellenform «${welle.datei}» fehlt im Ordner Waveforms`);
+      einstIndex.set(it.preset, einst.length);
+      einst.push({ e, roh: preset, warnungen: w });
+    }
+    const ei = einstIndex.get(it.preset), ein = einst[ei];
+    it.wobble = p && p.wobbleProzent ? K.wobbleAus(p.wobbleProzent, ein.roh) : ein.e.wobble;
+    const plan = K.erstellePlan(ein.e, [{ name: it.code, eintraege: K.leseFrequenzzeile(p ? p.zeile : it.r.zeile, p ? p.dwell : K.STANDARD_DWELL) }], { wobble: it.wobble });
+    it.sek = plan.gesamtSek;
+    it.warnungen = [...new Set([...ein.warnungen, ...plan.warnungen])];
+    if (it.warnungen.some(x => NICHT_UNTERSTUETZT.test(x))) it.fehler = it.warnungen.filter(x => NICHT_UNTERSTUETZT.test(x)).join(' · ');
+    it.start = schritte.length;
+    for (const s of plan.schritte) schritte.push({ ...s, ei, pi });
+    it.ende = schritte.length;
+  });
+  for (const it of items) if (it.fehler) warnungen.push(`${it.code !== '?' ? it.code : it.zeile.slice(0, 30)}: ${it.fehler}`);
+  if (!items.length) warnungen.push('Keine Programme: Programmliste ausfüllen');
+  else if (!schritte.some(s => !s.pause) && !warnungen.length) warnungen.push('Keine abspielbaren Frequenzen');
+  const blockiert = warnungen.length > 0;
+  return { items, einst, plan: { schritte, gesamtSek: schritte.reduce((a, s) => a + s.sek, 0) }, warnungen, blockiert };
+}
+
 // ------------------------------------------------------------------ Generator
 const generatoren = [];
-let gespeichert = lade(SPEICHER, []);
-const speichereAlle = () => { gespeichert = generatoren.map(g => g.daten()); speichere(SPEICHER, gespeichert); };
+// Einstellungen gehören zur Generator-Nummer (= Kontrollblatt), nicht zum COM-Anschluss: nach einem Neustart kann Windows
+// die Anschlüsse anders verteilen. Dann mit «Testen» prüfen und die Nummer korrigieren – Programmliste und Kunde wandern mit.
+function ladeSpeicher() {
+  const s = lade(SPEICHER, null);
+  if (s && s.gen) return s;
+  const neu = { zuordnung: [], gen: {} };
+  lade('gs-generatoren-v1', []).forEach((g, i) => { const nr = String(g.nr ?? i + 1); neu.zuordnung[i] = nr; neu.gen[nr] = g; });   // aus 0.1–0.3
+  return neu;
+}
+let speicher = ladeSpeicher();
+const speichereAlle = () => {
+  for (const g of generatoren) speicher.gen[g.einst.nr] = g.daten();
+  speicher.zuordnung = generatoren.map(g => g.einst.nr);
+  speichere(SPEICHER, speicher);
+};
 
 class Generator {
   constructor(port, index) {
     this.leitung = new Leitung(port);
     this.index = index;
-    const g = gespeichert[index] || {};
-    this.einst = { nr: g.nr ?? index + 1, preset: g.preset || '', zeile: g.zeile || '', durchlaeufe: g.durchlaeufe ?? 1, startUm: g.startUm || '' };
-    this.lauf = null;                    // laufender Ablauf
-    this.fortsetzen = g.lauf || null;    // gespeicherter Stand nach Neuladen
+    let nr = speicher.zuordnung[index];
+    const belegt = (n) => generatoren.some(g => g.einst.nr === String(n));
+    if (nr == null || belegt(nr)) { nr = index + 1; while (belegt(nr)) nr++; }
+    this.lauf = null;                                                       // laufender Ablauf
+    this.ladeEinst(String(nr));
     this.protokoll = [];
+    this.neue = [];
     this.baueKarte();
+  }
+  /** Einstellungen der Generator-Nummer laden (gespeichert unter dieser Nummer). */
+  ladeEinst(nr) {
+    const g = speicher.gen[nr] || {};
+    // Übernahme aus Version 0.1/0.2: Preset + Frequenzzeile
+    this.einst = { nr, liste: g.liste ?? g.zeile ?? '', standardPreset: g.standardPreset ?? g.preset ?? '', durchlaeufe: g.durchlaeufe ?? 1, startUm: g.startUm || '', auto: g.auto ?? true };
+    this.uebernommen = g.uebernommen || null;                              // { blatt, datum, anzahl } – bereits übernommene Einträge der heutigen Zeile
+    this.autoStart = false;                                                 // Kontrollblatt-Programm wartet auf Start (z. B. NF/HF fehlt)
+    this.fortsetzen = g.lauf && g.lauf.liste === this.einst.liste ? g.lauf : null;   // gespeicherter Stand nach Neuladen
+  }
+  /** Felder der Karte mit den Einstellungen füllen. */
+  zeigeEinst() {
+    const k = this.karte;
+    $('.nr', k).value = this.einst.nr;
+    $('.liste', k).value = this.einst.liste;
+    $('.preset', k).value = this.einst.standardPreset;
+    $('.durchlaeufe', k).value = this.einst.durchlaeufe;
+    $('.start-um', k).value = this.einst.startUm;
+    $('.auto-cb', k).checked = this.einst.auto;
+    $('.btn-weiter', k).hidden = !this.fortsetzen;
+    this.aktualisiereKunde();
+    this.pruefe();
+    if (this.fortsetzen) this.setzeStatus(`Unterbrochen bei Schritt ${this.fortsetzen.schritt + 1}, Durchlauf ${this.fortsetzen.durchlauf}`, 'warnung');
+    else this.setzeStatus('bereit');
+  }
+  /** Andere Nummer für diesen Anschluss; hat ein anderer Anschluss diese Nummer, werden die beiden getauscht. */
+  wechsleNummer(neu) {
+    const alt = this.einst.nr, feld = $('.nr', this.karte);
+    neu = String(parseInt(neu, 10) || '');
+    if (!neu || neu === alt) { feld.value = alt; return; }
+    if (this.lauf) { feld.value = alt; this.setzeStatus('Nummer erst nach dem Stopp ändern', 'fehler'); return; }
+    const anderer = generatoren.find(g => g !== this && g.einst.nr === neu);
+    if (anderer && anderer.lauf) { feld.value = alt; this.setzeStatus(`Generator ${neu} läuft gerade – dort zuerst stoppen`, 'fehler'); return; }
+    speichereAlle();                                  // Stand unter den bisherigen Nummern sichern
+    this.ladeEinst(neu); this.zeigeEinst();
+    this.log(`Nummer ${alt} → ${neu}`);
+    if (anderer) { anderer.ladeEinst(alt); anderer.zeigeEinst(); anderer.log(`Nummer ${neu} → ${alt} (getauscht)`); anderer.setzeStatus(`Nummer getauscht: jetzt Generator ${alt} – mit «Testen» prüfen`, 'warnung'); }
+    speichereAlle();
+    this.setzeStatus(`Jetzt Generator ${neu}${anderer ? ` (getauscht mit ${alt})` : ''} – mit «Testen» prüfen`, 'warnung');
   }
   daten() {
     const l = this.lauf;
-    return { ...this.einst, lauf: l && l.status !== 'fertig' ? { schritt: l.schritt, tImSchritt: l.tImSchritt, durchlauf: l.durchlauf, status: l.status, startUm: l.startUmMs } : null };
+    return { ...this.einst, uebernommen: this.uebernommen, lauf: l && l.status !== 'fertig' ? { schritt: l.schritt, tImSchritt: l.tImSchritt, durchlauf: l.durchlauf, status: l.status, startUm: l.startUmMs, liste: l.listeText } : null };
   }
   log(text, art = '') {
     this.protokoll.push(`${jetzt()}  ${text}`);
-    if (this.protokoll.length > 200) this.protokoll.shift();
+    if (this.protokoll.length > 300) this.protokoll.shift();
     const el = $('.protokoll', this.karte);
     if (el.open) { el.querySelector('pre').textContent = this.protokoll.join('\n'); }
     if (art === 'fehler') this.setzeStatus(text, 'fehler');
@@ -184,140 +365,297 @@ class Generator {
     this.karte = k;
     const info = this.leitung.port.getInfo();
     $('.chip', k).textContent = info.usbVendorId === 0x1a86 ? 'CH340' : info.usbVendorId === 0x10c4 ? 'CP210x' : 'USB';
-    const nr = $('.nr', k); nr.value = this.einst.nr;
-    nr.onchange = () => { this.einst.nr = nr.value; speichereAlle(); };
-    const pr = $('.preset', k); pr.value = this.einst.preset;
-    pr.onchange = () => { this.einst.preset = pr.value.trim(); speichereAlle(); this.pruefePreset(); };
-    const ze = $('.zeile', k); ze.value = this.einst.zeile;
-    ze.onchange = () => { this.einst.zeile = ze.value.trim(); speichereAlle(); this.pruefePreset(); };
-    const du = $('.durchlaeufe', k); du.value = this.einst.durchlaeufe;
-    du.onchange = () => { this.einst.durchlaeufe = Math.max(0, parseInt(du.value, 10) || 0); du.value = this.einst.durchlaeufe; speichereAlle(); this.pruefePreset(); };
-    const st = $('.start-um', k); st.value = this.einst.startUm;
+    const nr = $('.nr', k);
+    nr.onchange = () => this.wechsleNummer(nr.value.trim());
+    const li = $('.liste', k);
+    let warte = null;
+    li.oninput = () => { clearTimeout(warte); warte = setTimeout(() => this.setzeListe(li.value), 350); };
+    li.onchange = () => { clearTimeout(warte); this.setzeListe(li.value); };
+    const pr = $('.preset', k);
+    pr.onchange = () => { this.einst.standardPreset = pr.value.trim(); speichereAlle(); this.pruefe(); };
+    const du = $('.durchlaeufe', k);
+    du.onchange = () => { this.einst.durchlaeufe = Math.max(0, parseInt(du.value, 10) || 0); du.value = this.einst.durchlaeufe; speichereAlle(); this.pruefe(); };
+    const st = $('.start-um', k);
     st.onchange = () => { this.einst.startUm = st.value; speichereAlle(); };
     $('.btn-start', k).onclick = () => this.starte();
     $('.btn-stop', k).onclick = () => this.stoppe('gestoppt');
-    $('.btn-erkennen', k).onclick = () => this.erkennen();
+    $('.btn-testen', k).onclick = () => this.teste();
     $('.btn-weiter', k).onclick = () => this.starte(this.fortsetzen);
+    $('.btn-heute', k).onclick = () => this.uebernehmeHeute();
+    $('.btn-anhaengen', k).onclick = () => this.haengeNeueAn();
+    const au = $('.auto-cb', k);
+    au.onchange = () => { this.einst.auto = au.checked; this.uebernommen = null; speichereAlle(); this.aktualisiereKunde(); };
+    $('.vorschau', k).onclick = (ev) => { const b = ev.target.closest('button[data-z]'); if (b) this.setzeVariante(+b.dataset.z, b.dataset.v); };
     $('.protokoll', k).ontoggle = () => { $('.protokoll pre', k).textContent = this.protokoll.join('\n'); };
     $('#generatoren').appendChild(k);
-    this.pruefePreset();
-    if (this.fortsetzen) {
-      $('.btn-weiter', k).hidden = false;
-      this.setzeStatus(`Unterbrochen bei Schritt ${this.fortsetzen.schritt + 1}, Durchlauf ${this.fortsetzen.durchlauf}`, 'warnung');
-    } else this.setzeStatus('bereit');
+    this.zeigeEinst();
+  }
+  /** Laufendes Preset gross im Kartenkopf (rot = Killing, grün = übrige); leer = Generator steht. */
+  zeigePreset(name, wechsel = false) {
+    const el = $('.preset-aktiv', this.karte);
+    el.textContent = name ? (wechsel ? '→ ' : '') + name : '';
+    el.className = 'preset-aktiv' + (name ? (/killing/i.test(name) ? ' k' : ' h') : '') + (wechsel ? ' wechsel' : '');
+    el.title = name ? (wechsel ? 'Generator wird umgestellt auf ' : 'Laufendes Preset: ') + name : '';
   }
   setzeStatus(text, art = '') { const s = $('.status', this.karte); s.textContent = text; s.className = 'status ' + art; }
+  setzeListe(text) {
+    if (text === this.einst.liste) return;
+    this.einst.liste = text;
+    if (this.fortsetzen) { this.fortsetzen = null; $('.btn-weiter', this.karte).hidden = true; this.setzeStatus('bereit'); }
+    speichereAlle(); this.pruefe(); this.aktualisiereKunde();
+  }
 
-  /** Preset + Zeile -> Einstellungen und Plan, Warnungen anzeigen. */
-  pruefePreset() {
-    const w = $('.warnungen', this.karte), z = $('.zusammenfassung', this.karte);
-    w.textContent = ''; z.textContent = '';
-    this.vorbereitet = null;
-    $('.btn-start', this.karte).disabled = true;
-    $('.btn-weiter', this.karte).disabled = true;
-    if (!daten.geladen) { z.textContent = 'Zuerst den Spooky2-Ordner wählen.'; return null; }
-    if (!this.einst.preset) { z.textContent = 'Preset wählen.'; return null; }
-    const roh = daten.katalog.get(this.einst.preset.toLowerCase());
-    if (!roh) { w.textContent = `Preset «${this.einst.preset}» nicht gefunden.`; return null; }
-    const { preset, fehlt } = K.loeseBasis(roh, daten.katalog);
-    const e = K.einstellungen(preset);
-    const programme = this.einst.zeile ? [{ name: 'Frequenzzeile', eintraege: K.leseFrequenzzeile(this.einst.zeile) }] : K.programmeAusPreset(preset);
-    const plan = K.erstellePlan(e, programme);
-    const warn = [...plan.warnungen];
-    if (fehlt) warn.unshift(`Basis-Preset fehlt: ${fehlt}`);
-    for (const welle of [e.out1.welle, e.out2.welle]) if (welle && !K.findeWelle(daten.wellen, welle.datei)) warn.push(`Wellenform «${welle.datei}» fehlt im Ordner Waveforms`);
-    if (!programme.length) warn.push('Keine Frequenzen: Frequenzzeile eingeben');
-    else if (!plan.schritte.some(x => !x.pause)) warn.push('Keine abspielbaren Frequenzen');
-    w.textContent = warn.join(' · ');
-    const d = this.einst.durchlaeufe;
-    z.textContent = `${e.out1.welle ? e.out1.welle.datei : '?'}${e.out2.welle?.invertiert ? ' · Out2 gespiegelt' : ''} · ${e.out1.amp} V · Out2: ${({ gleich: 'gleiche Frequenz', dual: 'Dual', programm: 'Programmfrequenz', faktor: `× ${e.out2Modus.faktor} + ${e.out2Modus.konstante} Hz` })[e.out2Modus.art]}` +
-      ` · ${plan.schritte.length} Schritte · ${fmtZeit(plan.gesamtSek)} pro Durchlauf` + (d ? ` · ${d} × = ${fmtZeit(plan.gesamtSek * d)}` : ' · endlos');
-    const blockiert = warn.some(x => /fehlt|Keine|nicht unterstützt|nicht gefunden|Unbekannter/.test(x)) || e.warnungen.length > 0;
-    this.vorbereitet = blockiert ? null : { e, plan };
-    $('.btn-start', this.karte).disabled = !this.vorbereitet || !!this.lauf;
-    $('.btn-weiter', this.karte).disabled = !this.vorbereitet || !!this.lauf;
+  // ---------------------------------------------------------------- Kontrollblatt
+  blatt() { const nr = parseInt(this.einst.nr, 10); return daten.kontrolle && Number.isFinite(nr) ? daten.kontrolle.blaetter[String(nr)] || null : null; }
+  heute() { const b = this.blatt(); return b ? K.kontrolleHeute(b) : { eintraege: [], hinweis: '' }; }
+
+  aktualisiereKunde() {
+    const b = this.blatt();
+    $('.kunde', this.karte).textContent = b && b.name ? b.name.trim() : '';
+    $('.btn-heute', this.karte).disabled = !b || !!this.lauf;
+    // Programme des Kunden zum Antippen
+    const menue = $('.menue', this.karte), liste = $('.menue-liste', this.karte);
+    const eintraege = b ? K.kontrolleEintraege(b.programme) : [];
+    menue.hidden = !eintraege.length;
+    let html = '', sparte = null;
+    eintraege.forEach((x, i) => {
+      if (x.abschnitt !== sparte) { sparte = x.abschnitt; if (sparte) html += `<div class="sparte">${esc(sparte)}</div>`; }
+      const varianten = x.code.startsWith('pr') && !x.variante && daten.finder && !daten.finder.programme.has(x.code) ? ['NF', 'HF'] : [x.variante || ''];
+      const knoepfe = varianten.map(v => `<button class="ghost klein" data-i="${i}" data-v="${v}" title="An die Programmliste anhängen">+${v ? ' ' + v : ''}</button>`).join('');
+      html += `<div class="eintrag"><code>${esc(x.code)}${x.variante ? ' ' + x.variante : ''}</code><span title="${esc(x.name)}">${esc(x.name)}</span><small>${esc(x.dauer)}</small>${knoepfe}</div>`;
+    });
+    liste.innerHTML = html;
+    liste.onclick = (ev) => {
+      const btn = ev.target.closest('button'); if (!btn) return;
+      const x = eintraege[+btn.dataset.i], v = btn.dataset.v;
+      const zeile = `${x.code}${v ? ' ' + v : ''}  ${x.name}`;
+      this.fuegeZeilenAn([zeile]);
+    };
+    if (this.einst.auto) this.koppeln(); else this.pruefeNeue();
+  }
+
+  /**
+   * Kopplung: jeder neue Eintrag in der heutigen Zeile des Kontrollblatts (Doppelklick dort) geht auf diesen Generator.
+   * Läuft er, wird hinten angehängt; steht er still, startet er sofort mit den neuen Programmen.
+   */
+  koppeln() {
+    $('.neu', this.karte).hidden = true;
+    const b = this.blatt(), nr = parseInt(this.einst.nr, 10);
+    if (!b || !daten.finder || !daten.geladen) return;            // erst wenn Finder und Spooky2-Ordner da sind
+    const { eintraege, hinweis } = this.heute();
+    if (hinweis) return;
+    const heute = K.datumText(new Date());
+    let u = this.uebernommen;
+    if (!u || u.blatt !== nr) { this.uebernommen = { blatt: nr, datum: heute, anzahl: eintraege.length }; speichereAlle(); return; }   // erster Blick: Bestehendes nicht starten
+    if (u.datum !== heute) u = { blatt: nr, datum: heute, anzahl: 0 };   // neuer Tag: alles von heute ist neu
+    if (eintraege.length < u.anzahl) u.anzahl = eintraege.length;       // Zeile im Kontrollblatt gekürzt
+    const neu = eintraege.slice(u.anzahl);
+    u.anzahl = eintraege.length;
+    this.uebernommen = u;
+    speichereAlle();
+    if (!neu.length) return;
+    const zeilen = neu.map(x => K.kontrolleZeile(x, b, daten.finder));
+    this.log(`Vom Kontrollblatt ${nr}: ${zeilen.map(z => z.split(/\s{2,}|\t/)[0]).join(', ')}`);
+    if (this.lauf) { this.fuegeZeilenAn(zeilen); return; }
+    const text = zeilen.join('\n');
+    $('.liste', this.karte).value = text;
+    this.autoStart = true;
+    this.setzeListe(text);
+    this.versucheAutoStart();
+  }
+
+  versucheAutoStart() {
+    if (!this.autoStart || this.lauf) return;
+    if (this.pruefe()) { this.autoStart = false; this.starte(null, true); }
+    else this.setzeStatus('Vom Kontrollblatt übernommen, wartet: ' + $('.warnungen', this.karte).textContent, 'warnung');
+  }
+
+  /** NF oder HF für eine Zeile der Programmliste festlegen (Knopf in der Vorschau). */
+  setzeVariante(zeilenNr, v) {
+    const zeilen = this.einst.liste.split('\n');
+    if (!zeilen[zeilenNr]) return;
+    zeilen[zeilenNr] = zeilen[zeilenNr].replace(/^(\s*pr\s?\d{1,4})\b/i, `$1 ${v}`);
+    const text = zeilen.join('\n');
+    $('.liste', this.karte).value = text;
+    this.setzeListe(text);
+    this.versucheAutoStart();
+  }
+
+  /** Einträge der heutigen Kontrollblatt-Zeile, die noch nicht in der Programmliste stehen. */
+  pruefeNeue() {
+    const box = $('.neu', this.karte);
+    const { eintraege } = this.heute();
+    const schluessel = (zeile) => { const r = K.deuteListenZeile(zeile, daten.finder); return r && r.art === 'finder' ? r.code : K.sauber(zeile).split(/\s+/)[0].toLowerCase(); };
+    const vorhanden = new Map();
+    for (const z of this.einst.liste.split('\n')) { if (!z.trim()) continue; const s = schluessel(z); vorhanden.set(s, (vorhanden.get(s) || 0) + 1); }
+    this.neue = [];
+    const bl = this.blatt();
+    for (const x of eintraege) {
+      x.zeile = K.kontrolleZeile(x, bl, daten.finder);
+      const s = schluessel(x.zeile);
+      if (vorhanden.get(s)) vorhanden.set(s, vorhanden.get(s) - 1); else this.neue.push(x);
+    }
+    box.hidden = !this.neue.length;
+    $('.neu-text', box).textContent = `Kontrollblatt heute: ${this.neue.length} neu – ${this.neue.map(x => x.code + (x.variante ? ' ' + x.variante : '')).join(', ')}`;
+  }
+
+  uebernehmeHeute() {
+    const { eintraege, hinweis } = this.heute();
+    if (!eintraege.length) { this.setzeStatus(hinweis ? `Kontrollblatt: ${hinweis}` : 'Kontrollblatt: heute noch kein Programm eingetragen', 'warnung'); return; }
+    const b = this.blatt();
+    const text = eintraege.map(x => K.kontrolleZeile(x, b, daten.finder)).join('\n');
+    $('.liste', this.karte).value = text;
+    this.setzeListe(text);
+    this.log(`Aus Kontrollblatt ${parseInt(this.einst.nr, 10)} übernommen: ${eintraege.length} Programme`);
+  }
+
+  haengeNeueAn() { if (this.neue.length) this.fuegeZeilenAn(this.neue.map(x => x.zeile)); }
+
+  /** Zeilen anhängen; während dem Lauf wird der Ablauf hinten verlängert, ohne den laufenden Teil zu verändern. */
+  fuegeZeilenAn(zeilen) {
+    const basis = this.einst.liste.replace(/\s+$/, '');
+    const text = (basis ? basis + '\n' : '') + zeilen.join('\n');
+    if (this.lauf) {
+      const v = bereiteListeVor(text, this.einst.standardPreset);
+      if (v.blockiert) { this.setzeStatus('Nicht angehängt: ' + v.warnungen.join(' · '), 'fehler'); return; }
+      const l = this.lauf;
+      l.plan = v.plan; l.items = v.items; l.einst = v.einst; l.listeText = text;
+      this.log(`Angehängt: ${zeilen.map(z => z.split(/\s{2,}|\t/)[0]).join(', ')}`);
+    }
+    $('.liste', this.karte).value = text;
+    this.einst.liste = text;
+    speichereAlle(); this.pruefe(); this.pruefeNeue();
+  }
+
+  // ---------------------------------------------------------------- Prüfen und Vorschau
+  pruefe() {
+    const w = $('.warnungen', this.karte), z = $('.zusammenfassung', this.karte), vs = $('.vorschau', this.karte);
+    const anzeigen = this.lauf ? { items: this.lauf.items, plan: this.lauf.plan, warnungen: [], blockiert: false, einst: this.lauf.einst } : bereiteListeVor(this.einst.liste, this.einst.standardPreset);
+    vs.innerHTML = anzeigen.items.map((it, i) => {
+      const preset = it.preset ? `<b class="${/killing/i.test(it.preset) ? 'k' : 'h'}">${esc(it.preset)}</b>` : '';
+      const wob = it.wobble ? ` · <span class="w" title="Frequency Wobble, Dreieck ${it.wobble.stufen} Stufen, ${it.wobble.hz} Stufen/s – am Gerät noch nicht gegen Spooky2 geprüft">Wobble ${String(it.wobble.prozent).replace('.', ',')} % (vorläufig)</span>` : '';
+      const wahl = /NF oder HF/.test(it.fehler || '') && !this.lauf ? ` <button class="ghost klein" data-z="${it.zeilenNr}" data-v="NF">NF</button> <button class="ghost klein" data-z="${it.zeilenNr}" data-v="HF">HF</button>` : '';
+      const hinweis = it.fehler ? esc(it.fehler) + wahl : (it.warnungen || []).filter(x => !NICHT_UNTERSTUETZT.test(x)).map(esc).join(' · ');
+      return `<div class="p${it.fehler ? ' fehler' : ''}" data-pi="${i}"><code>${esc(it.code)}</code><span class="name" title="${esc(it.zeile)}">${esc(it.name)}</span><span class="zeit">${it.sek != null ? fmtZeit(it.sek) : ''}</span>` +
+        `<span class="pinfo">${preset}${wob}${hinweis ? (preset ? ' · ' : '') + hinweis : ''}</span></div>`;
+    }).join('');
+    w.textContent = anzeigen.warnungen.join(' · ');
+    const d = this.einst.durchlaeufe, n = anzeigen.items.length;
+    z.textContent = !daten.geladen ? 'Zuerst den Spooky2-Ordner wählen.' : n ? `${n} Programm${n === 1 ? '' : 'e'} · ${anzeigen.einst.length} Preset${anzeigen.einst.length === 1 ? '' : 's'} · ${fmtZeit(anzeigen.plan.gesamtSek)} pro Durchlauf` + (d ? ` · ${d} × = ${fmtZeit(anzeigen.plan.gesamtSek * d)}` : ' · endlos') : '';
+    if (this.lauf) { this.markiereAktiv(); return this.lauf; }
+    this.vorbereitet = anzeigen.blockiert ? null : anzeigen;
+    $('.btn-start', this.karte).disabled = !this.vorbereitet;
+    $('.btn-weiter', this.karte).disabled = !this.vorbereitet;
     return this.vorbereitet;
+  }
+  markiereAktiv() {
+    const l = this.lauf, pi = l && l.plan.schritte[l.schritt] ? l.plan.schritte[l.schritt].pi : -1;
+    for (const row of this.karte.querySelectorAll('.vorschau .p')) row.classList.toggle('aktiv', +row.dataset.pi === pi);
   }
 
   sperre(laufend) {
-    for (const s of ['.preset', '.zeile', '.durchlaeufe', '.start-um', '.btn-erkennen']) $(s, this.karte).disabled = laufend;
+    for (const s of ['.nr', '.liste', '.preset', '.durchlaeufe', '.start-um', '.btn-testen', '.btn-heute']) $(s, this.karte).disabled = laufend;
     $('.btn-start', this.karte).disabled = laufend || !this.vorbereitet;
     $('.btn-stop', this.karte).disabled = !laufend;
     this.karte.classList.toggle('laeuft', laufend);
+    if (!laufend) $('.btn-heute', this.karte).disabled = !this.blatt();
   }
 
   async sende(liste) {
     for (const [text, befehl, timeout] of liste) {
-      try { await this.leitung.sende(befehl, timeout); this.log(`${text} ✓`); }
+      try { await this.leitung.sende(befehl, timeout); if (!this.leise) this.log(`${text} ✓`); }
       catch (e) { this.log(`${text}: ${e.message}`, 'fehler'); throw e; }
     }
   }
 
-  async erkennen() {
+  /** Zuordnung prüfen: Display des angeschlossenen Generators zeigt die Kartennummer als Frequenz (Ausgänge aus, kein Signal). */
+  async teste() {
+    if (this.lauf) return;
     try {
       await this.leitung.oeffne();
-      const nr = parseFloat(this.einst.nr) || this.index + 1;
+      const nr = parseInt(this.einst.nr, 10);
       const z = K.neuerZustand();
       await this.sende([['Ausgang 1 aus', K.Befehl.ausgang(0, false)], ['Ausgang 2 aus', K.Befehl.ausgang(1, false)], ...K.frequenzBefehle(nr, nr, z)]);
-      this.setzeStatus(`Display zeigt jetzt ${nr} Hz (Ausgänge aus)`, 'ok');
-    } catch (e) { this.setzeStatus('Erkennen fehlgeschlagen: ' + e.message, 'fehler'); }
+      this.setzeStatus(`Test: Display zeigt ${nr} Hz. Steht am Generator die Nummer ${nr}? Sonst oben links die Nummer des Generators eintragen.`, 'warnung');
+      this.log(`Test: ${nr} Hz auf dem Display`);
+    } catch (e) { this.setzeStatus('Test fehlgeschlagen: ' + e.message + ' (Spooky2 geschlossen? Kabel?)', 'fehler'); }
   }
 
-  async starte(stand = null) {
+  // ---------------------------------------------------------------- Ablauf
+  async starte(stand = null, sofort = false) {
     if (this.lauf) return;
-    const v = this.pruefePreset();
+    const v = this.pruefe();
     if (!v) return;
+    if (stand && stand.liste !== this.einst.liste) stand = null;
     this.fortsetzen = null;
     $('.btn-weiter', this.karte).hidden = true;
     let startUmMs = null;
     if (stand?.startUm && stand.status === 'wartet') startUmMs = stand.startUm;
-    else if (!stand && this.einst.startUm) {
+    else if (!stand && !sofort && this.einst.startUm) {
       const [h, m] = this.einst.startUm.split(':').map(Number);
       const d = new Date(); d.setHours(h, m, 0, 0);
       if (d.getTime() <= Date.now()) d.setDate(d.getDate() + 1);
       startUmMs = d.getTime();
     }
+    const schritt = stand && stand.schritt < v.plan.schritte.length ? stand.schritt : 0;
     this.lauf = {
-      ...v, schritt: stand?.schritt ?? 0, tImSchritt: stand?.tImSchritt ?? 0, durchlauf: stand?.durchlauf ?? 1,
+      plan: v.plan, items: v.items, einst: v.einst, listeText: this.einst.liste,
+      schritt, tImSchritt: stand && schritt === stand.schritt ? stand.tImSchritt ?? 0 : 0, durchlauf: stand?.durchlauf ?? 1,
       durchlaeufe: this.einst.durchlaeufe, zustand: K.neuerZustand(), status: startUmMs ? 'wartet' : 'einrichten',
-      startUmMs, letzterTick: null, letzteSweepSek: -1, beschaeftigt: false,
+      startUmMs, letzterTick: null, letzterTakt: null, beschaeftigt: false, aktivEi: null, aktivPi: null,
     };
     this.sperre(true);
+    this.pruefe();
     speichereAlle();
     if (startUmMs) this.setzeStatus(`Wartet bis ${new Date(startUmMs).toLocaleString('de-CH', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}`, 'warnung');
   }
 
+  /** Generator auf das Preset des aktuellen (bzw. nächsten klingenden) Schritts einrichten. */
   async einrichten() {
     const l = this.lauf;
     l.beschaeftigt = true;
     try {
-      this.setzeStatus('Generator wird eingerichtet …');
+      const s = l.plan.schritte;
+      let ei = s[l.schritt].ei;
+      if (s[l.schritt].pause) { const n = s.slice(l.schritt).find(x => !x.pause) || s.find(x => !x.pause); if (n) ei = n.ei; }
+      const ein = l.einst[ei];
+      this.zeigePreset(ein.e.name, true);
+      this.setzeStatus(`Generator wird eingerichtet: ${ein.e.name || 'Preset'} …`);
       await this.leitung.oeffne();
-      await this.sende(K.einrichtung(l.e, daten.wellen));
+      await this.sende(K.einrichtung(ein.e, daten.wellen));
+      if (!this.lauf) return;
+      l.aktivEi = ei;
+      this.zeigePreset(ein.e.name);
+      this.log(`Preset aktiv: ${ein.e.name}`);
       l.status = 'laeuft';
       speichereAlle();
-      l.letzterTick = performance.now();
       l.zustand = K.neuerZustand();
+      l.letzterTick = performance.now();        // Einrichtzeit zählt nicht zur Programmzeit
       await this.spieleSchritt(true);
     } catch (e) {
       this.stoppe('Fehler beim Einrichten: ' + e.message, true);
     } finally { if (this.lauf) this.lauf.beschaeftigt = false; }
   }
 
-  /** Aktuellen Schritt an den Generator geben (bei Wechsel oder Sweep-Fortschritt). */
+  /** Aktuellen Schritt an den Generator geben (bei Wechsel, Sweep-Fortschritt oder Wobble-Takt). */
   async spieleSchritt(neu) {
     const l = this.lauf;
     const s = l.plan.schritte[l.schritt];
     const b = [];
     if (s.pause) b.push(...K.ausgangBefehle(false, l.zustand));
     else {
-      const { f1, f2 } = K.frequenzenBei(s, Math.floor(l.tImSchritt), l.e);   // Sweeps auf ganzen Sekunden
+      const { f1, f2 } = K.frequenzenBei(s, l.tImSchritt, l.einst[s.ei].e);
       b.push(...K.frequenzBefehle(f1, f2, l.zustand));
       b.push(...K.ausgangBefehle(true, l.zustand));
       l.f1 = f1; l.f2 = f2;
     }
-    if (b.length) await this.sende(b);
-    if (neu) this.log(`Schritt ${l.schritt + 1}/${l.plan.schritte.length}: ${s.pause ? 'Pause' : `${fmtHz(l.f1)} / ${fmtHz(l.f2)}`} für ${s.sek} s`);
+    l.letzterTakt = K.taktBei(s, l.tImSchritt);
+    this.leise = !neu;                           // Wobble- und Sweep-Schritte nicht einzeln protokollieren
+    try { if (b.length) await this.sende(b); } finally { this.leise = false; }
+    if (neu) {
+      if (s.pi !== l.aktivPi) { l.aktivPi = s.pi; const it = l.items[s.pi]; this.log(`Programm ${s.pi + 1}/${l.items.length}: ${it.code} ${it.name}`); this.markiereAktiv(); }
+      this.log(`Schritt ${l.schritt + 1}/${l.plan.schritte.length}: ${s.pause ? 'Pause' : `${fmtHz(l.f1)} / ${fmtHz(l.f2)}`} für ${s.sek} s`);
+    }
   }
 
   /** Wird regelmässig vom Taktgeber aufgerufen. */
@@ -347,9 +685,13 @@ class Generator {
         }
       }
       const s = l.plan.schritte[l.schritt];
-      const sweepSek = Math.floor(l.tImSchritt);
-      if (gewechselt) { l.letzteSweepSek = sweepSek; await this.spieleSchritt(true); }
-      else if (s.sweep && sweepSek !== l.letzteSweepSek) { l.letzteSweepSek = sweepSek; await this.spieleSchritt(false); }
+      if (!s.pause && s.ei !== l.aktivEi) {          // anderes Preset: Generator umstellen
+        this.log(`Preset-Wechsel auf ${l.einst[s.ei].e.name}`);
+        l.status = 'einrichten';
+        return;
+      }
+      if (gewechselt) await this.spieleSchritt(true);
+      else if (K.taktBei(s, l.tImSchritt) !== l.letzterTakt) await this.spieleSchritt(false);
       this.zeigeFortschritt();
     } catch (e) {
       this.stoppe('Verbindung verloren: ' + e.message, true);
@@ -358,10 +700,10 @@ class Generator {
 
   zeigeFortschritt() {
     const l = this.lauf; if (!l) return;
-    const s = l.plan.schritte[l.schritt];
+    const s = l.plan.schritte[l.schritt], it = l.items[s.pi];
     const vorher = l.plan.schritte.slice(0, l.schritt).reduce((a, x) => a + x.sek, 0) + l.tImSchritt;
     const rest = l.plan.gesamtSek - vorher + (l.durchlaeufe ? (l.durchlaeufe - l.durchlauf) * l.plan.gesamtSek : 0);
-    this.setzeStatus(`${s.pause ? 'Pause' : `Out1 ${fmtHz(l.f1)} · Out2 ${fmtHz(l.f2)}`} · Schritt ${l.schritt + 1}/${l.plan.schritte.length} · Durchlauf ${l.durchlauf}${l.durchlaeufe ? '/' + l.durchlaeufe : ''} · ${l.durchlaeufe ? 'noch ' + fmtZeit(rest) : 'endlos'}`, 'ok');
+    this.setzeStatus(`${it.code} · ${s.pause ? 'Pause' : `Out1 ${fmtHz(l.f1)} · Out2 ${fmtHz(l.f2)}`} · Programm ${s.pi + 1}/${l.items.length} · Durchlauf ${l.durchlauf}${l.durchlaeufe ? '/' + l.durchlaeufe : ''} · ${l.durchlaeufe ? 'noch ' + fmtZeit(rest) : 'endlos'}`, 'ok');
     $('.balken > div', this.karte).style.width = `${Math.min(100, vorher / l.plan.gesamtSek * 100)}%`;
   }
 
@@ -372,17 +714,19 @@ class Generator {
       try { await this.sende([['Ausgang 1 aus', K.Befehl.ausgang(0, false)], ['Ausgang 2 aus', K.Befehl.ausgang(1, false)]]); } catch (e) { /* Gerät weg */ }
     }
     this.sperre(false);
+    this.zeigePreset('');
     $('.balken > div', this.karte).style.width = '0';
     this.setzeStatus(grund === 'fertig' ? `Fertig um ${jetzt()}` : grund, fehler ? 'fehler' : grund === 'fertig' ? 'ok' : '');
     this.log(grund);
     speichereAlle();
-    this.pruefePreset();
+    this.pruefe();
+    this.aktualisiereKunde();
   }
 }
 
 // ------------------------------------------------------------------ Taktgeber (Web Worker, läuft auch im Hintergrund)
 function starteTakt() {
-  const code = 'setInterval(() => postMessage(0), 100);';
+  const code = 'setInterval(() => postMessage(0), 50);';
   const w = new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
   let letztesSpeichern = 0;
   w.onmessage = () => {
@@ -407,11 +751,13 @@ async function init() {
   if (!('serial' in navigator) || !('showDirectoryPicker' in window)) { $('#kein-chrome').hidden = false; return; }
   $('#btn-ordner').onclick = waehleOrdner;
   $('#btn-hinzu').onclick = async () => { try { await fuegeHinzu(await navigator.serial.requestPort()); } catch (e) { /* abgebrochen */ } };
+  $('#btn-alle-testen').onclick = () => { for (const g of generatoren) if (!g.lauf) g.teste(); };
   $('#btn-alle-stopp').onclick = () => { for (const g of generatoren) if (g.lauf) g.stoppe('gestoppt'); };
   navigator.serial.addEventListener('connect', (ev) => fuegeHinzu(ev.target));
   window.addEventListener('beforeunload', (ev) => { speichereAlle(); if (generatoren.some(g => g.lauf)) { ev.preventDefault(); ev.returnValue = ''; } });
-  await ordnerBeimStart();
   for (const p of await navigator.serial.getPorts()) await fuegeHinzu(p);
+  await Promise.all([ordnerBeimStart(), quelleBeimStart('finder'), quelleBeimStart('kontrolle')]);
+  beobachteQuellen();
   starteTakt();
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 }

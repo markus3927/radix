@@ -1,6 +1,6 @@
 // Service Worker: hält die App offline verfügbar. Bei neuer Version CACHE erhöhen.
-const CACHE = 'generator-steuerung-0.1.0';
-const DATEIEN = ['./', 'index.html', 'kern.js', 'app.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
+const CACHE = 'radix-0.4.0';
+const DATEIEN = ['./', 'index.html', 'kern.js', 'app.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'logo-kopf.png'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(DATEIEN)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
