@@ -35,6 +35,14 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
    springt zum nächsten Programm der Liste (Preset wird bei Bedarf umgestellt; beim letzten Programm: nächster Durchlauf bzw. fertig).
    Jeder Sprung steht im Protokoll.
 
+10. **Leeren** (neben «Heute aus Kontrollblatt»): leert die Programmliste; läuft der Generator, wird er nach Rückfrage gestoppt.
+    Danach startet «Start» wieder von vorne.
+11. **NF ↔ HF pro Zeile:** Hat eine Kachel beide Blöcke, steht in der Vorschau «→ HF» bzw. «→ NF». So kann dieselbe Nummer einmal
+    als NF und einmal als HF laufen. Auch während dem Lauf, aber nur für Programme nach dem laufenden.
+
+## Stand Version 0.4.3
+- Neu: Leeren, NF/HF pro Zeile umstellen
+
 ## Stand Version 0.4.2
 - Neu: Vorspulen (nächste Frequenz, nächstes Programm)
 

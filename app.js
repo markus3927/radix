@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.4.2';
+const VERSION = '0.4.3';
 const $ = (s, el = document) => el.querySelector(s);
 const K = window.Kern;
 const SPEICHER = 'radix-generatoren-v2';   // { zuordnung: [Nummer je Anschluss], gen: { Nummer: Einstellungen } }
@@ -387,6 +387,7 @@ class Generator {
     $('.btn-naechste-f', k).onclick = () => this.springe('frequenz');
     $('.btn-naechstes-p', k).onclick = () => this.springe('programm');
     $('.btn-heute', k).onclick = () => this.uebernehmeHeute();
+    $('.btn-leeren', k).onclick = () => this.leere();
     $('.btn-anhaengen', k).onclick = () => this.haengeNeueAn();
     const au = $('.auto-cb', k);
     au.onchange = () => { this.einst.auto = au.checked; this.uebernommen = null; speichereAlle(); this.aktualisiereKunde(); };
@@ -485,8 +486,13 @@ class Generator {
   /** NF oder HF für eine Zeile der Programmliste festlegen (Knopf in der Vorschau). */
   setzeVariante(zeilenNr, v) {
     const zeilen = this.einst.liste.split('\n');
-    if (!zeilen[zeilenNr]) return;
-    zeilen[zeilenNr] = zeilen[zeilenNr].replace(/^(\s*pr\s?\d{1,4})\b/i, `$1 ${v}`);
+    const z = zeilen[zeilenNr];
+    if (!z) return;
+    // Ganze Zeile neu schreiben (Code + Name der Finder-Kachel): sonst gilt weiter die Angabe im Namen («… - NF (Hz)»)
+    const m = z.match(/^\s*pr\s?(\d{1,4})\b/i);
+    const code = m ? `pr${m[1].padStart(4, '0')} ${v}` : '';
+    const p = code && daten.finder ? daten.finder.programme.get(code) : null;
+    zeilen[zeilenNr] = p ? `${code}  ${p.name.replace(/^(pa|sm)\d{2}\s+/i, '')}` : z.replace(/^(\s*pr\s?\d{1,4})\b/i, `$1 ${v}`);
     const text = zeilen.join('\n');
     $('.liste', this.karte).value = text;
     this.setzeListe(text);
@@ -519,6 +525,19 @@ class Generator {
     $('.liste', this.karte).value = text;
     this.setzeListe(text);
     this.log(`Aus Kontrollblatt ${parseInt(this.einst.nr, 10)} übernommen: ${eintraege.length} Programme`);
+  }
+
+  /** Liste leeren; läuft der Generator, wird er nach Rückfrage gestoppt. Danach startet «Start» wieder von vorne. */
+  async leere() {
+    if (this.lauf) {
+      if (!confirm(`Generator ${this.einst.nr} stoppen und die Programmliste leeren?`)) return;
+      await this.stoppe('Gestoppt, Liste geleert');
+    }
+    this.autoStart = false;
+    this.meldung = null;
+    $('.liste', this.karte).value = '';
+    this.setzeListe('');
+    this.log('Liste geleert');
   }
 
   haengeNeueAn() { if (this.neue.length) this.fuegeZeilenAn(this.neue.map(x => x.zeile)); }
@@ -578,13 +597,17 @@ class Generator {
   pruefe() {
     const w = $('.warnungen', this.karte), z = $('.zusammenfassung', this.karte), vs = $('.vorschau', this.karte);
     const anzeigen = this.lauf ? { items: this.lauf.items, plan: this.lauf.plan, warnungen: this.lauf.warnungen || [], blockiert: false, einst: this.lauf.einst } : bereiteListeVor(this.einst.liste, this.einst.standardPreset);
+    const aktPi = this.lauf && this.lauf.plan.schritte[this.lauf.schritt] ? this.lauf.plan.schritte[this.lauf.schritt].pi : -1;
     vs.innerHTML = anzeigen.items.map((it, i) => {
+      const nv = /^(pr\d{4}) (NF|HF)$/.exec(it.code || ''), andere = nv && (nv[2] === 'NF' ? 'HF' : 'NF');
+      const wechsel = nv && !it.fehler && i > aktPi && daten.finder && daten.finder.programme.has(`${nv[1]} ${andere}`)
+        ? ` <button class="ghost klein wechsel" data-z="${it.zeilenNr}" data-v="${andere}" title="Dieses Programm als ${andere} spielen">→ ${andere}</button>` : '';
       const preset = it.preset ? `<b class="${/killing/i.test(it.preset) ? 'k' : 'h'}">${esc(it.preset)}</b>` : '';
       const wob = it.wobble ? ` · <span class="w" title="Frequency Wobble, Dreieck ${it.wobble.stufen} Stufen, ${it.wobble.hz} Stufen/s – am Gerät noch nicht gegen Spooky2 geprüft">Wobble ${String(it.wobble.prozent).replace('.', ',')} % (vorläufig)</span>` : '';
       const wahl = /NF oder HF/.test(it.fehler || '') ? ` <button class="ghost klein" data-z="${it.zeilenNr}" data-v="NF">NF</button> <button class="ghost klein" data-z="${it.zeilenNr}" data-v="HF">HF</button>` : '';
       const hinweis = it.fehler ? esc(it.fehler) + wahl : (it.warnungen || []).filter(x => !NICHT_UNTERSTUETZT.test(x)).map(esc).join(' · ');
       return `<div class="p${it.fehler ? ' fehler' : ''}" data-pi="${i}"><code>${esc(it.code)}</code><span class="name" title="${esc(it.zeile)}">${esc(it.name)}</span><span class="zeit">${it.sek != null ? fmtZeit(it.sek) : ''}</span>` +
-        `<span class="pinfo">${preset}${wob}${hinweis ? (preset ? ' · ' : '') + hinweis : ''}</span></div>`;
+        `<span class="pinfo">${preset}${wob}${hinweis ? (preset ? ' · ' : '') + hinweis : ''}${wechsel}</span></div>`;
     }).join('');
     const m = this.meldung && this.meldung.bis > Date.now() ? this.meldung : null;
     w.textContent = [m ? m.text : '', ...anzeigen.warnungen.map(x => this.lauf ? 'Übersprungen, bis geklärt – ' + x : x)].filter(Boolean).join(' · ');

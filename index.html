@@ -92,6 +92,7 @@
   label{font-size:12.5px;color:var(--text-light);display:block;margin-bottom:2px}
   .label-reihe{display:flex;align-items:flex-end;gap:6px;flex-wrap:wrap;margin-bottom:3px}
   .label-reihe label{margin:0;flex:1}
+  .vorschau button.wechsel{padding:0 6px;font-size:11.5px;margin-left:4px;vertical-align:baseline}
   .reihe{display:flex;gap:8px;align-items:flex-end}
   .reihe > div{flex:1;min-width:0}
   .neu{font-size:12.5px;background:var(--gold-bg);color:var(--gold);border-radius:6px;padding:5px 8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -174,6 +175,7 @@
       <div class="label-reihe">
         <label title="Eine Zeile pro Programm: pr0245 NF · pa60 · sm15 · eigene Frequenzzeile">Programme (eine Zeile pro Programm)</label>
         <button class="ghost klein btn-heute" title="Ersetzt die Liste durch die heutige Zeile des Kontrollblatts">Heute aus Kontrollblatt</button>
+        <button class="ghost klein btn-leeren" title="Liste leeren (läuft der Generator, wird er zuerst gestoppt). Danach mit Start wieder von vorne.">Leeren</button>
       </div>
       <textarea class="liste" spellcheck="false" wrap="off" placeholder="pr0001&#10;pr2262 NF&#10;pa30&#10;pr0409 HF&#10;sm60&#10;437=240, 727=420"></textarea>
     </div>
