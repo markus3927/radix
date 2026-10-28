@@ -54,6 +54,11 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.6.7 (Brücke bleibt 1.2.1) – Zeitmarke aus dem Kontrollblatt, Sprung beim Doppelklick
+- **Zeitmarke im Kontrollblatt:** Eine Zeile `um 6.00` (auch `um 06:00`, `ab 6:00`, `um 6.00 Uhr`) in der Tageszeile kommt mit «Heute aus Kontrollblatt», «Morgen aus Kontrollblatt» und dem Doppelklick in die Programmliste. Programme davor laufen sofort, danach wartet der Generator mit Ausgängen aus bis zu dieser Uhrzeit. `6.00` allein ist keine Zeitmarke (wird übergangen)
+- **Doppelklick im Kontrollblatt** springt in RADIX gleich zum Generator dieses Blatts. Andere Änderungen im Kontrollblatt (Notiz usw.) lösen keinen Sprung aus
+- Sprung schon beim Anwählen eines Blatts im Kontrollblatt: geht, sobald das Kontrollblatt `"aktiv"`/`"aktivZeit"` in die Datei schreibt (dort noch zu bauen)
+
 ## Stand Version 0.6.6 (Brücke bleibt 1.2.1) – GX Pro: Takt wie Spooky2
 - **Fehler behoben (am Gerät 28.10., 17:41):** Erster GX-Lauf brach beim Einrichten ab («Out1 auf Tabelle 14: keine Antwort»). Der GX bestätigt eine Wellentabelle sofort, ist danach aber kurz taub – der nächste Befehl ging verloren. RADIX wartet jetzt wie Spooky2: 100 ms nach jedem GX-Befehl, 300 ms nach jeder Wellentabelle
 - Kommt trotzdem keine Antwort, schickt RADIX den Befehl einmal nochmals (steht im Protokoll: «keine Antwort … nochmals gesendet»). Erst wenn auch das ausbleibt, Abbruch mit Meldung

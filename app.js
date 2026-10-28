@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.6.6';
+const VERSION = '0.6.7';
 const $ = (s, el = document) => el.querySelector(s);
 const K = window.Kern;
 const SPEICHER = 'radix-generatoren-v2';   // { zuordnung: [Nummer je Anschluss], gen: { Nummer: Einstellungen } }
@@ -406,13 +406,7 @@ function brueckenListe(ports) {
 const NICHT_UNTERSTUETZT = /fehlt|Keine|nicht unterstützt|nicht gefunden|Unbekannter/;
 
 /** Zeitmarke «um 06:00» (auch «ab 6:00», «06:00», «um 6.00 Uhr»): die Programme darunter starten erst zu dieser Uhrzeit. */
-function deuteZeitmarke(zeile) {
-  const t = K.sauber(zeile).trim();
-  const m = t.match(/^(?:(?:um|ab)\s*(\d{1,2})[:.](\d{2})|(\d{1,2}):(\d{2}))\s*(?:uhr)?$/i);
-  if (!m) return null;
-  const h = +(m[1] ?? m[3]), min = +(m[2] ?? m[4]);
-  return h < 24 && min < 60 ? `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}` : null;
-}
+function deuteZeitmarke(zeile) { return K.zeitmarke(zeile); }
 
 /** Nächster Zeitpunkt (ms) mit dieser Uhrzeit nach «ab». */
 function naechsteUhrzeit(hhmm, ab) {
@@ -762,7 +756,7 @@ class Generator {
     $('.btn-morgen', this.karte).disabled = !b;
     // Programme des Kunden zum Antippen
     const menue = $('.menue', this.karte), liste = $('.menue-liste', this.karte);
-    const eintraege = b ? K.kontrolleEintraege(b.programme) : [];
+    const eintraege = b ? K.kontrolleEintraege(b.programme).filter(x => x.code !== 'um') : [];
     menue.hidden = !eintraege.length;
     let html = '', sparte = null;
     eintraege.forEach((x, i) => {
@@ -806,6 +800,7 @@ class Generator {
     this.log(`Vom Kontrollblatt ${nr}: ${zeilen.map(z => z.split(/\s{2,}|\t/)[0]).join(', ')}`);
     this.fuegeZeilenAn(zeilen);
     if (!this.lauf) this.melde(`Vom Kontrollblatt übernommen: ${zeilen.map(z => z.split(/\s{2,}|\t/)[0]).join(', ')} – mit Start (oder Startzeit) starten`, 'ok');
+    springeZu(nr);                                                  // 0.6.7: Doppelklick in der KA zeigt gleich diesen Generator
   }
 
   /** NF oder HF für eine Zeile der Programmliste festlegen (Knopf in der Vorschau). */

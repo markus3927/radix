@@ -392,6 +392,16 @@
     return { art: 'fehler', text: `Nicht erkannt: «${t.slice(0, 40)}»` };
   }
 
+  // ------------------------------------------------------------------ Zeitmarke
+  /** Zeitmarke «um 06:00» (auch «ab 6:00», «06:00», «um 6.00 Uhr») -> «06:00», sonst null. «6.00» allein ist eine Frequenz. */
+  function zeitmarke(zeile) {
+    const t = sauber(zeile).trim();
+    const m = t.match(/^(?:(?:um|ab)\s*(\d{1,2})[:.](\d{2})|(\d{1,2}):(\d{2}))\s*(?:uhr)?$/i);
+    if (!m) return null;
+    const h = +(m[1] ?? m[3]), min = +(m[2] ?? m[4]);
+    return h < 24 && min < 60 ? `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}` : null;
+  }
+
   // ------------------------------------------------------------------ Kontrollblatt (Frequenz_Kontrolle.json)
   /** Mehrzeilige Programm-Einträge des Kontrollblatts zusammensetzen (Fortsetzungszeilen beginnen mit Tabulator). */
   function kontrolleEintraege(text) {
@@ -400,12 +410,15 @@
     for (const roh of String(text || '').split('\n')) {
       const z = sauber(roh);
       if (!z.trim()) continue;
+      const um = zeitmarke(z);                                          // 0.6.7: «um 6.00» in der Tageszeile -> Zeitmarke
+      if (um) { liste.push({ code: 'um', um, text: `um ${um}`, abschnitt }); continue; }
       const code = z.match(/^\s*(pr\d{4}|pa\d{2}|sm\d{2})\b/i);
       if (code) { liste.push({ code: code[1].toLowerCase(), text: z.trim(), abschnitt }); continue; }
       if (/^\t\t\t/.test(roh)) { abschnitt = z.trim(); continue; }      // Spartenkopf im Feld «Programme»
       if (/^\t/.test(z) && liste.length) { liste[liste.length - 1].text += ' ' + z.trim(); continue; }
     }
     for (const e of liste) {
+      if (e.code === 'um') { Object.assign(e, { dauer: '', name: `Start um ${e.um}`, tageszeit: '', variante: '', zeile: `um ${e.um}` }); continue; }
       const teile = e.text.split('\t').map(s => s.trim()).filter(Boolean);
       e.dauer = /^(\d+h)?\s*(\d+\s*(min|s))?$/.test(teile[1] || '') && /\d/.test(teile[1] || '') ? teile[1] : '';   // «1h 09min», «54min»
       e.name = teile.slice(e.dauer ? 2 : 1).filter(x => !/^(morgens|tagsüber|nachts|abends|mittags|vor Essen|nach Essen)$/i.test(x)).join(' ').replace(/\s+/g, ' ').trim();
@@ -669,7 +682,7 @@
     STANDARD_DWELL, lesePresets, baueKatalog, loeseBasis, einstellungen, leseFrequenzzeile, programmeAusPreset,
     inBereich, erstellePlan, frequenzenBei, taktBei, wobbleAus, wobbleFaktor, Befehl, welleZuWerten, leseWellenCsv, findeWelle, einrichtung,
     frequenzBefehle, ausgangBefehle, neuerZustand, GX, gxEinrichtung, gxFrequenzBefehle, gxAusgangBefehle, gxWarnungen, gxWerte,
-    lesePresetAngabe, finderDaten, finderKatalog, deuteListenZeile, sauber,
+    lesePresetAngabe, finderDaten, finderKatalog, deuteListenZeile, sauber, zeitmarke,
     kontrolleEintraege, kontrolleZeile, leseKontrolle, kontrolleHeute, datumText,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = Kern;
