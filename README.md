@@ -54,6 +54,20 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.6.1 – Brücke 1.2: Nummer am USB-Steckplatz
+- Windows vergibt die COM-Nummern der CH340 (ohne Seriennummer) bei Markus bei jedem Start neu. Darum merkt sich RADIX die Nummer jetzt **pro USB-Steckplatz** (Brücke liest DEVPKEY_Device_LocationPaths). Neu erkannter Steckplatz: COM-Nummer als Vorschlag, einmal «Zuordnen» (oder ◀ ▶), danach stimmt es nach jedem Neustart von selbst
+- Karte zeigt den aktuellen COM-Namen, Tooltip den Steckplatz; wechselt Windows die COM-Nummer, bleibt die Generator-Nummer
+- «Zuordnen» und ◀ ▶ auch mit Brücke (gespeichert pro Steckplatz in `speicher.orte`)
+- Brücke 1.2: Fehler beim Start bleiben im Fenster stehen (und `bruecke-fehler.txt`)
+
+## Stand Version 0.6.0 – mit RADIX-Brücke
+- **RADIX-Brücke 1.1** (Hilfsprogramm auf dem Spooky-PC, `RADIX-Bruecke.exe`): RADIX verbindet sich beim Start mit ws://127.0.0.1:8642. Ist sie da, kommen alle Generatoren von ihr: **Nummer = COM-Nummer** (COM7 = Generator 7), fest – kein Zuordnen, kein Verrutschen nach Neustart, Aus-/Einstecken oder Strom aus/ein. Karte zeigt den COM-Namen; Nummer, ◀ ▶, «Zuordnen» und «Generator hinzufügen» entfallen
+- Kopf: «RADIX-Brücke 1.1.0 ✓» (grün), «getrennt – verbinde neu …» (rot, versucht alle 3 s), «besetzt» (zweites Fenster) oder «ohne RADIX-Brücke» (dann wie bisher über Chrome). Startet die Brücke später: «RADIX-Brücke gefunden – hier klicken zum Neuladen»
+- Ausgesteckt/ohne Strom: Karte «getrennt», wieder da → verbindet von selbst. Brücke neu gestartet: Anschlüsse werden vor dem nächsten Befehl selbst wieder geöffnet
+- GX Pro über die Brücke: erkannt (pid 55d2), Anschluss bleibt zu
+- Wird RADIX geschlossen, gibt die Brücke alle Anschlüsse frei (Spooky2 als Rückfallebene)
+- Enthält 0.4.7–0.4.11. (Eine 0.5.0 aus einem parallelen Chat wurde nie veröffentlicht.)
+
 ## Stand Version 0.4.11
 - **Spooky2 GeneratorX Pro** (CH342, USB 1a86:55d2 – bei Markus Anschlüsse 1+2 und 23+24, je ein GX Pro mit zwei Platinen) wird erkannt: RADIX öffnet den Anschluss nie (keine Prüfung, kein Test, kein Start, kein Code beim Zuordnen), damit Spooky2 ihn gleichzeitig betreiben kann. Karte: Chip «GX Pro · Spooky2», Leiste grau gestrichelt
 - Protokoll GX Pro (für später): 115200 Baud, Befehle `:w24=<f>,` / `:w25=<f>,` (Frequenz, Kodierung m·10+e in 10⁻⁸ Hz), `:w11=a,b,` (Ausgänge), Antwort `:ok`; Quelle github.com/pahor167/opengx-pro docs/spec/protocols.md. Gerät meldet r01=G2

@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.4.11';
+const VERSION = '0.6.1';
 const $ = (s, el = document) => el.querySelector(s);
 const K = window.Kern;
 const SPEICHER = 'radix-generatoren-v2';   // { zuordnung: [Nummer je Anschluss], gen: { Nummer: Einstellungen } }
@@ -208,6 +208,7 @@ class Leitung {
     this.offen = true;
     this.lese();
   }
+  schreibe(text) { return this.writer.write(new TextEncoder().encode(text)); }
   async lese() {
     const dec = new TextDecoder();
     const reader = this.reader = this.port.readable.getReader();
@@ -218,9 +219,10 @@ class Leitung {
   /** Befehl senden und auf «ok» warten; Befehle laufen streng nacheinander. */
   sende(befehl, timeout = 1500) {
     const auftrag = this.kette.then(async () => {
+      if (!this.offen && this.wiederOeffnen) { try { await this.wiederOeffnen(); } catch (e) { /* unten gemeldet */ } }
       if (!this.offen) throw new Error('Generator nicht verbunden');
       this.rx = '';
-      await this.writer.write(new TextEncoder().encode(befehl));
+      await this.schreibe(befehl);
       const start = Date.now();
       let okSeit = null;
       for (;;) {
@@ -243,6 +245,123 @@ class Leitung {
     this.writer = null;
     try { await this.port.close(); } catch (e) {}
     this.offen = false;
+  }
+}
+
+// ------------------------------------------------------------------ RADIX-Brücke (Hilfsprogramm auf dem Spooky-PC)
+// Chrome kennt weder COM-Namen noch USB-Steckplatz. Die Brücke schon. Windows vergibt die COM-Nummern der CH340 (ohne
+// Seriennummer) bei Markus bei jedem Start neu – fest ist nur der Steckplatz («schluessel»). RADIX merkt sich darum pro
+// Steckplatz die Generator-Nummer (speicher.orte). Neu erkannter Steckplatz: COM-Nummer als Vorschlag, dann einmal «Zuordnen».
+const BRUECKE_URL = 'ws://127.0.0.1:8642';
+const bruecke = { ws: null, verbunden: false, version: '', besetzt: false, leitungen: new Map(), wartend: new Map() };
+let modus = 'chrome';                                                    // 'chrome' oder 'bruecke'
+
+class BrueckenLeitung extends Leitung {
+  constructor(p) {
+    super({ getInfo: () => ({ usbVendorId: p.vid, usbProductId: p.pid }) });
+    this.p = p; this.schluessel = p.schluessel || p.id;
+  }
+  get id() { return this.p.id; }                                         // aktueller COM-Name (kann nach Neustart anders sein)
+  async oeffne(baud = this.baud) {
+    if (this.offen && baud === this.baud) return;
+    if (!bruecke.verbunden) throw new Error('RADIX-Brücke nicht verbunden');
+    if (!bruecke.leitungen.has(this.schluessel) || this.weg) throw new Error(`${this.p.com} nicht da (Kabel?)`);
+    await new Promise((ok, nein) => {
+      const uhr = setTimeout(() => { bruecke.wartend.delete(this.id); nein(new Error('Brücke antwortet nicht')); }, 4000);
+      bruecke.wartend.set(this.id, { ok: () => { clearTimeout(uhr); ok(); }, nein: (e) => { clearTimeout(uhr); nein(e); } });
+      bruecke.ws.send(JSON.stringify({ t: 'oeffne', id: this.id, baud }));
+    });
+    this.baud = baud; this.rx = ''; this.offen = true;
+  }
+  schreibe(text) {
+    if (!bruecke.verbunden) { this.offen = false; throw new Error('RADIX-Brücke nicht verbunden'); }
+    bruecke.ws.send(JSON.stringify({ t: 'schreibe', id: this.id, daten: text }));
+  }
+  /** Nach einem Unterbruch (Brücke neu gestartet, Kabel kurz weg) vor dem nächsten Befehl selbst wieder öffnen. */
+  async wiederOeffnen() { if (bruecke.verbunden && !this.weg) await this.oeffne(this.baud); }
+  async schliesse() { if (bruecke.verbunden) bruecke.ws.send(JSON.stringify({ t: 'schliesse', id: this.id })); this.offen = false; }
+}
+
+/** Verbindung zur Brücke. Ergebnis true = Brücke da. */
+function verbindeBruecke(wartezeit = 1500, nurPruefen = false) {
+  return new Promise((fertig) => {
+    let ws, erledigt = false;
+    const ende = (x) => { if (!erledigt) { erledigt = true; fertig(x); } };
+    try { ws = new WebSocket(BRUECKE_URL); } catch (e) { ende(false); return; }
+    const uhr = setTimeout(() => { try { ws.close(); } catch (e) {} ende(false); }, wartezeit);
+    ws.onmessage = (ev) => {
+      let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+      if (nurPruefen) { if (m.t === 'hallo') { clearTimeout(uhr); try { ws.close(); } catch (e) {} ende(true); } return; }
+      if (m.t === 'hallo') { clearTimeout(uhr); bruecke.ws = ws; bruecke.verbunden = true; bruecke.version = m.version; zeigeBruecke(); ende(true); }
+      else if (m.t === 'liste') brueckenListe(m.ports);
+      else if (m.t === 'offen') { const w = bruecke.wartend.get(m.id); bruecke.wartend.delete(m.id); if (w) w.ok(); }
+      else if (m.t === 'fehler') {
+        const w = m.id && bruecke.wartend.get(m.id);
+        if (w) { bruecke.wartend.delete(m.id); w.nein(new Error(m.text)); }
+        else if (!m.id) { bruecke.besetzt = true; clearTimeout(uhr); zeigeBruecke(m.text); alert(m.text); ende(false); }
+      }
+      else if (m.t === 'daten') { const l = leitungMitId(m.id); if (l) l.rx += m.daten; }
+      else if (m.t === 'zu') { const l = leitungMitId(m.id); if (l) l.offen = false; }
+    };
+    ws.onerror = () => {};
+    ws.onclose = () => {
+      clearTimeout(uhr);
+      const war = bruecke.ws === ws && bruecke.verbunden;
+      if (bruecke.ws === ws) { bruecke.verbunden = false; for (const l of bruecke.leitungen.values()) l.offen = false; }
+      if (war) { zeigeBruecke(); setTimeout(neuVerbinden, 2000); }
+      ende(false);
+    };
+  });
+}
+
+const leitungMitId = (id) => { for (const l of bruecke.leitungen.values()) if (l.p.id === id) return l; return null; };
+
+/** Brücke verloren (Fenster zu, PC-Neustart): immer wieder versuchen. Laufende Generatoren öffnen ihren Anschluss dann selbst. */
+async function neuVerbinden() {
+  if (bruecke.verbunden) return;
+  zeigeBruecke();
+  if (!await verbindeBruecke(2500)) setTimeout(neuVerbinden, 3000);
+}
+
+function zeigeBruecke(text) {
+  const el = $('#bruecke');
+  el.hidden = false;
+  if (bruecke.besetzt) { el.className = 'info fehler'; el.textContent = 'RADIX-Brücke besetzt'; el.title = text || ''; return; }
+  if (modus === 'chrome') {
+    el.className = 'info'; el.textContent = 'ohne RADIX-Brücke';
+    el.title = 'Die RADIX-Brücke läuft nicht: Generatoren direkt über Chrome. Nummern nach jedem Öffnen mit «Alle testen» prüfen. Brücke starten (Desktop «RADIX-Brücke»), dann diese Seite neu laden.';
+    return;
+  }
+  el.className = 'info ' + (bruecke.verbunden ? 'ok' : 'fehler');
+  el.textContent = bruecke.verbunden ? `RADIX-Brücke ${bruecke.version} ✓` : 'RADIX-Brücke getrennt – verbinde neu …';
+  el.title = bruecke.verbunden ? 'Generator-Nummer fest am USB-Steckplatz (einmal zuordnen, gilt nach jedem Neustart)' : 'Das Fenster «RADIX-Brücke» auf dem PC ist zu oder abgestürzt. Neu starten: Desktop-Verknüpfung «RADIX-Brücke».';
+}
+
+/** Anschlussliste der Brücke (alle 2 s bei Änderung): neue Generatoren als Karte, ausgesteckte melden, wieder eingesteckte verbinden. */
+function brueckenListe(ports) {
+  const da = new Set();
+  for (const p of ports) {
+    const key = p.schluessel || p.id;
+    da.add(key);
+    let l = bruecke.leitungen.get(key);
+    if (!l) { l = new BrueckenLeitung(p); bruecke.leitungen.set(key, l); fuegeHinzu(l); continue; }
+    if (l.p.id !== p.id && l.offen) l.offen = false;                       // COM-Name hat gewechselt: neu öffnen
+    const vorher = l.p.com;
+    l.p = p;
+    const g = generatoren.find(x => x.leitung === l);
+    if (g && vorher !== p.com) { g.log(`Steckplatz ${p.ort}: jetzt ${p.com} (vorher ${vorher})`); g.zeigeVerbindung(g.verbunden ? 'ok' : 'fehler'); }
+    if (l.weg) { l.weg = false; if (g) { g.getrennt = false; g.log(`${p.com} wieder da`); if (!g.lauf) g.verbinde(); } }
+  }
+  for (const [id, l] of bruecke.leitungen) {
+    if (da.has(id) || l.weg) continue;
+    l.weg = true; l.offen = false;
+    const g = generatoren.find(x => x.leitung === l);
+    if (g) {
+      g.getrennt = true; g.verbunden = false;
+      if (g.gx) continue;
+      g.zeigeVerbindung('fehler', 'getrennt'); g.log(`${l.p.com} ausgesteckt`);
+      if (!g.lauf) g.setzeStatus(`${l.p.com} ausgesteckt oder ohne Strom – verbindet von selbst, sobald er wieder da ist.`, 'fehler');
+    }
   }
 }
 
@@ -343,18 +462,32 @@ const speichereAlle = () => {
   for (const g of generatoren) speicher.gen[g.einst.nr] = g.daten();
   // Zuordnung Anschluss -> Nummer: nur die Plätze der vorhandenen Generatoren überschreiben. Beim Start kommen die Anschlüsse
   // einzeln dazu – vorher wurde hier nach dem ersten alles Weitere abgeschnitten und die Nummern verrutschten bei jedem Neuladen.
-  const z = Array.isArray(speicher.zuordnung) ? [...speicher.zuordnung] : [];
-  generatoren.forEach((g, i) => { z[i] = g.einst.nr; });
-  speicher.zuordnung = z;
+  if (modus === 'chrome') {
+    const z = Array.isArray(speicher.zuordnung) ? [...speicher.zuordnung] : [];
+    generatoren.forEach((g, i) => { z[i] = g.einst.nr; });
+    speicher.zuordnung = z;
+  } else {
+    // Brücke: Nummer pro Steckplatz. Jede Nummer nur einmal – ein nicht eingesteckter Steckplatz gibt sie an den ab, der sie jetzt hat.
+    const orte = speicher.orte || {}, jetzt = generatoren.filter(g => g.leitung.schluessel);
+    for (const g of jetzt) for (const [k, v] of Object.entries(orte)) if (v === g.einst.nr && k !== g.leitung.schluessel) delete orte[k];
+    for (const g of jetzt) orte[g.leitung.schluessel] = g.einst.nr;
+    speicher.orte = orte;
+  }
   speichere(SPEICHER, speicher);
 };
 
 class Generator {
   constructor(port, index) {
-    this.leitung = new Leitung(port);
+    this.leitung = port instanceof Leitung ? port : new Leitung(port);
     this.index = index;
-    let nr = speicher.zuordnung[index];
     const belegt = (n) => generatoren.some(g => g.einst.nr === String(n));
+    let nr = speicher.zuordnung[index];
+    if (this.leitung.p) {                                                     // Brücke: Nummer gehört zum Steckplatz
+      const orte = speicher.orte || {}, gemerkt = orte[this.leitung.schluessel];
+      const fremd = (n) => Object.entries(orte).some(([k, v]) => v === String(n) && k !== this.leitung.schluessel && !generatoren.some(g => g.leitung.schluessel === k) && bruecke.leitungen.has(k));
+      nr = gemerkt != null ? gemerkt : (this.leitung.p.nr != null && !fremd(this.leitung.p.nr) && !Object.values(orte).includes(String(this.leitung.p.nr)) ? this.leitung.p.nr : null);
+      if (nr == null) { let n = 1; while (belegt(n) || Object.values(orte).includes(String(n))) n++; nr = n; }
+    }
     if (nr == null || belegt(nr)) { nr = index + 1; while (belegt(nr)) nr++; }
     this.lauf = null;                                                       // laufender Ablauf
     this.ladeEinst(String(nr));
@@ -370,6 +503,7 @@ class Generator {
     const c = $('.chip', this.karte);
     c.textContent = `${this.chipTyp} ${art === 'ok' ? '✓' : art === 'pruefe' ? '…' : '✗'}${text ? ' ' + text : ''}`;
     c.className = 'chip ' + art;
+    if (this.leitung.p) c.title = `${this.leitung.p.com} · USB-Steckplatz ${this.leitung.p.ort || '?'}\nDie Generator-Nummer gehört zu diesem Steckplatz.`;
   }
 
   /**
@@ -379,11 +513,12 @@ class Generator {
    */
   /** GeneratorX Pro (CH342)? Dann bleibt der Anschluss für Spooky2 frei. */
   get gx() { return istGX(this.leitung.port); }
-  get chipTyp() { const i = this.leitung.port.getInfo(); return this.gx ? 'GX Pro' : i.usbVendorId === 0x1a86 ? 'CH340' : i.usbVendorId === 0x10c4 ? 'CP210x' : 'USB'; }
+  get chipTyp() { if (this.leitung.p) return this.leitung.p.com; const i = this.leitung.port.getInfo(); return this.gx ? 'GX Pro' : i.usbVendorId === 0x1a86 ? 'CH340' : i.usbVendorId === 0x10c4 ? 'CP210x' : 'USB'; }
   /** GX-Karte: Hinweis statt Verbindung, Anschluss nicht öffnen. */
   zeigeGX() {
     const c = $('.chip', this.karte);
-    c.textContent = 'GX Pro · Spooky2'; c.className = 'chip gx';
+    c.textContent = this.leitung.p ? `${this.leitung.p.com} · GX Pro` : 'GX Pro · Spooky2'; c.className = 'chip gx';
+    if (this.leitung.p) c.title = `GeneratorX Pro an ${this.leitung.p.com}, USB-Steckplatz ${this.leitung.p.ort || '?'}. RADIX steuert ihn noch nicht.`;
     c.title = 'Spooky2 GeneratorX Pro (CH342). RADIX steuert ihn noch nicht und lässt den Anschluss frei – er läuft mit Spooky2.';
     if (!this.lauf) this.setzeStatus('GeneratorX Pro – läuft vorerst mit Spooky2. RADIX lässt diesen Anschluss frei.', 'gx');
   }
@@ -1239,7 +1374,7 @@ function starteTakt() {
     for (const g of generatoren) g.tick();
     if (Date.now() - letzterVersuch > 15000) {
       letzterVersuch = Date.now();
-      for (const g of generatoren) if (!g.gx && !g.lauf && !g.imTest && !g.verbunden && !g.verbindet) g.verbinde(true);
+      for (const g of generatoren) if (!g.gx && !g.lauf && !g.imTest && !g.verbunden && !g.verbindet && !g.leitung.weg) g.verbinde(true);
     }
     if (Date.now() - letzteLeiste > 500) { letzteLeiste = Date.now(); aktualisiereLeiste(); pruefeWach(); }
     if (Date.now() - letztesSpeichern > 5000) { letztesSpeichern = Date.now(); if (generatoren.some(g => g.lauf)) speichereAlle(); }
@@ -1248,6 +1383,16 @@ function starteTakt() {
 
 // ------------------------------------------------------------------ Start
 async function fuegeHinzu(port) {
+  if (port instanceof BrueckenLeitung) {
+    $('#generatoren .leer')?.remove();
+    const g = new Generator(port, generatoren.length);
+    generatoren.push(g);
+    g.verbinde();
+    $('#anzahl').textContent = `${generatoren.length} Generator${generatoren.length === 1 ? '' : 'en'}`;
+    speichereAlle();
+    zeigeGemerkten();
+    return;
+  }
   const da = generatoren.find(g => g.leitung.port === port);
   if (da) { da.getrennt = false; if (!da.lauf) da.verbinde(); return; }   // wieder eingesteckt / eingeschaltet: neu verbinden
   // Wieder eingesteckt, aber Chrome meldet ihn als neuen Anschluss (z. B. nach Strom aus/ein): die getrennte Karte übernimmt ihn,
@@ -1298,10 +1443,33 @@ async function init() {
   setzeAnsicht(ansicht.einzel);
   window.addEventListener('resize', setzeKopfHoehe);
   beobachteScrollen();
-  navigator.serial.addEventListener('connect', (ev) => fuegeHinzu(ev.target));
-  navigator.serial.addEventListener('disconnect', (ev) => getrennt(ev.target));
   window.addEventListener('beforeunload', (ev) => { speichereAlle(); if (generatoren.some(g => g.lauf)) { ev.preventDefault(); ev.returnValue = ''; } });
-  for (const p of await navigator.serial.getPorts()) await fuegeHinzu(p);
+  if (await verbindeBruecke()) {
+    modus = 'bruecke';
+    document.body.classList.add('bruecke');
+    $('#btn-hinzu').hidden = true;                                       // Generatoren kommen von der Brücke (auch neu eingesteckte)
+    zeigeBruecke();
+    const leer = $('#generatoren .leer');
+    if (leer) leer.textContent = 'RADIX-Brücke verbunden, aber noch keine Generatoren gefunden. Spooky2 schliessen und USB-Kabel prüfen – sie erscheinen von selbst.';
+  } else if (bruecke.besetzt) {
+    $('#btn-hinzu').hidden = true; $('#btn-zuordnen').hidden = true;
+    const leer = $('#generatoren .leer');
+    if (leer) leer.textContent = 'RADIX ist schon in einem anderen Fenster oder Tab offen und steuert dort die Generatoren. Dieses Fenster schliessen.';
+  } else {
+    zeigeBruecke();
+    navigator.serial.addEventListener('connect', (ev) => fuegeHinzu(ev.target));
+    navigator.serial.addEventListener('disconnect', (ev) => getrennt(ev.target));
+    for (const p of await navigator.serial.getPorts()) await fuegeHinzu(p);
+    // Startet die Brücke später (z. B. Chrome fragte erst nach der Erlaubnis): Hinweis zum Neuladen
+    const suche = setInterval(async () => {
+      if (generatoren.some(g => g.lauf)) return;
+      if (await verbindeBruecke(1500, true)) {
+        clearInterval(suche);
+        const el = $('#bruecke'); el.className = 'info ok'; el.textContent = 'RADIX-Brücke gefunden – hier klicken zum Neuladen'; el.style.cursor = 'pointer';
+        el.onclick = () => location.reload();
+      }
+    }, 10000);
+  }
   await Promise.all([ordnerBeimStart(), quelleBeimStart('finder'), quelleBeimStart('kontrolle')]);
   beobachteQuellen();
   starteTakt();
