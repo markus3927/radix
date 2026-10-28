@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.4.8';
+const VERSION = '0.4.9';
 const $ = (s, el = document) => el.querySelector(s);
 const K = window.Kern;
 const SPEICHER = 'radix-generatoren-v2';   // { zuordnung: [Nummer je Anschluss], gen: { Nummer: Einstellungen } }
@@ -472,7 +472,7 @@ class Generator {
     const nr = $('.nr', k);
     nr.onchange = () => this.wechsleNummer(nr.value.trim());
     $('.nr-zurueck', k).onclick = () => { const n = parseInt(this.einst.nr, 10) || 1; if (n > 1) this.wechsleNummer(String(n - 1)); };
-    $('.nr-weiter', k).onclick = () => { const n = parseInt(this.einst.nr, 10) || 0; if (n < 99) this.wechsleNummer(String(n + 1)); };
+    $('.nr-weiter', k).onclick = () => { const n = parseInt(this.einst.nr, 10) || 0; if (n < hoechsteNummer()) this.wechsleNummer(String(n + 1)); };
     const li = $('.liste', k);
     let warte = null;
     li.oninput = () => { clearTimeout(warte); warte = setTimeout(() => this.setzeListe(li.value), 350); };
@@ -1114,6 +1114,8 @@ function beobachteScrollen() {
 // Jeder verbundene Anschluss zeigt einen eindeutigen Code (101, 102, …) auf dem Display. Markus trägt pro Gerät (Nummer am Regal)
 // den Code ein, den es zeigt. RADIX gibt jedem Anschluss direkt seine Nummer – ohne Tauschen Schritt für Schritt.
 const CODE_AB = 101;
+/** Höchste sinnvolle Generator-Nummer: 24 (Regal) oder mehr, wenn mehr Generatoren angeschlossen sind. */
+const hoechsteNummer = () => Math.max(24, generatoren.length);
 let zuCodes = new Map();                                                // Code -> Generator
 
 async function sendeCodes() {
@@ -1177,12 +1179,12 @@ async function uebernehmeZuordnung() {
   }
   if (fehler.length) { meldung.className = 'zu-meldung'; meldung.textContent = fehler.join(' · '); return; }
   if (!zuteilung.size) { meldung.className = 'zu-meldung'; meldung.textContent = 'Noch nichts eingetragen.'; return; }
-  // Übrige Anschlüsse: freie Nummern, möglichst ihre bisherige
-  const belegt = new Set(zuteilung.values());
+  // Übrige Anschlüsse (z. B. ohne Verbindung): die freien Nummern 1, 2, 3 … – Lücken werden gefüllt, keine Nummer über der Anzahl
+  const belegt = new Set(zuteilung.values()), hoechste = hoechsteNummer();
   for (const g of generatoren) {
     if (zuteilung.has(g)) continue;
     let nr = g.einst.nr;
-    if (belegt.has(nr)) { let n = 1; while (belegt.has(String(n))) n++; nr = String(n); }
+    if (belegt.has(nr) || !(parseInt(nr, 10) >= 1 && parseInt(nr, 10) <= hoechste)) { let n = 1; while (belegt.has(String(n))) n++; nr = String(n); }
     zuteilung.set(g, nr); belegt.add(nr);
   }
   speichereAlle();                                                      // Stand unter den bisherigen Nummern sichern

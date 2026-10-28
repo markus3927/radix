@@ -54,6 +54,10 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.4.9
+- Zuordnen: Generatoren ohne Code (ohne Verbindung) füllen die freien Nummern ab 1 (vorher konnte z. B. eine 25 stehen bleiben und die 1 fehlen)
+- ▶ bei der Nummer geht nicht mehr über 24 (bzw. die Anzahl angeschlossener Generatoren) hinaus
+
 ## Stand Version 0.4.8
 - **Zuordnen** (Knopf oben): jeder verbundene Generator zeigt einen Code ab 101 auf dem Display (Ausgänge aus). Pro Gerät am Regal den Code eintragen (Enter springt weiter), «Übernehmen» – alle Nummern stimmen auf einmal, Programmlisten und Kunden bleiben bei ihrer Nummer. Danach zeigt jedes Gerät zur Kontrolle seine eigene Nummer. Geräte ohne Code (keine Verbindung) leer lassen
 - **Fehler behoben:** beim Neuladen wurde die gespeicherte Zuordnung nach dem ersten Generator abgeschnitten – die Nummern verrutschten bei jedem Start
