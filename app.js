@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.4.9';
+const VERSION = '0.4.10';
 const $ = (s, el = document) => el.querySelector(s);
 const K = window.Kern;
 const SPEICHER = 'radix-generatoren-v2';   // { zuordnung: [Nummer je Anschluss], gen: { Nummer: Einstellungen } }
@@ -1231,7 +1231,23 @@ function starteTakt() {
 // ------------------------------------------------------------------ Start
 async function fuegeHinzu(port) {
   const da = generatoren.find(g => g.leitung.port === port);
-  if (da) { if (!da.lauf) da.verbinde(); return; }                  // wieder eingesteckt / eingeschaltet: neu verbinden
+  if (da) { da.getrennt = false; if (!da.lauf) da.verbinde(); return; }   // wieder eingesteckt / eingeschaltet: neu verbinden
+  // Wieder eingesteckt, aber Chrome meldet ihn als neuen Anschluss (z. B. nach Strom aus/ein): die getrennte Karte übernimmt ihn,
+  // statt dass eine zusätzliche Karte (25, 26 …) entsteht. Chrome liefert bei CH340 keine Kennung – sind mehrere getrennt,
+  // nimmt er die kleinste Nummer und bittet um «Zuordnen».
+  const frei = generatoren.filter(g => g.getrennt && !g.lauf).sort((a, b) => zahl(a) - zahl(b));
+  if (frei.length) {
+    const g = frei[0];
+    try { await g.leitung.schliesse(); } catch (e) { /* alter Anschluss ist weg */ }
+    g.leitung = new Leitung(port);
+    g.getrennt = false;
+    g.log('Wieder eingesteckt (neuer Anschluss)');
+    const ok = await g.verbinde();
+    if (ok && frei.length > 1) g.setzeStatus(`Wieder eingesteckt – ${frei.length} Generatoren waren getrennt, die Nummer ist nicht sicher: mit «Zuordnen» prüfen`, 'warnung');
+    else if (ok) g.setzeStatus('Wieder eingesteckt – verbunden', 'ok');
+    speichereAlle();
+    return;
+  }
   $('#generatoren .leer')?.remove();
   const g = new Generator(port, generatoren.length);
   generatoren.push(g);
@@ -1245,7 +1261,7 @@ async function fuegeHinzu(port) {
 function getrennt(port) {
   const g = generatoren.find(x => x.leitung.port === port);
   if (!g) return;
-  g.verbunden = false; g.leitung.offen = false;
+  g.verbunden = false; g.leitung.offen = false; g.getrennt = true;
   g.zeigeVerbindung('fehler', 'getrennt');
   g.log('USB getrennt');
   if (!g.lauf) g.setzeStatus('USB getrennt – Kabel/Strom prüfen. Verbindet von selbst, sobald er wieder da ist.', 'fehler');

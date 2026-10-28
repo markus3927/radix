@@ -54,6 +54,9 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.4.10
+- Generator aus- und wieder eingesteckt (oder Strom aus/ein): Chrome meldet ihn als neuen Anschluss. Er übernimmt jetzt die getrennte Karte (gleiche Nummer, gleiche Programmliste) statt einer zusätzlichen Karte 25. Waren mehrere getrennt: kleinste Nummer, Hinweis «mit Zuordnen prüfen»
+
 ## Stand Version 0.4.9
 - Zuordnen: Generatoren ohne Code (ohne Verbindung) füllen die freien Nummern ab 1 (vorher konnte z. B. eine 25 stehen bleiben und die 1 fehlen)
 - ▶ bei der Nummer geht nicht mehr über 24 (bzw. die Anzahl angeschlossener Generatoren) hinaus
