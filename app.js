@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.6.1';
+const VERSION = '0.6.2';
 const $ = (s, el = document) => el.querySelector(s);
 const K = window.Kern;
 const SPEICHER = 'radix-generatoren-v2';   // { zuordnung: [Nummer je Anschluss], gen: { Nummer: Einstellungen } }
@@ -439,10 +439,10 @@ function bereiteListeVor(text, standardPreset) {
     it.ende = schritte.length;
   });
   for (const it of items) if (it.fehler) warnungen.push(`${it.code !== '?' ? it.code : it.zeile.slice(0, 30)}: ${it.fehler}`);
-  if (!items.length) warnungen.push('Keine Programme: Programmliste ausfüllen');
-  else if (!schritte.some(s => !s.pause) && !warnungen.length) warnungen.push('Keine abspielbaren Frequenzen');
+  // Leere Liste ist kein Fehler (keine rote Meldung), Start bleibt aber gesperrt – die Zusammenfassung sagt «Liste leer»
+  if (items.length && !schritte.some(s => !s.pause) && !warnungen.length) warnungen.push('Keine abspielbaren Frequenzen');
   else if (schritte.length && schritte[schritte.length - 1].marke) warnungen.push('Nach der letzten Zeitmarke steht kein Programm');
-  const blockiert = warnungen.length > 0;
+  const blockiert = warnungen.length > 0 || !items.length;
   return { items, einst, plan: { schritte, gesamtSek: schritte.reduce((a, s) => a + s.sek, 0) }, warnungen, blockiert };
 }
 
@@ -518,8 +518,8 @@ class Generator {
   zeigeGX() {
     const c = $('.chip', this.karte);
     c.textContent = this.leitung.p ? `${this.leitung.p.com} · GX Pro` : 'GX Pro · Spooky2'; c.className = 'chip gx';
-    if (this.leitung.p) c.title = `GeneratorX Pro an ${this.leitung.p.com}, USB-Steckplatz ${this.leitung.p.ort || '?'}. RADIX steuert ihn noch nicht.`;
-    c.title = 'Spooky2 GeneratorX Pro (CH342). RADIX steuert ihn noch nicht und lässt den Anschluss frei – er läuft mit Spooky2.';
+    c.title = this.leitung.p ? `GeneratorX Pro an ${this.leitung.p.com}, USB-Steckplatz ${this.leitung.p.ort || '?'}. RADIX steuert ihn noch nicht und lässt den Anschluss frei – er läuft mit Spooky2.`
+      : 'Spooky2 GeneratorX Pro (CH342). RADIX steuert ihn noch nicht und lässt den Anschluss frei – er läuft mit Spooky2.';
     if (!this.lauf) this.setzeStatus('GeneratorX Pro – läuft vorerst mit Spooky2. RADIX lässt diesen Anschluss frei.', 'gx');
   }
   verbinde(leise = false) {
@@ -606,6 +606,16 @@ class Generator {
     const l = this.lauf;
     return { ...this.einst, uebernommen: this.uebernommen, geleert: this.geleert, lauf: l && l.status !== 'fertig' ? { schritt: l.schritt, tImSchritt: l.tImSchritt, durchlauf: l.durchlauf, status: l.status, startUm: l.startUmMs, liste: l.listeText } : null };
   }
+  /** Ganzes Protokoll in die Zwischenablage (zum Einfügen im Chat). */
+  async kopiereProtokoll() {
+    const knopf = $('.btn-kopieren', this.karte), text = `RADIX ${VERSION} · Generator ${this.einst.nr}\n` + this.protokoll.join('\n');
+    try { await navigator.clipboard.writeText(text); knopf.textContent = 'Kopiert ✓'; }
+    catch (e) {                                                   // ohne Zwischenablage-Recht: Text markieren, dann Strg+C
+      const r = document.createRange(); r.selectNodeContents($('.protokoll pre', this.karte));
+      const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); knopf.textContent = 'Markiert – Strg+C';
+    }
+    setTimeout(() => { knopf.textContent = 'Kopieren'; }, 2500);
+  }
   log(text, art = '') {
     this.protokoll.push(`${jetzt()}  ${text}`);
     if (this.protokoll.length > 300) this.protokoll.shift();
@@ -646,6 +656,7 @@ class Generator {
     au.onchange = () => { this.einst.auto = au.checked; this.uebernommen = null; speichereAlle(); this.aktualisiereKunde(); };
     $('.vorschau', k).onclick = (ev) => { const b = ev.target.closest('button[data-z]'); if (b) this.setzeVariante(+b.dataset.z, b.dataset.v); };
     $('.protokoll', k).ontoggle = () => { $('.protokoll pre', k).textContent = this.protokoll.join('\n'); };
+    $('.btn-kopieren', k).onclick = () => this.kopiereProtokoll();
     $('#generatoren').appendChild(k);
     this.zeigeEinst();
   }
@@ -705,6 +716,9 @@ class Generator {
       const zeile = `${x.code}${v ? ' ' + v : ''}  ${x.name}`;
       this.fuegeZeilenAn([zeile]);
     };
+    // GX Pro läuft vorerst mit Spooky2: kein Doppelklick-Empfang, keine Hinweise (die Einstellung selbst bleibt gespeichert)
+    $('label.auto', this.karte).hidden = this.gx;
+    if (this.gx) { $('.neu', this.karte).hidden = true; return; }
     if (this.einst.auto) this.koppeln(); else this.pruefeNeue();
   }
 
@@ -753,6 +767,7 @@ class Generator {
   /** Einträge der heutigen Kontrollblatt-Zeile, die noch nicht in der Programmliste stehen. */
   pruefeNeue() {
     const box = $('.neu', this.karte);
+    if (this.gx) { box.hidden = true; return; }
     const { eintraege } = this.heute();
     const schluessel = (zeile) => { const r = K.deuteListenZeile(zeile, daten.finder); return r && r.art === 'finder' ? r.code : K.sauber(zeile).split(/\s+/)[0].toLowerCase(); };
     const vorhanden = new Map();
@@ -908,7 +923,7 @@ class Generator {
     w.textContent = [m ? m.text : '', ...anzeigen.warnungen.map(x => this.lauf ? 'Übersprungen, bis geklärt – ' + x : x)].filter(Boolean).join(' · ');
     w.className = 'warnungen' + (m && m.art === 'ok' && !anzeigen.warnungen.length ? ' ok' : '');
     const d = this.einst.durchlaeufe, n = anzeigen.items.filter(it => it.r.art !== 'zeit').length, nm = anzeigen.items.length - n;
-    z.textContent = !daten.geladen ? 'Zuerst den Spooky2-Ordner wählen.' : n ? `${n} Programm${n === 1 ? '' : 'e'} · ${anzeigen.einst.length} Preset${anzeigen.einst.length === 1 ? '' : 's'} · ${fmtZeit(anzeigen.plan.gesamtSek)} pro Durchlauf` + (d ? ` · ${d} × = ${fmtZeit(anzeigen.plan.gesamtSek * d)}` : ' · endlos') + (nm ? ` · ${nm} Zeitmarke${nm === 1 ? '' : 'n'} (Wartezeit nicht eingerechnet)` : '') : '';
+    z.textContent = !daten.geladen ? 'Zuerst den Spooky2-Ordner wählen.' : n ? `${n} Programm${n === 1 ? '' : 'e'} · ${anzeigen.einst.length} Preset${anzeigen.einst.length === 1 ? '' : 's'} · ${fmtZeit(anzeigen.plan.gesamtSek)} pro Durchlauf` + (d ? ` · ${d} × = ${fmtZeit(anzeigen.plan.gesamtSek * d)}` : ' · endlos') + (nm ? ` · ${nm} Zeitmarke${nm === 1 ? '' : 'n'} (Wartezeit nicht eingerechnet)` : '') : 'Liste leer';
     if (this.lauf) { this.markiereAktiv(); return this.lauf; }
     this.vorbereitet = anzeigen.blockiert ? null : anzeigen;
     $('.btn-start', this.karte).disabled = !this.vorbereitet || this.gx;
@@ -1199,14 +1214,21 @@ function aktualisiereLeiste() {
     const z = zustand(g), kunde = $('.kunde', g.karte).textContent;
     return { nr: zahl(g), art: z.art, titel: `Generator ${g.einst.nr}${kunde ? ' · ' + kunde : ''} · ${z.text}` };
   });
+  // Mit Brücke: alle Nummern 1–24 sofort zeigen; noch nicht gemeldete Generatoren blass («fehlt»), damit beim Hochfahren
+  // nichts herumspringt und man sieht, welche noch fehlen
+  if (modus === 'bruecke') {
+    const da = new Set(liste.map(x => x.nr));
+    for (let n = 1; n <= hoechsteNummer(); n++) if (!da.has(n)) liste.push({ nr: n, art: 'fehlt', titel: `Generator ${n}: noch nicht gemeldet – wartet auf Anschluss (Strom, USB-Kabel, Hub?)` });
+    liste.sort((a, b) => a.nr - b.nr);
+  }
   for (const g of generatoren) g.karte.style.order = zahl(g);          // Karten nach Nummer sortiert
   const gz = gezeigt ? zahl(gezeigt) : null;
   const stand = JSON.stringify([liste, aktiv, gz]);
   if (stand === leistenStand) return;
   leistenStand = stand;
   nav.hidden = liste.length < 1;
-  nav.innerHTML = liste.map(x => `<button class="lg ${x.art}${x.nr === aktiv ? ' aktiv' : ''}${x.nr === gz ? ' gezeigt' : ''}" data-nr="${x.nr}" title="${esc(x.titel)}">${x.nr}</button>`).join('') +
-    '<span class="legende">rot Killing · blau Healing · gelb stellt um oder wartet · weiss steht · rot umrandet keine Verbindung · grau gestrichelt GX Pro (Spooky2)</span>';
+  nav.innerHTML = liste.map(x => `<button class="lg ${x.art}${x.nr === aktiv ? ' aktiv' : ''}${x.nr === gz ? ' gezeigt' : ''}" data-nr="${x.nr}" title="${esc(x.titel)}"${x.art === 'fehlt' ? ' disabled' : ''}>${x.nr}</button>`).join('') +
+    `<span class="legende">rot Killing · blau Healing · gelb stellt um oder wartet · weiss steht · rot umrandet keine Verbindung · grau gestrichelt GX Pro (Spooky2)${modus === 'bruecke' ? ' · blass noch nicht da' : ''}</span>`;
   setzeKopfHoehe();
 }
 
@@ -1449,6 +1471,7 @@ async function init() {
     document.body.classList.add('bruecke');
     $('#btn-hinzu').hidden = true;                                       // Generatoren kommen von der Brücke (auch neu eingesteckte)
     zeigeBruecke();
+    aktualisiereLeiste();                                                // Nummern 1–24 sofort, auch bevor die Generatoren gemeldet sind
     const leer = $('#generatoren .leer');
     if (leer) leer.textContent = 'RADIX-Brücke verbunden, aber noch keine Generatoren gefunden. Spooky2 schliessen und USB-Kabel prüfen – sie erscheinen von selbst.';
   } else if (bruecke.besetzt) {

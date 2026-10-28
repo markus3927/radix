@@ -520,7 +520,9 @@
     const b = [];
     for (const [kanal, hz] of [[0, f1], [1, f2]]) {
       const tief = hz < 600;
-      if (zustand.bereich[kanal] !== tief) { b.push([`Bereich Out${kanal + 1} ${tief ? 'tief' : 'normal'}`, Befehl.bereich(kanal, tief)]); zustand.bereich[kanal] = tief; }
+      // Nach einem Bereichswechsel die Frequenz immer neu schicken: 10 Hz (tief, ×100'000) und 10'000 Hz (normal, ×100)
+      // ergeben denselben Wert – ohne Neusenden zeigte der XM weiter 10'000 Hz (gefunden am Gerät 28.10.2026)
+      if (zustand.bereich[kanal] !== tief) { b.push([`Bereich Out${kanal + 1} ${tief ? 'tief' : 'normal'}`, Befehl.bereich(kanal, tief)]); zustand.bereich[kanal] = tief; zustand.wert[kanal] = null; }
       const wert = Befehl.frequenzWert(kanal, hz);
       if (zustand.wert[kanal] !== wert) { b.push([`Frequenz Out${kanal + 1} ${+hz.toFixed(6)} Hz`, wert]); zustand.wert[kanal] = wert; }
     }

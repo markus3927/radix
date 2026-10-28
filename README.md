@@ -54,6 +54,14 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.6.2 (Brücke bleibt 1.2.1)
+- **Fehler behoben (gefunden am Gerät):** Nach einem Wechsel zwischen tiefem (unter 600 Hz) und normalem Frequenzbereich wird die Frequenz jetzt immer neu geschickt. Vorher blieb z. B. bei `10000=…, 10=…` das Display auf 10'000 Hz stehen, weil 10 Hz × 100'000 und 10'000 Hz × 100 denselben Wert ergeben (betrifft alle Paare 1:1000, z. B. 1/1000, 7.83/7830)
+- Kopf: neues Logo (Mensch im Kreis), Untertitel «zurück zum Ursprung» entfernt
+- Leiste mit Brücke: sofort alle Nummern 1–24, noch nicht gemeldete Generatoren blass gestrichelt (nicht anklickbar)
+- Leere Programmliste: keine rote Meldung mehr, nur «Liste leer»; das graue Beispiel im leeren Feld heisst jetzt «Beispiel (Liste ist leer)»
+- GX-Pro-Karten: kein Haken «Doppelklick im Kontrollblatt» (läuft vorerst mit Spooky2); Tooltip zeigt den Steckplatz
+- Protokoll: grösser (bis 420 px, ziehbar) und Knopf «Kopieren» (ganzes Protokoll in die Zwischenablage)
+
 ## Stand Version 0.6.1 – Brücke 1.2: Nummer am USB-Steckplatz
 - Windows vergibt die COM-Nummern der CH340 (ohne Seriennummer) bei Markus bei jedem Start neu. Darum merkt sich RADIX die Nummer jetzt **pro USB-Steckplatz** (Brücke liest DEVPKEY_Device_LocationPaths). Neu erkannter Steckplatz: COM-Nummer als Vorschlag, einmal «Zuordnen» (oder ◀ ▶), danach stimmt es nach jedem Neustart von selbst
 - Karte zeigt den aktuellen COM-Namen, Tooltip den Steckplatz; wechselt Windows die COM-Nummer, bleibt die Generator-Nummer
