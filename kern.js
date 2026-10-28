@@ -475,25 +475,124 @@
     eigeneWelle: (kanal, werte) => `:a0${kanal + 1}${werte.join(',')}\n`,
   };
 
-  // ------------------------------------------------------------------ GeneratorX Pro (erst zum Testen, 0.6.4)
-  // 115200 Baud, Rahmen «:<Buchstabe><Nr>=<Wert>,<Wert>,» + CR LF, jeder Wert endet mit Komma (aus der GX-Firmware, opengx).
-  // Frequenz Out1 «:w24=v,», Out2 «:w25=v,»: v = m·10 + e, Frequenz = m·10^e · 10⁻⁸ Hz (37 500 Hz = 3750007). Ausgänge «:w11=a,b,».
-  // Gesichert ist nur, was die Anzeige versteht – was die Generator-Platine daraus macht, zeigt erst der Test am Gerät.
+  // ------------------------------------------------------------------ GeneratorX Pro (0.6.5)
+  // 115200 Baud, Zeilen «:wNN=<Wert>,<Wert>,» + CR LF, jeder Wert endet mit Komma, leerer Wert = Kanal unverändert. Antwort «:ok» / «:err».
+  // Quelle: zwei USB-Mitschnitte von Spooky2 am Spooky-PC (28.10.2026, claude/gx_pro/mitschnitt_spooky2.md) und Versuche am Gerät.
+  // Frequenz Out1 «:w24=v,», Out2 «:w25=v,»: v = m·10 + e, Frequenz = m·10^e · 10⁻⁸ Hz (4 Hz = 48, 10 000 Hz = 10009).
+  // Freischaltung: Spooky2 schaltet den GX beim Verbinden frei (Challenge-Response :r90/:w92, nicht nachbaubar). Das hält bis zum
+  // Stromunterbruch des GX. Ohne Freischaltung antwortet er auf alles ausser «:n00=$» mit «:err».
   const GX = {
     BAUD: 115200,
-    /** Frequenz in Hz -> GX-Zahl (höchstens 8 Nullen in den Exponenten, wie die GX-Firmware selbst: 20 kHz = 200008). */
+    MAX_VOLT: 20,
+    /** Wellentabelle je Spooky2-Wellenform (Spooky2 lädt :a11…:a21 in dieser Reihenfolge), Out2 bekommt immer Tabelle 25. */
+    TABELLE: { Sine: 11, Square: 12, Sawtooth: 13, Inverted_Sawtooth: 14, Triangle: 15, Sine_Damped: 16, Square_Damped: 17,
+               Sine_Hbomb: 18, Square_Hbomb: 19, User_Defined_1: 20, User_Defined_2: 21 },
+    TABELLE_OUT2: 25,
+    /** Frequenz in Hz -> GX-Zahl, Nullen in den Exponenten (höchstens 9, wie Spooky2: 10 000 Hz = 10009, 2720 Hz = 2729). */
     zahl(hz) {
       let n = Math.round(hz * 1e8), e = 0;
       if (!(n > 0)) return 0;
-      while (e < 8 && n % 10 === 0) { n /= 10; e++; }
+      while (e < 9 && n % 10 === 0) { n /= 10; e++; }
       return n * 10 + e;
     },
     /** GX-Zahl -> Hz (zum Prüfen und für die Anzeige im Protokoll). */
     hz(v) { return Math.floor(v / 10) * Math.pow(10, v % 10) / 1e8; },
     frequenz: (kanal, hz) => `:w${24 + kanal}=${GX.zahl(hz)},\r\n`,
     ausgaenge: (a, b) => `:w11=${a ? 1 : 0},${b ? 1 : 0},\r\n`,
+    ausgang: (kanal, ein) => (kanal ? `:w11=,${ein ? 1 : 0},\r\n` : `:w11=${ein ? 1 : 0},,\r\n`),
+    amplitude: (kanal, volt) => `:w${28 + kanal}=${Math.round(volt * 100)},\r\n`,
+    offset: (kanal, prozent) => `:w${32 + kanal}=${120 + Math.round(prozent)},\r\n`,
+    welle: (kanal, tabelle) => `:w${20 + kanal}=${tabelle},\r\n`,
+    tabelle: (nr, werte) => `:a${nr}=${werte.join(',')},\r\n`,
+    sync: (ein) => `:w14=${ein ? 1 : 0},\r\n`,
+    gateAus: (kanal) => (kanal ? ':w12=,0,\r\n' : ':w12=0,,\r\n'),
+    neueFrequenz: ':w13=0,\r\n',
+    /** Text im GX-Display (Spooky2: «Port 1 - Healing (R) - JW»). Nur ASCII, höchstens 57 Zeichen, nicht mit $ * # , ? beginnen. */
+    name(text) {
+      const t = String(text).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\x20-\x7e]/g, '').replace(/^[$*#,?\s]+/, '').slice(0, 57);
+      return `:n00=${t || 'RADIX'}\r\n`;
+    },
     version: ':n00=$\r\n',
+    /** Grundstellung nach dem Öffnen, wie Spooky2 beim Verbinden (ohne Freischaltung). */
+    grundstellung: () => [
+      ['Kanal-Sync aus', ':w14=0,\r\n'], ['w17 (wie Spooky2)', ':w17=0,0,\r\n'],
+      ['Frequenz Out1 0', ':w24=0,\r\n'], ['Frequenz Out2 0', ':w25=0,\r\n'], ['w15 (wie Spooky2)', ':w15=1,1,\r\n'],
+      ['Offset Out1 0 %', ':w32=120,\r\n'], ['Offset Out2 0 %', ':w33=120,\r\n'],
+    ],
+    /** Ausgänge aus und Amplitude 0 (Stopp, Pause am Ende, Test beenden). */
+    aus: () => [
+      ['Ausgang 1 aus', GX.ausgang(0, false)], ['Ausgang 2 aus', GX.ausgang(1, false)],
+      ['Amplitude Out1 0', GX.amplitude(0, 0)], ['Amplitude Out2 0', GX.amplitude(1, 0)],
+    ],
+    /**
+     * Amplitude so begrenzen, dass Amplitude + Offset die 20 V nicht übersteigt. Spooky2 schickte bei Killing (R) - JK
+     * (20 V, Offset +100 % / −100 %) nur 10 V an den GX – das entspricht 20 V / (1 + 100 %).
+     */
+    begrenzt(volt, offset) { return Math.min(volt, GX.MAX_VOLT / (1 + Math.abs(offset) / 100)); },
   };
+
+  /** Wellenform eines Ausgangs als 1024 Werte 0…1023 (Square mit Duty, sonst aus der CSV, Out2 «invertiert» gespiegelt). */
+  function gxWerte(welle, wellen, duty) {
+    if (welle.typ === 'Square' && duty !== 50) {
+      const hoch = Math.round(1024 * Math.max(0, Math.min(100, duty)) / 100);
+      return Array.from({ length: 1024 }, (_, i) => ((i < hoch) !== welle.invertiert ? 1023 : 0));
+    }
+    return welleZuWerten(findeWelle(wellen, welle.datei), welle.invertiert);
+  }
+
+  /** Was der GX (noch) nicht kann – zusätzlich zu den allgemeinen Warnungen von einstellungen(). */
+  function gxWarnungen(e) {
+    const w = [];
+    if (e.out1.phase || e.out2.phase) w.push('Phase auf dem GX Pro noch nicht unterstützt');
+    if (e.out2Modus.art === 'faktor') w.push('Out2 mit Faktor/Konstante auf dem GX Pro noch nicht unterstützt');
+    return w;
+  }
+
+  /** Befehle zum Einrichten des GX für ein Preset (Ablauf wie Spooky2 beim Programmstart). */
+  function gxEinrichtung(e, wellen, anzeige = '') {
+    const fehlt = [e.out1.welle, e.out2.welle].filter(w => w && !findeWelle(wellen, w.datei) && !(w.typ === 'Square' && e.duty !== 50)).map(w => w.datei);
+    if (fehlt.length) throw new Error(`Wellenform fehlt: ${[...new Set(fehlt)].join(', ')}`);
+    const t1 = GX.TABELLE[e.out1.welle.typ] || GX.TABELLE.User_Defined_1, t2 = GX.TABELLE_OUT2;
+    const syncen = e.out2Modus.art === 'gleich';
+    const amp = [e.out1, e.out2].map(o => GX.begrenzt(o.amp, o.offset));
+    const ampText = (o, a) => `${+a.toFixed(2)} V${a < o.amp ? ` (Preset ${o.amp} V, wegen Offset ${o.offset} % begrenzt)` : ''}`;
+    const welleText = (w) => `${w.datei}${w.invertiert ? ' gespiegelt' : ''}${w.typ === 'Square' && e.duty !== 50 ? ` Duty ${e.duty} %` : ''}`;
+    return [
+      ['Ausgänge aus', GX.ausgaenge(0, 0)],
+      ['Frequenz vorbereiten (w13)', GX.neueFrequenz],
+      ...(anzeige ? [[`Anzeige «${anzeige}»`, GX.name(anzeige)]] : []),
+      [`Wellenform Out1 ${welleText(e.out1.welle)} → Tabelle ${t1}`, GX.tabelle(t1, gxWerte(e.out1.welle, wellen, e.duty)), 5000],
+      [`Wellenform Out2 ${welleText(e.out2.welle)} → Tabelle ${t2}`, GX.tabelle(t2, gxWerte(e.out2.welle, wellen, e.duty)), 5000],
+      [`Out1 auf Tabelle ${t1}`, GX.welle(0, t1)],
+      [`Out2 auf Tabelle ${t2}`, GX.welle(1, t2)],
+      [`Kanal-Sync ${syncen ? 'ein' : 'aus'}`, GX.sync(syncen)],
+      ['Gate Out1 aus', GX.gateAus(0)], ['Gate Out2 aus', GX.gateAus(1)],
+      [`Amplitude Out1 ${ampText(e.out1, amp[0])}`, GX.amplitude(0, amp[0])],
+      [`Amplitude Out2 ${ampText(e.out2, amp[1])}`, GX.amplitude(1, amp[1])],
+      [`Offset Out1 ${e.out1.offset} %`, GX.offset(0, e.out1.offset)],
+      [`Offset Out2 ${e.out2.offset} %`, GX.offset(1, e.out2.offset)],
+    ];
+  }
+
+  /**
+   * Frequenzbefehle GX: neuer Schritt -> zuerst «:w13=0,» (macht Spooky2 vor jeder neuen Frequenz), Wobble/Sweep nur «:w24».
+   * Mit Kanal-Sync folgt Out2 von selbst (Spooky2 schickt dann nur :w24). Nur Änderungen werden gesendet.
+   */
+  function gxFrequenzBefehle(f1, f2, zustand, neu, sync) {
+    const b = [];
+    const w1 = GX.frequenz(0, f1), w2 = sync ? null : GX.frequenz(1, f2);
+    if (neu && (zustand.wert[0] !== w1 || (w2 && zustand.wert[1] !== w2))) b.push(['Frequenz vorbereiten (w13)', GX.neueFrequenz]);
+    if (zustand.wert[0] !== w1) { b.push([`Frequenz Out1 ${+f1.toFixed(6)} Hz`, w1]); zustand.wert[0] = w1; }
+    if (w2 && zustand.wert[1] !== w2) { b.push([`Frequenz Out2 ${+f2.toFixed(6)} Hz`, w2]); zustand.wert[1] = w2; }
+    return b;
+  }
+
+  /** Ausgänge GX passend zum Schritt (Pause = aus), je Kanal einzeln wie Spooky2. */
+  function gxAusgangBefehle(ein, zustand) {
+    const b = [];
+    for (const k of [0, 1]) if (zustand.aus[k] === ein) { b.push([`Ausgang ${k + 1} ${ein ? 'ein' : 'aus'}`, GX.ausgang(k, ein)]); zustand.aus[k] = !ein; }
+    return b;
+  }
 
   /** Wellenform-Namen vergleichen: Spooky2 schreibt mal «_», mal Leerzeichen (UDB_Square = «UDB Square.csv»). */
   const wellenSchluessel = (name) => String(name).toLowerCase().replace(/[_\s]+/g, ' ').trim();
@@ -569,7 +668,7 @@
   const Kern = {
     STANDARD_DWELL, lesePresets, baueKatalog, loeseBasis, einstellungen, leseFrequenzzeile, programmeAusPreset,
     inBereich, erstellePlan, frequenzenBei, taktBei, wobbleAus, wobbleFaktor, Befehl, welleZuWerten, leseWellenCsv, findeWelle, einrichtung,
-    frequenzBefehle, ausgangBefehle, neuerZustand, GX,
+    frequenzBefehle, ausgangBefehle, neuerZustand, GX, gxEinrichtung, gxFrequenzBefehle, gxAusgangBefehle, gxWarnungen, gxWerte,
     lesePresetAngabe, finderDaten, finderKatalog, deuteListenZeile, sauber,
     kontrolleEintraege, kontrolleZeile, leseKontrolle, kontrolleHeute, datumText,
   };

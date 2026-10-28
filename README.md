@@ -54,6 +54,13 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.6.5 (Brücke bleibt 1.2.1) – GX Pro läuft mit RADIX
+- GeneratorX Pro (1+2, 23+24) startet jetzt Programme wie die XM. Befehle aus zwei USB-Mitschnitten von Spooky2 (28.10.2026): Wellentabelle Out1 (:a11–:a21 nach Wellenform, z. B. Inverted Sawtooth = 14), Out2 Tabelle 25 (gespiegelt), Sync :w14, Gate aus :w12, Amplitude :w28/:w29 (V × 100), Offset :w32/:w33 (120 + %), vor jeder neuen Frequenz :w13=0, Frequenz :w24/:w25 (gleiche Zahlen wie Spooky2), Ausgänge :w11 je Kanal
+- Amplitude wird wie bei Spooky2 begrenzt, damit Amplitude + Offset höchstens 20 V ergibt (Offset ±100 % → höchstens 10 V)
+- **Freischaltung:** Nach Strom aus/ein am GX muss Spooky2 ihn einmal freischalten (starten, warten bis der GX da ist, schliessen). Sonst antwortet der GX mit «:err» – RADIX meldet das («GX Pro gesperrt») und startet nicht
+- RADIX öffnet den GX-Anschluss erst bei Start oder Testen und gibt ihn nach dem Stopp wieder frei. Doppelklick im Kontrollblatt geht jetzt auch für GX-Nummern. «Alle testen» testet auch die GX (Display zeigt die Nummer)
+- Noch nicht auf dem GX: Phase, Out2 mit Faktor/Konstante (Start gesperrt mit Meldung); WCM, Spektrum, F2, Gate wie beim XM
+
 ## Stand Version 0.6.4 (Brücke bleibt 1.2.1)
 - **GX-Test:** «Testen» auf einer GX-Pro-Karte (1, 2, 23, 24) öffnet den Anschluss mit 115200 Baud, fragt die Firmware (`:n00=$`), schaltet die Ausgänge aus (`:w11=0,0,`) und schickt die Kartennummer als Frequenz auf Out1 und Out2 (`:w24=…,` / `:w25=…,`, GX-Zahlenform). Alles mit Antwort im Protokoll. Darunter ein Feld für eigene Zeilen (Vorgaben aus dem Chat). «Test beenden» schaltet aus und gibt den Anschluss wieder frei. Spooky2 muss dafür aus sein
 - «Alle testen» lässt die GX weiterhin in Ruhe; Programme starten auf GX noch nicht
