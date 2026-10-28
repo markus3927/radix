@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.6.5';
+const VERSION = '0.6.6';
 const $ = (s, el = document) => el.querySelector(s);
 const K = window.Kern;
 const SPEICHER = 'radix-generatoren-v2';   // { zuordnung: [Nummer je Anschluss], gen: { Nummer: Einstellungen } }
@@ -196,9 +196,15 @@ const zeigeRoh = (t, max = 40) => String(t).slice(0, max).replace(/[\x00-\x1f\x7
  *  und danach wieder freigegeben, damit Spooky2 ihn betreiben kann. */
 const GX_GESPERRT = 'GX Pro gesperrt (antwortet «:err»): Nach Strom aus/ein muss Spooky2 ihn einmal freischalten. Spooky2 starten, warten bis der GX dort erscheint, Spooky2 schliessen – dann hier nochmals Start oder Testen.';
 const istGX = (port) => { const i = port.getInfo(); return i.usbVendorId === 0x1a86 && i.usbProductId === 0x55d2; };
+// 0.6.6: Takt wie Spooky2 (Mitschnitt 28.10.2026). Der GX bestätigt eine Wellentabelle (:a…) sofort mit «:ok», ist danach aber
+// kurz taub: am Gerät ging der Befehl direkt nach der Tabelle verloren (17:41, «Out1 auf Tabelle 14: keine Antwort»).
+// Spooky2 wartet ~100 ms nach jedem Befehl und ~200 ms nach jeder Tabelle. Bleibt eine Antwort trotzdem aus, wird der Befehl
+// einmal wiederholt (alle GX-Befehle setzen nur Werte, doppelt senden schadet nicht).
+const GX_ABSTAND = 100, GX_ABSTAND_TABELLE = 300, GX_WIEDERHOLEN_NACH = 300;
+const ABGEBROCHEN = 'abgebrochen (gestoppt)';
 
 class Leitung {
-  constructor(port) { this.port = port; this.rx = ''; this.kette = Promise.resolve(); this.offen = false; this.baud = BAUDRATEN[0]; }
+  constructor(port) { this.port = port; this.rx = ''; this.kette = Promise.resolve(); this.offen = false; this.baud = BAUDRATEN[0]; this.gx = false; this.frei = 0; this.melde = null; }
   /** Anschluss öffnen (mit dieser Baudrate). Hängt ein alter Zustand fest, wird zuerst sauber geschlossen. */
   async oeffne(baud = this.baud) {
     if (this.offen && baud === this.baud) return;
@@ -218,27 +224,43 @@ class Leitung {
     catch (e) { /* Gerät getrennt */ }
     finally { try { reader.releaseLock(); } catch (e) {} if (this.reader === reader) this.offen = false; }
   }
-  /** Befehl senden und auf «ok» warten; Befehle laufen streng nacheinander. */
+  /** Befehl senden und auf «ok» warten; Befehle laufen streng nacheinander. GX: Abstand wie Spooky2, einmal wiederholen. */
   sende(befehl, timeout = 1500) {
     const auftrag = this.kette.then(async () => {
       if (!this.offen && this.wiederOeffnen) { try { await this.wiederOeffnen(); } catch (e) { /* unten gemeldet */ } }
       if (!this.offen) throw new Error('Generator nicht verbunden');
-      this.rx = '';
-      await this.schreibe(befehl);
-      const start = Date.now();
-      let okSeit = null;
-      for (;;) {
-        const i = this.rx.indexOf('\n');
-        if (i >= 0) { const z = this.rx.slice(0, i).trim(); this.rx = this.rx.slice(i + 1); if (!/^:?ok/i.test(z)) throw new Error(/^:err/i.test(z) ? 'GX antwortet «:err»' : `falsche Antwort «${zeigeRoh(z)}»`); return z; }
-        if (/^\s*:?ok/i.test(this.rx)) {                       // «ok» ohne Zeilenende (andere Firmware): kurz warten, dann gelten lassen
-          if (okSeit === null) okSeit = Date.now(); else if (Date.now() - okSeit > 60) { this.rx = ''; return 'ok'; }
+      const versuche = this.gx ? 2 : 1;
+      for (let v = 1; ; v++) {
+        if (this.gx) { const w = this.frei - Date.now(); if (w > 0) await new Promise(r => setTimeout(r, w)); }
+        try {
+          const z = await this.einmal(befehl, timeout);
+          if (this.gx) this.frei = Date.now() + (/^:a\d/.test(befehl) ? GX_ABSTAND_TABELLE : GX_ABSTAND);
+          return z;
+        } catch (e) {
+          if (v >= versuche || e.message !== 'keine Antwort') throw e;
+          if (this.melde) this.melde(`GX: keine Antwort auf «${zeigeRoh(befehl.trim(), 30)}» – nochmals gesendet`);
+          this.frei = Date.now() + GX_WIEDERHOLEN_NACH;
         }
-        if (Date.now() - start > timeout) throw new Error(this.rx ? `unverständliche Antwort «${zeigeRoh(this.rx)}»` : 'keine Antwort');
-        await new Promise(r => setTimeout(r, 5));
       }
     });
     this.kette = auftrag.catch(() => {});
     return auftrag;
+  }
+  /** Ein Versuch: schreiben, auf «ok» warten. */
+  async einmal(befehl, timeout) {
+    this.rx = '';
+    await this.schreibe(befehl);
+    const start = Date.now();
+    let okSeit = null;
+    for (;;) {
+      const i = this.rx.indexOf('\n');
+      if (i >= 0) { const z = this.rx.slice(0, i).trim(); this.rx = this.rx.slice(i + 1); if (!/^:?ok/i.test(z)) throw new Error(/^:err/i.test(z) ? 'GX antwortet «:err»' : `falsche Antwort «${zeigeRoh(z)}»`); return z; }
+      if (/^\s*:?ok/i.test(this.rx)) {                       // «ok» ohne Zeilenende (andere Firmware): kurz warten, dann gelten lassen
+        if (okSeit === null) okSeit = Date.now(); else if (Date.now() - okSeit > 60) { this.rx = ''; return 'ok'; }
+      }
+      if (Date.now() - start > timeout) throw new Error(this.rx ? `unverständliche Antwort «${zeigeRoh(this.rx)}»` : 'keine Antwort');
+      await new Promise(r => setTimeout(r, 5));
+    }
   }
   /** GX-Test: Zeile senden (wie getippt) und alles sammeln, was in «warte» ms zurückkommt. Keine Erwartung an die Antwort. */
   roh(text, warte = 700) {
@@ -547,6 +569,7 @@ class Generator {
       this.zeigeVerbindung('fehler', chip); this.log(text); if (!this.lauf) this.setzeStatus(text, 'fehler');
       return false;
     };
+    L.gx = true; L.frei = 0; L.melde = (t) => this.log(t);
     try { await L.oeffne(G.BAUD); } catch (e) { return fehler(`GX Pro: Anschluss lässt sich nicht öffnen (${e.message}). Spooky2 ganz geschlossen?`, 'belegt'); }
     try { await L.sende(G.ausgaenge(0, 0), 1500); }
     catch (e) {
@@ -987,8 +1010,12 @@ class Generator {
   /** Ausgänge aus (XM: w61/w62, GX: je Kanal aus und Amplitude 0). */
   ausBefehle() { return this.gx ? K.GX.aus() : [['Ausgang 1 aus', K.Befehl.ausgang(0, false)], ['Ausgang 2 aus', K.Befehl.ausgang(1, false)]]; }
 
+  /** Befehle senden. Gehören sie zu einem Lauf, der inzwischen gestoppt wurde, wird der Rest nicht mehr gesendet (0.6.6):
+   *  sonst kamen z. B. «Ausgang ein» nach den Stopp-Befehlen an. */
   async sende(liste) {
+    const lauf = this.lauf;
     for (const [text, befehl, timeout] of liste) {
+      if (lauf && this.lauf !== lauf) throw new Error(ABGEBROCHEN);
       try { await this.leitung.sende(befehl, timeout); if (!this.leise) this.log(`${text} ✓`); }
       catch (e) { this.log(`${text}: ${e.message}`, 'fehler'); throw e; }
     }
@@ -1025,7 +1052,7 @@ class Generator {
     this.log('Test beendet');
   }
 
-  // ---------------------------------------------------------------- GeneratorX Pro: Test (0.6.4)
+  // ---------------------------------------------------------------- GeneratorX Pro: Test (0.6.4, Takt 0.6.6)
   /** Eine Zeile an den GX schicken, Befehl und Antwort ins Protokoll. Rückgabe: Antwort (Text, evtl. leer). */
   async gxSende(text, warte = 700) {
     const zeile = /\r?\n$/.test(text) ? text : text + '\r\n';
@@ -1139,6 +1166,7 @@ class Generator {
       l.letzterTick = performance.now();        // Einrichtzeit zählt nicht zur Programmzeit
       await this.spieleSchritt(true);
     } catch (e) {
+      if (this.lauf !== l) return;                                // inzwischen gestoppt: kein Fehler
       this.verbunden = false; this.zeigeVerbindung('fehler', this.gx && this.gxGrund === GX_GESPERRT ? 'gesperrt' : 'keine Antwort');
       this.stoppe(this.gx && this.gxGrund && e.message === this.gxGrund ? e.message : 'Fehler beim Einrichten: ' + e.message, true);
     } finally { if (this.lauf) this.lauf.beschaeftigt = false; }
@@ -1256,6 +1284,7 @@ class Generator {
       else if (K.taktBei(s, l.tImSchritt) !== l.letzterTakt) await this.spieleSchritt(false);
       this.zeigeFortschritt();
     } catch (e) {
+      if (this.lauf !== l) return;                                // inzwischen gestoppt: kein Fehler
       this.verbunden = false; this.zeigeVerbindung('fehler', 'keine Antwort');
       this.stoppe('Verbindung verloren: ' + e.message, true);
     } finally { if (this.lauf) this.lauf.beschaeftigt = false; }

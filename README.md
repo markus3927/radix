@@ -54,6 +54,12 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.6.6 (Brücke bleibt 1.2.1) – GX Pro: Takt wie Spooky2
+- **Fehler behoben (am Gerät 28.10., 17:41):** Erster GX-Lauf brach beim Einrichten ab («Out1 auf Tabelle 14: keine Antwort»). Der GX bestätigt eine Wellentabelle sofort, ist danach aber kurz taub – der nächste Befehl ging verloren. RADIX wartet jetzt wie Spooky2: 100 ms nach jedem GX-Befehl, 300 ms nach jeder Wellentabelle
+- Kommt trotzdem keine Antwort, schickt RADIX den Befehl einmal nochmals (steht im Protokoll: «keine Antwort … nochmals gesendet»). Erst wenn auch das ausbleibt, Abbruch mit Meldung
+- **Stopp mitten in einem Schritt** (XM und GX): Befehle des gestoppten Laufs werden nicht mehr nachgeschickt. Vorher konnte z. B. «Ausgang ein» nach den Stopp-Befehlen ankommen
+- XM sonst unverändert
+
 ## Stand Version 0.6.5 (Brücke bleibt 1.2.1) – GX Pro läuft mit RADIX
 - GeneratorX Pro (1+2, 23+24) startet jetzt Programme wie die XM. Befehle aus zwei USB-Mitschnitten von Spooky2 (28.10.2026): Wellentabelle Out1 (:a11–:a21 nach Wellenform, z. B. Inverted Sawtooth = 14), Out2 Tabelle 25 (gespiegelt), Sync :w14, Gate aus :w12, Amplitude :w28/:w29 (V × 100), Offset :w32/:w33 (120 + %), vor jeder neuen Frequenz :w13=0, Frequenz :w24/:w25 (gleiche Zahlen wie Spooky2), Ausgänge :w11 je Kanal
 - Amplitude wird wie bei Spooky2 begrenzt, damit Amplitude + Offset höchstens 20 V ergibt (Offset ±100 % → höchstens 10 V)
