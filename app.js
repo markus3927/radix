@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.4.10';
+const VERSION = '0.4.11';
 const $ = (s, el = document) => el.querySelector(s);
 const K = window.Kern;
 const SPEICHER = 'radix-generatoren-v2';   // { zuordnung: [Nummer je Anschluss], gen: { Nummer: Einstellungen } }
@@ -191,6 +191,10 @@ function beobachteQuellen() {
 const BAUDRATEN = [57600, 115200, 38400, 19200, 9600];          // 57600 = Spooky2 XM (geprüft); übrige nur als Suche
 const zeigeRoh = (t) => String(t).slice(0, 40).replace(/[\x00-\x1f\x7f-￿]/g, c => c === '\r' ? '\\r' : c === '\n' ? '\\n' : `\\x${c.charCodeAt(0).toString(16).padStart(2, '0')}`);
 
+/** Spooky2 GeneratorX Pro: Doppel-Chip CH342 (USB 1a86:55d2), 115200 Baud, eigenes Protokoll («:w24=…,»).
+ *  Von RADIX noch nicht unterstützt – der Anschluss wird nie geöffnet, damit Spooky2 ihn gleichzeitig betreiben kann. */
+const istGX = (port) => { const i = port.getInfo(); return i.usbVendorId === 0x1a86 && i.usbProductId === 0x55d2; };
+
 class Leitung {
   constructor(port) { this.port = port; this.rx = ''; this.kette = Promise.resolve(); this.offen = false; this.baud = BAUDRATEN[0]; }
   /** Anschluss öffnen (mit dieser Baudrate). Hängt ein alter Zustand fest, wird zuerst sauber geschlossen. */
@@ -373,7 +377,18 @@ class Generator {
    * Antwortet er nicht: Anschluss schliessen und neu öffnen, dann andere Baudraten versuchen (falls ein Gerätetyp anders spricht).
    * Rückgabe true/false; bei Fehler steht der Grund im Status der Karte.
    */
+  /** GeneratorX Pro (CH342)? Dann bleibt der Anschluss für Spooky2 frei. */
+  get gx() { return istGX(this.leitung.port); }
+  get chipTyp() { const i = this.leitung.port.getInfo(); return this.gx ? 'GX Pro' : i.usbVendorId === 0x1a86 ? 'CH340' : i.usbVendorId === 0x10c4 ? 'CP210x' : 'USB'; }
+  /** GX-Karte: Hinweis statt Verbindung, Anschluss nicht öffnen. */
+  zeigeGX() {
+    const c = $('.chip', this.karte);
+    c.textContent = 'GX Pro · Spooky2'; c.className = 'chip gx';
+    c.title = 'Spooky2 GeneratorX Pro (CH342). RADIX steuert ihn noch nicht und lässt den Anschluss frei – er läuft mit Spooky2.';
+    if (!this.lauf) this.setzeStatus('GeneratorX Pro – läuft vorerst mit Spooky2. RADIX lässt diesen Anschluss frei.', 'gx');
+  }
   verbinde(leise = false) {
+    if (this.gx) { this.verbunden = false; this.zeigeGX(); return Promise.resolve(false); }
     if (this.verbindet) return this.verbindet;
     this.verbindet = (async () => {
       const L = this.leitung, vorher = this.verbunden;
@@ -467,7 +482,6 @@ class Generator {
     const k = document.getElementById('vorlage-generator').content.firstElementChild.cloneNode(true);
     this.karte = k;
     const info = this.leitung.port.getInfo();
-    this.chipTyp = info.usbVendorId === 0x1a86 ? 'CH340' : info.usbVendorId === 0x10c4 ? 'CP210x' : 'USB';
     $('.chip', k).textContent = this.chipTyp;
     const nr = $('.nr', k);
     nr.onchange = () => this.wechsleNummer(nr.value.trim());
@@ -762,7 +776,7 @@ class Generator {
     z.textContent = !daten.geladen ? 'Zuerst den Spooky2-Ordner wählen.' : n ? `${n} Programm${n === 1 ? '' : 'e'} · ${anzeigen.einst.length} Preset${anzeigen.einst.length === 1 ? '' : 's'} · ${fmtZeit(anzeigen.plan.gesamtSek)} pro Durchlauf` + (d ? ` · ${d} × = ${fmtZeit(anzeigen.plan.gesamtSek * d)}` : ' · endlos') + (nm ? ` · ${nm} Zeitmarke${nm === 1 ? '' : 'n'} (Wartezeit nicht eingerechnet)` : '') : '';
     if (this.lauf) { this.markiereAktiv(); return this.lauf; }
     this.vorbereitet = anzeigen.blockiert ? null : anzeigen;
-    $('.btn-start', this.karte).disabled = !this.vorbereitet;
+    $('.btn-start', this.karte).disabled = !this.vorbereitet || this.gx;
     $('.btn-weiter', this.karte).disabled = !this.vorbereitet;
     return this.vorbereitet;
   }
@@ -820,6 +834,7 @@ class Generator {
   // ---------------------------------------------------------------- Ablauf
   async starte(stand = null, sofort = false) {
     if (this.lauf) return;
+    if (this.gx) { this.zeigeGX(); return; }
     if (this.imTest) this.setzeTest(false);
     const v = this.pruefe();
     if (!v) return;
@@ -1036,6 +1051,7 @@ function zustand(g) {
     const e = l.einst[l.aktivEi], name = e ? e.e.name : '';
     return { art: /killing/i.test(name) ? 'k' : 'h', text: `läuft · ${name}` };
   }
+  if (g.gx) return { art: 'x', text: 'GeneratorX Pro – läuft mit Spooky2' };
   if (st.classList.contains('fehler')) return { art: 'f', text: st.textContent };
   return { art: '', text: st.textContent || 'steht' };
 }
@@ -1055,7 +1071,7 @@ function aktualisiereLeiste() {
   leistenStand = stand;
   nav.hidden = liste.length < 1;
   nav.innerHTML = liste.map(x => `<button class="lg ${x.art}${x.nr === aktiv ? ' aktiv' : ''}${x.nr === gz ? ' gezeigt' : ''}" data-nr="${x.nr}" title="${esc(x.titel)}">${x.nr}</button>`).join('') +
-    '<span class="legende">rot Killing · blau Healing · gelb stellt um oder wartet · weiss steht · rot umrandet keine Verbindung</span>';
+    '<span class="legende">rot Killing · blau Healing · gelb stellt um oder wartet · weiss steht · rot umrandet keine Verbindung · grau gestrichelt GX Pro (Spooky2)</span>';
   setzeKopfHoehe();
 }
 
@@ -1127,6 +1143,7 @@ async function sendeCodes() {
     const code = CODE_AB + i;
     zuCodes.set(code, g);
     if (g.imTest) g.setzeTest(false);
+    if (g.gx) return;
     try {
       if (!g.verbunden && !(await g.verbinde(true))) return;
       await g.sende([['Ausgang 1 aus', K.Befehl.ausgang(0, false)], ['Ausgang 2 aus', K.Befehl.ausgang(1, false)], ...K.frequenzBefehle(code, code, K.neuerZustand())]);
@@ -1135,8 +1152,9 @@ async function sendeCodes() {
       ok++;
     } catch (e) { /* bleibt ohne Code */ }
   }));
+  const gx = generatoren.filter(g => g.gx).length, ohne = generatoren.length - ok - gx;
   meldung.className = 'zu-meldung ok';
-  meldung.textContent = `${ok} von ${generatoren.length} Generatoren zeigen einen Code (${CODE_AB} bis ${CODE_AB + generatoren.length - 1}). ${generatoren.length - ok ? `${generatoren.length - ok} ohne Verbindung zeigen keinen Code.` : ''}`;
+  meldung.textContent = `${ok} von ${generatoren.length} Generatoren zeigen einen Code (${CODE_AB} bis ${CODE_AB + generatoren.length - 1}).${gx ? ` ${gx} GX-Pro-Anschlüsse (Spooky2) zeigen keinen Code.` : ''}${ohne ? ` ${ohne} ohne Verbindung zeigen keinen Code.` : ''}`;
 }
 
 async function oeffneZuordnen() {
@@ -1221,7 +1239,7 @@ function starteTakt() {
     for (const g of generatoren) g.tick();
     if (Date.now() - letzterVersuch > 15000) {
       letzterVersuch = Date.now();
-      for (const g of generatoren) if (!g.lauf && !g.imTest && !g.verbunden && !g.verbindet) g.verbinde(true);
+      for (const g of generatoren) if (!g.gx && !g.lauf && !g.imTest && !g.verbunden && !g.verbindet) g.verbinde(true);
     }
     if (Date.now() - letzteLeiste > 500) { letzteLeiste = Date.now(); aktualisiereLeiste(); pruefeWach(); }
     if (Date.now() - letztesSpeichern > 5000) { letztesSpeichern = Date.now(); if (generatoren.some(g => g.lauf)) speichereAlle(); }

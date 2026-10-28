@@ -54,6 +54,10 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.4.11
+- **Spooky2 GeneratorX Pro** (CH342, USB 1a86:55d2 – bei Markus Anschlüsse 1+2 und 23+24, je ein GX Pro mit zwei Platinen) wird erkannt: RADIX öffnet den Anschluss nie (keine Prüfung, kein Test, kein Start, kein Code beim Zuordnen), damit Spooky2 ihn gleichzeitig betreiben kann. Karte: Chip «GX Pro · Spooky2», Leiste grau gestrichelt
+- Protokoll GX Pro (für später): 115200 Baud, Befehle `:w24=<f>,` / `:w25=<f>,` (Frequenz, Kodierung m·10+e in 10⁻⁸ Hz), `:w11=a,b,` (Ausgänge), Antwort `:ok`; Quelle github.com/pahor167/opengx-pro docs/spec/protocols.md. Gerät meldet r01=G2
+
 ## Stand Version 0.4.10
 - Generator aus- und wieder eingesteckt (oder Strom aus/ein): Chrome meldet ihn als neuen Anschluss. Er übernimmt jetzt die getrennte Karte (gleiche Nummer, gleiche Programmliste) statt einer zusätzlichen Karte 25. Waren mehrere getrennt: kleinste Nummer, Hinweis «mit Zuordnen prüfen»
 
