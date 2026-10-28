@@ -54,6 +54,18 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.4.7
+- **Verbindung wird geprüft:** beim Start, bei «Testen»/«Alle testen» und vor jedem Start bekommt jeder Generator «Ausgänge aus» und muss mit «ok» antworten. Chip neben der Nummer: ✓ verbunden, ✗ keine Antwort / belegt / getrennt
+- Antwortet er nicht: Anschluss schliessen, neu öffnen, dann andere Baudraten (115200, 38400, 19200, 9600) versuchen. Gefundene Baudrate steht im Chip. «ok» ohne Zeilenende wird angenommen
+- Generatoren ohne Verbindung werden alle 15 s von selbst neu versucht (z. B. nachdem Spooky2 geschlossen oder der Generator eingeschaltet wurde); USB ab- und wieder angesteckt wird erkannt
+- Klare Meldungen: «antwortet nicht – Netzteil? USB-Kabel/Hub?» bzw. «Anschluss belegt – Spooky2 ganz geschlossen?»; Leiste: rot umrandet = keine Verbindung
+- **Einzelansicht** (Standard): nur der gewählte Generator, ganze Breite, zwei Spalten. Wahl über die Leiste oder Blattklick im Kontrollblatt; «Alle zeigen» schaltet um; Wahl wird gemerkt
+- **Kopf bleibt stehen** beim Scrollen (Logo klein, Knöpfe und Leiste immer sichtbar)
+- Enthält alles aus 0.4.6 (Morgen aus Kontrollblatt, PC bleibt wach, Rückfragen)
+
+## Stand Version 0.4.6
+- «Morgen aus Kontrollblatt» (braucht die Startzeit in «Start um»), PC bleibt wach solange ein Generator läuft oder wartet, Rückfragen beim Überspringen des letzten Programms und bei Startzeit in der Vergangenheit
+
 ## Stand Version 0.4.5
 - Zeitmarken, Nummer mit ◀ ▶, Test beenden
 

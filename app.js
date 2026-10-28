@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.4.5';
+const VERSION = '0.4.7';
 const $ = (s, el = document) => el.querySelector(s);
 const K = window.Kern;
 const SPEICHER = 'radix-generatoren-v2';   // { zuordnung: [Nummer je Anschluss], gen: { Nummer: Einstellungen } }
@@ -188,21 +188,28 @@ function beobachteQuellen() {
 }
 
 // ------------------------------------------------------------------ Serielle Verbindung
+const BAUDRATEN = [57600, 115200, 38400, 19200, 9600];          // 57600 = Spooky2 XM (geprüft); übrige nur als Suche
+const zeigeRoh = (t) => String(t).slice(0, 40).replace(/[\x00-\x1f\x7f-￿]/g, c => c === '\r' ? '\\r' : c === '\n' ? '\\n' : `\\x${c.charCodeAt(0).toString(16).padStart(2, '0')}`);
+
 class Leitung {
-  constructor(port) { this.port = port; this.rx = ''; this.kette = Promise.resolve(); this.offen = false; }
-  async oeffne() {
-    if (this.offen) return;
-    await this.port.open({ baudRate: 57600, dataBits: 8, stopBits: 1, parity: 'none' });
+  constructor(port) { this.port = port; this.rx = ''; this.kette = Promise.resolve(); this.offen = false; this.baud = BAUDRATEN[0]; }
+  /** Anschluss öffnen (mit dieser Baudrate). Hängt ein alter Zustand fest, wird zuerst sauber geschlossen. */
+  async oeffne(baud = this.baud) {
+    if (this.offen && baud === this.baud) return;
+    if (this.offen || this.port.readable || this.port.writable) await this.schliesse();
+    await this.port.open({ baudRate: baud, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' });
+    this.baud = baud;
     this.writer = this.port.writable.getWriter();
+    this.rx = '';
     this.offen = true;
     this.lese();
   }
   async lese() {
     const dec = new TextDecoder();
-    this.reader = this.port.readable.getReader();
-    try { for (;;) { const { value, done } = await this.reader.read(); if (done) break; this.rx += dec.decode(value, { stream: true }); } }
+    const reader = this.reader = this.port.readable.getReader();
+    try { for (;;) { const { value, done } = await reader.read(); if (done) break; this.rx += dec.decode(value, { stream: true }); } }
     catch (e) { /* Gerät getrennt */ }
-    finally { try { this.reader.releaseLock(); } catch (e) {} this.offen = false; }
+    finally { try { reader.releaseLock(); } catch (e) {} if (this.reader === reader) this.offen = false; }
   }
   /** Befehl senden und auf «ok» warten; Befehle laufen streng nacheinander. */
   sende(befehl, timeout = 1500) {
@@ -211,10 +218,14 @@ class Leitung {
       this.rx = '';
       await this.writer.write(new TextEncoder().encode(befehl));
       const start = Date.now();
+      let okSeit = null;
       for (;;) {
         const i = this.rx.indexOf('\n');
-        if (i >= 0) { const z = this.rx.slice(0, i).trim(); this.rx = this.rx.slice(i + 1); if (!/^ok/i.test(z)) throw new Error(`Antwort «${z}»`); return z; }
-        if (Date.now() - start > timeout) throw new Error('keine Antwort');
+        if (i >= 0) { const z = this.rx.slice(0, i).trim(); this.rx = this.rx.slice(i + 1); if (!/^ok/i.test(z)) throw new Error(`falsche Antwort «${zeigeRoh(z)}»`); return z; }
+        if (/^\s*ok/i.test(this.rx)) {                       // «ok» ohne Zeilenende (andere Firmware): kurz warten, dann gelten lassen
+          if (okSeit === null) okSeit = Date.now(); else if (Date.now() - okSeit > 60) { this.rx = ''; return 'ok'; }
+        }
+        if (Date.now() - start > timeout) throw new Error(this.rx ? `unverständliche Antwort «${zeigeRoh(this.rx)}»` : 'keine Antwort');
         await new Promise(r => setTimeout(r, 5));
       }
     });
@@ -222,8 +233,10 @@ class Leitung {
     return auftrag;
   }
   async schliesse() {
-    try { await this.reader?.cancel(); } catch (e) {}
+    const r = this.reader; this.reader = null;
+    try { await r?.cancel(); } catch (e) {}
     try { this.writer?.releaseLock(); } catch (e) {}
+    this.writer = null;
     try { await this.port.close(); } catch (e) {}
     this.offen = false;
   }
@@ -339,7 +352,58 @@ class Generator {
     this.ladeEinst(String(nr));
     this.protokoll = [];
     this.neue = [];
+    this.verbunden = false;                                                 // Generator hat auf einen Befehl geantwortet
+    this.verbindet = null;                                                  // laufende Verbindungsprüfung (Promise)
     this.baueKarte();
+  }
+
+  /** Verbindungszustand im Chip neben dem Namen: ✓ verbunden, … prüft, ✗ keine Verbindung. */
+  zeigeVerbindung(art, text = '') {
+    const c = $('.chip', this.karte);
+    c.textContent = `${this.chipTyp} ${art === 'ok' ? '✓' : art === 'pruefe' ? '…' : '✗'}${text ? ' ' + text : ''}`;
+    c.className = 'chip ' + art;
+  }
+
+  /**
+   * Verbindung herstellen und prüfen: Anschluss öffnen, beide Ausgänge aus (harmlos, der Generator muss mit «ok» antworten).
+   * Antwortet er nicht: Anschluss schliessen und neu öffnen, dann andere Baudraten versuchen (falls ein Gerätetyp anders spricht).
+   * Rückgabe true/false; bei Fehler steht der Grund im Status der Karte.
+   */
+  verbinde(leise = false) {
+    if (this.verbindet) return this.verbindet;
+    this.verbindet = (async () => {
+      const L = this.leitung, vorher = this.verbunden;
+      this.zeigeVerbindung('pruefe', 'prüft');
+      const probe = async (baud, timeout) => {
+        await L.oeffne(baud);
+        await L.sende(K.Befehl.ausgang(0, false), timeout);
+        await L.sende(K.Befehl.ausgang(1, false), timeout);
+      };
+      let grund = '', belegt = false;
+      const versuche = [[L.baud, 1500, false], [L.baud, 1500, true], ...BAUDRATEN.filter(b => b !== L.baud).map(b => [b, 700, true])];
+      for (const [baud, timeout, neu] of versuche) {
+        try {
+          if (neu) { await L.schliesse(); await new Promise(r => setTimeout(r, 300)); }
+          try { await L.oeffne(baud); } catch (e) { belegt = true; grund = e.message || String(e); break; }   // Öffnen scheitert: Baudrate egal
+          await probe(baud, timeout);
+          this.verbunden = true;
+          this.zeigeVerbindung('ok', baud === BAUDRATEN[0] ? '' : `${baud} Baud`);
+          if (!vorher || baud !== BAUDRATEN[0]) this.log(`Verbunden${baud === BAUDRATEN[0] ? '' : ` mit ${baud} Baud (anders als Spooky2 XM)`}`);
+          if (!this.lauf && $('.status', this.karte).classList.contains('fehler')) this.setzeStatus('Verbunden – bereit');
+          return true;
+        } catch (e) { if (!grund) grund = e.message || String(e); }
+      }
+      try { await L.schliesse(); await L.oeffne(BAUDRATEN[0]); } catch (e) { /* bleibt zu */ }
+      this.verbunden = false;
+      this.zeigeVerbindung('fehler', belegt ? 'belegt' : 'keine Antwort');
+      const text = belegt
+        ? `Keine Verbindung: Anschluss belegt (${grund}). Spooky2 ganz geschlossen? Zweites RADIX-Fenster offen?`
+        : `Keine Verbindung: Generator ${grund === 'keine Antwort' ? 'antwortet nicht' : grund} (auch nach Neu-Öffnen und mit anderen Baudraten). Generator eingeschaltet (Netzteil)? USB-Kabel/Hub?`;
+      if (!leise || vorher || !$('.status', this.karte).classList.contains('fehler')) { if (!this.lauf) this.setzeStatus(text, 'fehler'); this.log(text); }
+      return false;
+    })();
+    this.verbindet.finally(() => { this.verbindet = null; });
+    return this.verbindet;
   }
   /** Einstellungen der Generator-Nummer laden (gespeichert unter dieser Nummer). */
   ladeEinst(nr) {
@@ -380,6 +444,7 @@ class Generator {
     if (anderer) { anderer.ladeEinst(alt); anderer.zeigeEinst(); anderer.log(`Nummer ${neu} → ${alt} (getauscht)`); anderer.setzeStatus(`Nummer getauscht: jetzt Generator ${alt} – mit «Testen» prüfen`, 'warnung'); }
     speichereAlle();
     this.setzeStatus(`Jetzt Generator ${neu}${anderer ? ` (getauscht mit ${alt})` : ''} – mit «Testen» prüfen`, 'warnung');
+    if (gezeigt === this || gezeigt === anderer) zeige(gezeigt);
     if (imTest[0]) this.teste();                       // im Test: Display zeigt gleich die neue Nummer
     if (imTest[1]) anderer.teste();
   }
@@ -398,7 +463,8 @@ class Generator {
     const k = document.getElementById('vorlage-generator').content.firstElementChild.cloneNode(true);
     this.karte = k;
     const info = this.leitung.port.getInfo();
-    $('.chip', k).textContent = info.usbVendorId === 0x1a86 ? 'CH340' : info.usbVendorId === 0x10c4 ? 'CP210x' : 'USB';
+    this.chipTyp = info.usbVendorId === 0x1a86 ? 'CH340' : info.usbVendorId === 0x10c4 ? 'CP210x' : 'USB';
+    $('.chip', k).textContent = this.chipTyp;
     const nr = $('.nr', k);
     nr.onchange = () => this.wechsleNummer(nr.value.trim());
     $('.nr-zurueck', k).onclick = () => { const n = parseInt(this.einst.nr, 10) || 1; if (n > 1) this.wechsleNummer(String(n - 1)); };
@@ -421,6 +487,7 @@ class Generator {
     $('.btn-naechstes-p', k).onclick = () => this.springe('programm');
     $('.btn-heute', k).onclick = () => this.uebernehmeHeute();
     $('.btn-leeren', k).onclick = () => this.leere();
+    $('.btn-morgen', k).onclick = () => this.uebernehmeMorgen();
     $('.btn-anhaengen', k).onclick = () => this.haengeNeueAn();
     const au = $('.auto-cb', k);
     au.onchange = () => { this.einst.auto = au.checked; this.uebernommen = null; speichereAlle(); this.aktualisiereKunde(); };
@@ -466,6 +533,7 @@ class Generator {
     const b = this.blatt();
     $('.kunde', this.karte).textContent = b && b.name ? b.name.trim() : '';
     $('.btn-heute', this.karte).disabled = !b || !!this.lauf;
+    $('.btn-morgen', this.karte).disabled = !b;
     // Programme des Kunden zum Antippen
     const menue = $('.menue', this.karte), liste = $('.menue-liste', this.karte);
     const eintraege = b ? K.kontrolleEintraege(b.programme) : [];
@@ -555,6 +623,26 @@ class Generator {
     $('.liste', this.karte).value = text;
     this.setzeListe(text);
     this.log(`Aus Kontrollblatt ${parseInt(this.einst.nr, 10)} übernommen: ${eintraege.length} Programme`);
+  }
+
+  /**
+   * Zeile von morgen aus dem Kontrollblatt anhängen, mit Zeitmarke davor (auch während dem Lauf). Die Uhrzeit kommt aus dem
+   * Feld «Start um» (zuerst eintragen); danach wird das Feld geleert, damit «Start» das Programm davor sofort startet.
+   */
+  uebernehmeMorgen() {
+    const b = this.blatt();
+    if (!b) return;
+    const morgen = new Date(); morgen.setDate(morgen.getDate() + 1);
+    const tag = K.datumText(morgen);
+    const um = this.einst.startUm;
+    if (!um) { this.melde('Zuerst unten bei «Start um» die Startzeit für morgen eintragen, dann «Morgen aus Kontrollblatt»', 'fehler'); $('.start-um', this.karte).focus(); return; }
+    const { eintraege, hinweis } = K.kontrolleHeute(b, morgen);
+    if (!eintraege.length) { this.melde(hinweis ? `Kontrollblatt morgen: ${hinweis}` : `Kontrollblatt: für morgen (${tag}) noch nichts eingetragen`, 'fehler'); return; }
+    const zeilen = [`um ${um}`, ...eintraege.map(x => K.kontrolleZeile(x, b, daten.finder))];
+    this.fuegeZeilenAn(zeilen);
+    this.einst.startUm = ''; $('.start-um', this.karte).value = ''; speichereAlle();   // Uhrzeit steckt jetzt in der Liste
+    this.log(`Morgen ${tag} aus Kontrollblatt ${parseInt(this.einst.nr, 10)}: ${eintraege.length} Programme ab ${um}`);
+    this.melde(`Morgen (${tag}): ${eintraege.length} Programm${eintraege.length === 1 ? '' : 'e'} ab ${um} angehängt${this.lauf ? '' : ' – jetzt Start drücken'}`, 'ok');
   }
 
   /**
@@ -680,7 +768,7 @@ class Generator {
   }
 
   sperre(laufend) {
-    for (const s of ['.nr', '.nr-zurueck', '.nr-weiter', '.preset', '.durchlaeufe', '.start-um', '.btn-testen', '.btn-heute']) $(s, this.karte).disabled = laufend;
+    for (const s of ['.nr', '.nr-zurueck', '.nr-weiter', '.preset', '.durchlaeufe', '.btn-testen', '.btn-heute']) $(s, this.karte).disabled = laufend;
     $('.btn-start', this.karte).disabled = laufend || !this.vorbereitet;
     $('.btn-stop', this.karte).disabled = !laufend && !this.imTest;
     $('.btn-naechste-f', this.karte).disabled = !laufend;
@@ -700,14 +788,14 @@ class Generator {
   async teste() {
     if (this.lauf) return;
     try {
-      await this.leitung.oeffne();
+      if (!(await this.verbinde())) return;
       const nr = parseInt(this.einst.nr, 10);
       const z = K.neuerZustand();
       await this.sende([['Ausgang 1 aus', K.Befehl.ausgang(0, false)], ['Ausgang 2 aus', K.Befehl.ausgang(1, false)], ...K.frequenzBefehle(nr, nr, z)]);
       this.setzeStatus(`Test: Display zeigt ${nr} Hz. Steht am Generator die Nummer ${nr}? Sonst mit ◀ ▶ die Nummer des Generators einstellen. Ende mit «Test beenden» oder Stopp.`, 'warnung');
       this.log(`Test: ${nr} Hz auf dem Display`);
       this.setzeTest(true);
-    } catch (e) { this.setzeStatus('Test fehlgeschlagen: ' + e.message + ' (Spooky2 geschlossen? Kabel?)', 'fehler'); }
+    } catch (e) { this.verbunden = false; this.zeigeVerbindung('fehler', 'keine Antwort'); this.setzeStatus('Test fehlgeschlagen: ' + e.message + ' – nochmals «Testen» (verbindet neu)', 'fehler'); }
   }
 
   /** Test-Zustand: Knopf heisst «Test beenden», Stopp ist aktiv. */
@@ -739,7 +827,10 @@ class Generator {
     else if (!stand && !sofort && this.einst.startUm) {
       const [h, m] = this.einst.startUm.split(':').map(Number);
       const d = new Date(); d.setHours(h, m, 0, 0);
-      if (d.getTime() <= Date.now()) d.setDate(d.getDate() + 1);
+      if (d.getTime() <= Date.now()) {
+        d.setDate(d.getDate() + 1);
+        if (!confirm(`Startzeit ${this.einst.startUm} ist heute schon vorbei.\n\nOK = erst morgen um ${this.einst.startUm} starten\nAbbrechen = nicht starten (Feld «Start um» leeren für sofort)`)) return;
+      }
       startUmMs = d.getTime();
     }
     const schritt = stand && stand.schritt < v.plan.schritte.length ? stand.schritt : 0;
@@ -767,7 +858,8 @@ class Generator {
       const ein = l.einst[ei], key = ein.key;
       this.zeigePreset(ein.e.name, true);
       this.setzeStatus(`Generator wird eingerichtet: ${ein.e.name || 'Preset'} …`);
-      await this.leitung.oeffne();
+      if (!this.verbunden || !this.leitung.offen) { if (!(await this.verbinde())) throw new Error('Generator antwortet nicht'); }
+      if (!this.lauf) return;
       await this.sende(K.einrichtung(ein.e, daten.wellen));
       if (!this.lauf) return;
       l.aktivEi = l.einst.findIndex(x => x.key === key);
@@ -779,6 +871,7 @@ class Generator {
       l.letzterTick = performance.now();        // Einrichtzeit zählt nicht zur Programmzeit
       await this.spieleSchritt(true);
     } catch (e) {
+      this.verbunden = false; this.zeigeVerbindung('fehler', 'keine Antwort');
       this.stoppe('Fehler beim Einrichten: ' + e.message, true);
     } finally { if (this.lauf) this.lauf.beschaeftigt = false; }
   }
@@ -809,6 +902,13 @@ class Generator {
     const l = this.lauf;
     if (!l) return;
     if (l.status === 'wartet') { this.melde('Wartet noch auf die Startzeit – nichts zu überspringen', 'fehler'); return; }
+    if (art === 'programm') {                                       // würde der Sprung den Generator stoppen? -> nachfragen
+      const s = l.plan.schritte, i = l.schritt;
+      let j = i;
+      while (j + 1 < s.length && s[j + 1].pi === s[i].pi) j++;
+      const letztes = !s[i].marke && j + 1 >= s.length && l.durchlaeufe && l.durchlauf >= l.durchlaeufe;
+      if (letztes && !confirm(`${l.items[s[i].pi].code === 'Zeile' ? l.items[s[i].pi].name : l.items[s[i].pi].code} ist das letzte Programm – Generator ${this.einst.nr} wird danach gestoppt. Trotzdem überspringen?`)) return;
+    }
     l.sprung = art;
   }
   /** Sprung ausführen: Zeit im Schritt ans Ende setzen, der normale Ablauf geht dann zum nächsten Schritt bzw. Programm. */
@@ -887,6 +987,7 @@ class Generator {
       else if (K.taktBei(s, l.tImSchritt) !== l.letzterTakt) await this.spieleSchritt(false);
       this.zeigeFortschritt();
     } catch (e) {
+      this.verbunden = false; this.zeigeVerbindung('fehler', 'keine Antwort');
       this.stoppe('Verbindung verloren: ' + e.message, true);
     } finally { if (this.lauf) this.lauf.beschaeftigt = false; }
   }
@@ -943,50 +1044,119 @@ function aktualisiereLeiste() {
     const z = zustand(g), kunde = $('.kunde', g.karte).textContent;
     return { nr: zahl(g), art: z.art, titel: `Generator ${g.einst.nr}${kunde ? ' · ' + kunde : ''} · ${z.text}` };
   });
-  const stand = JSON.stringify([liste, aktiv]);
+  const gz = gezeigt ? zahl(gezeigt) : null;
+  const stand = JSON.stringify([liste, aktiv, gz]);
   if (stand === leistenStand) return;
   leistenStand = stand;
   nav.hidden = liste.length < 1;
-  nav.innerHTML = liste.map(x => `<button class="lg ${x.art}${x.nr === aktiv ? ' aktiv' : ''}" data-nr="${x.nr}" title="${esc(x.titel)}">${x.nr}</button>`).join('') +
-    '<span class="legende">rot Killing · blau Healing · gelb stellt um oder wartet · weiss steht</span>';
+  nav.innerHTML = liste.map(x => `<button class="lg ${x.art}${x.nr === aktiv ? ' aktiv' : ''}${x.nr === gz ? ' gezeigt' : ''}" data-nr="${x.nr}" title="${esc(x.titel)}">${x.nr}</button>`).join('') +
+    '<span class="legende">rot Killing · blau Healing · gelb stellt um oder wartet · weiss steht · rot umrandet keine Verbindung</span>';
   setzeKopfHoehe();
 }
 
-/** Zur Karte des Generators mit dieser Nummer scrollen und sie kurz hervorheben. */
+// ------------------------------------------------------------------ Einzelansicht: nur der gewählte Generator, ganze Breite
+const ANSICHT = 'radix-ansicht';
+let ansicht = lade(ANSICHT, { einzel: true, nr: null });
+let gezeigt = null;
+/** Diesen Generator zeigen (in der Einzelansicht der einzige sichtbare). */
+function zeige(g, merken = true) {
+  if (!g) return;
+  gezeigt = g;
+  for (const x of generatoren) x.karte.classList.toggle('gezeigt', x === g);
+  if (merken) { ansicht.nr = zahl(g); speichere(ANSICHT, ansicht); }
+  aktualisiereLeiste();
+}
+/** Gemerkten Generator wieder zeigen; ist er (noch) nicht verbunden, vorläufig den mit der kleinsten Nummer, ohne die Wahl zu überschreiben. */
+function zeigeGemerkten() {
+  const g = generatoren.find(x => zahl(x) === ansicht.nr);
+  if (g) { if (g !== gezeigt) zeige(g); return; }
+  const erster = [...generatoren].sort((a, b) => zahl(a) - zahl(b))[0];
+  if (erster && erster !== gezeigt) zeige(erster, false);
+}
+function setzeAnsicht(einzel) {
+  ansicht.einzel = einzel; speichere(ANSICHT, ansicht);
+  document.body.classList.toggle('einzel', einzel);
+  $('#btn-ansicht').textContent = einzel ? 'Alle zeigen' : 'Nur gewählten';
+  setzeKopfHoehe();
+  if (gezeigt) gezeigt.karte.scrollIntoView({ block: 'start' });
+}
+
+/** Zur Karte des Generators mit dieser Nummer gehen (Einzelansicht: nur sie zeigen) und sie kurz hervorheben. */
 function springeZu(nr) {
   const g = generatoren.find(x => zahl(x) === Number(nr));
   if (!g) { setzeQuelle('#kontrolle-status', `Blatt ${nr} angeklickt – kein Generator mit Nummer ${nr} verbunden`, 'fehler'); return; }
-  g.karte.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  zeige(g);
+  g.karte.scrollIntoView({ behavior: ansicht.einzel ? 'auto' : 'smooth', block: 'start' });
   g.karte.classList.remove('markiert'); void g.karte.offsetWidth; g.karte.classList.add('markiert');
 }
 
-/** Höhe der stehenbleibenden Leiste, damit die Karte beim Springen nicht darunter verschwindet. */
+/** Höhe des stehenbleibenden Kopfs, damit die Karte beim Springen nicht darunter verschwindet. */
 function setzeKopfHoehe() {
-  const n = $('#leiste');
-  document.documentElement.style.setProperty('--kopf', n.hidden ? '0px' : n.offsetHeight + 'px');
+  document.documentElement.style.setProperty('--kopf', $('#kopfbereich').offsetHeight + 'px');
+}
+/** Beim Scrollen bleibt der Kopf stehen und wird schmal (kleines Logo); oben wieder gross. */
+function beobachteScrollen() {
+  const pruefe = () => {
+    const y = window.scrollY, b = document.body;
+    if (!b.classList.contains('gescrollt') && y > 120) { b.classList.add('gescrollt'); setzeKopfHoehe(); }
+    else if (b.classList.contains('gescrollt') && y < 10) { b.classList.remove('gescrollt'); setzeKopfHoehe(); }
+  };
+  window.addEventListener('scroll', pruefe, { passive: true });
+  pruefe();
+}
+
+// ------------------------------------------------------------------ PC wach halten, solange ein Generator läuft oder wartet
+let wachSperre = null, wachAnfrage = false;
+async function pruefeWach() {
+  const noetig = generatoren.some(g => g.lauf);
+  try {
+    if (noetig && !wachSperre && !wachAnfrage && 'wakeLock' in navigator && document.visibilityState === 'visible') {
+      wachAnfrage = true;
+      wachSperre = await navigator.wakeLock.request('screen');
+      wachSperre.addEventListener('release', () => { wachSperre = null; $('#wach').hidden = true; });
+    } else if (!noetig && wachSperre) { const w = wachSperre; wachSperre = null; await w.release(); }
+  } catch (e) { /* nicht erlaubt (Tab verdeckt, Akku-Sparmodus): beim nächsten Takt erneut */ }
+  finally { wachAnfrage = false; }
+  $('#wach').hidden = !wachSperre;
 }
 
 // ------------------------------------------------------------------ Taktgeber (Web Worker, läuft auch im Hintergrund)
 function starteTakt() {
   const code = 'setInterval(() => postMessage(0), 50);';
   const w = new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
-  let letztesSpeichern = 0, letzteLeiste = 0;
+  let letztesSpeichern = 0, letzteLeiste = 0, letzterVersuch = Date.now();
   w.onmessage = () => {
     for (const g of generatoren) g.tick();
-    if (Date.now() - letzteLeiste > 500) { letzteLeiste = Date.now(); aktualisiereLeiste(); }
+    if (Date.now() - letzterVersuch > 15000) {
+      letzterVersuch = Date.now();
+      for (const g of generatoren) if (!g.lauf && !g.imTest && !g.verbunden && !g.verbindet) g.verbinde(true);
+    }
+    if (Date.now() - letzteLeiste > 500) { letzteLeiste = Date.now(); aktualisiereLeiste(); pruefeWach(); }
     if (Date.now() - letztesSpeichern > 5000) { letztesSpeichern = Date.now(); if (generatoren.some(g => g.lauf)) speichereAlle(); }
   };
 }
 
 // ------------------------------------------------------------------ Start
 async function fuegeHinzu(port) {
-  if (generatoren.some(g => g.leitung.port === port)) return;
+  const da = generatoren.find(g => g.leitung.port === port);
+  if (da) { if (!da.lauf) da.verbinde(); return; }                  // wieder eingesteckt / eingeschaltet: neu verbinden
   $('#generatoren .leer')?.remove();
   const g = new Generator(port, generatoren.length);
   generatoren.push(g);
-  try { await g.leitung.oeffne(); } catch (e) { g.setzeStatus('Anschluss belegt oder getrennt (Spooky2 geschlossen?)', 'fehler'); }
+  g.verbinde();                                                      // alle gleichzeitig prüfen, nicht warten
   $('#anzahl').textContent = `${generatoren.length} Generator${generatoren.length === 1 ? '' : 'en'}`;
   speichereAlle();
+  zeigeGemerkten();
+}
+
+/** USB getrennt (Kabel, Strom): Karte zeigt es sofort. */
+function getrennt(port) {
+  const g = generatoren.find(x => x.leitung.port === port);
+  if (!g) return;
+  g.verbunden = false; g.leitung.offen = false;
+  g.zeigeVerbindung('fehler', 'getrennt');
+  g.log('USB getrennt');
+  if (!g.lauf) g.setzeStatus('USB getrennt – Kabel/Strom prüfen. Verbindet von selbst, sobald er wieder da ist.', 'fehler');
 }
 
 async function init() {
@@ -997,8 +1167,12 @@ async function init() {
   $('#btn-alle-testen').onclick = () => { for (const g of generatoren) if (!g.lauf) g.teste(); };
   $('#btn-alle-stopp').onclick = () => { for (const g of generatoren) { if (g.lauf) g.stoppe('gestoppt'); else if (g.imTest) g.beendeTest(); } };
   $('#leiste').onclick = (ev) => { const b = ev.target.closest('button[data-nr]'); if (b) springeZu(b.dataset.nr); };
+  $('#btn-ansicht').onclick = () => setzeAnsicht(!ansicht.einzel);
+  setzeAnsicht(ansicht.einzel);
   window.addEventListener('resize', setzeKopfHoehe);
+  beobachteScrollen();
   navigator.serial.addEventListener('connect', (ev) => fuegeHinzu(ev.target));
+  navigator.serial.addEventListener('disconnect', (ev) => getrennt(ev.target));
   window.addEventListener('beforeunload', (ev) => { speichereAlle(); if (generatoren.some(g => g.lauf)) { ev.preventDefault(); ev.returnValue = ''; } });
   for (const p of await navigator.serial.getPorts()) await fuegeHinzu(p);
   await Promise.all([ordnerBeimStart(), quelleBeimStart('finder'), quelleBeimStart('kontrolle')]);
