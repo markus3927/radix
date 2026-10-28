@@ -1,5 +1,5 @@
 // Service Worker: hält die App offline verfügbar. Bei neuer Version CACHE erhöhen.
-const CACHE = 'radix-0.4.7';
+const CACHE = 'radix-0.4.8';
 const DATEIEN = ['./', 'index.html', 'kern.js', 'app.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'logo-kopf.png'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(DATEIEN)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => {

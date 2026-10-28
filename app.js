@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.4.7';
+const VERSION = '0.4.8';
 const $ = (s, el = document) => el.querySelector(s);
 const K = window.Kern;
 const SPEICHER = 'radix-generatoren-v2';   // { zuordnung: [Nummer je Anschluss], gen: { Nummer: Einstellungen } }
@@ -337,7 +337,11 @@ function ladeSpeicher() {
 let speicher = ladeSpeicher();
 const speichereAlle = () => {
   for (const g of generatoren) speicher.gen[g.einst.nr] = g.daten();
-  speicher.zuordnung = generatoren.map(g => g.einst.nr);
+  // Zuordnung Anschluss -> Nummer: nur die Plätze der vorhandenen Generatoren überschreiben. Beim Start kommen die Anschlüsse
+  // einzeln dazu – vorher wurde hier nach dem ersten alles Weitere abgeschnitten und die Nummern verrutschten bei jedem Neuladen.
+  const z = Array.isArray(speicher.zuordnung) ? [...speicher.zuordnung] : [];
+  generatoren.forEach((g, i) => { z[i] = g.einst.nr; });
+  speicher.zuordnung = z;
   speichere(SPEICHER, speicher);
 };
 
@@ -1044,6 +1048,7 @@ function aktualisiereLeiste() {
     const z = zustand(g), kunde = $('.kunde', g.karte).textContent;
     return { nr: zahl(g), art: z.art, titel: `Generator ${g.einst.nr}${kunde ? ' · ' + kunde : ''} · ${z.text}` };
   });
+  for (const g of generatoren) g.karte.style.order = zahl(g);          // Karten nach Nummer sortiert
   const gz = gezeigt ? zahl(gezeigt) : null;
   const stand = JSON.stringify([liste, aktiv, gz]);
   if (stand === leistenStand) return;
@@ -1103,6 +1108,91 @@ function beobachteScrollen() {
   };
   window.addEventListener('scroll', pruefe, { passive: true });
   pruefe();
+}
+
+// ------------------------------------------------------------------ Zuordnen: alle Nummern auf einmal richtig stellen
+// Jeder verbundene Anschluss zeigt einen eindeutigen Code (101, 102, …) auf dem Display. Markus trägt pro Gerät (Nummer am Regal)
+// den Code ein, den es zeigt. RADIX gibt jedem Anschluss direkt seine Nummer – ohne Tauschen Schritt für Schritt.
+const CODE_AB = 101;
+let zuCodes = new Map();                                                // Code -> Generator
+
+async function sendeCodes() {
+  zuCodes = new Map();
+  const meldung = $('#zuordnen .zu-meldung');
+  meldung.className = 'zu-meldung'; meldung.textContent = 'Codes werden gesendet …';
+  let ok = 0;
+  await Promise.all(generatoren.map(async (g, i) => {
+    const code = CODE_AB + i;
+    zuCodes.set(code, g);
+    if (g.imTest) g.setzeTest(false);
+    try {
+      if (!g.verbunden && !(await g.verbinde(true))) return;
+      await g.sende([['Ausgang 1 aus', K.Befehl.ausgang(0, false)], ['Ausgang 2 aus', K.Befehl.ausgang(1, false)], ...K.frequenzBefehle(code, code, K.neuerZustand())]);
+      g.setzeStatus(`Zuordnen: Display zeigt Code ${code}`, 'warnung');
+      g.log(`Zuordnen: Code ${code} auf dem Display`);
+      ok++;
+    } catch (e) { /* bleibt ohne Code */ }
+  }));
+  meldung.className = 'zu-meldung ok';
+  meldung.textContent = `${ok} von ${generatoren.length} Generatoren zeigen einen Code (${CODE_AB} bis ${CODE_AB + generatoren.length - 1}). ${generatoren.length - ok ? `${generatoren.length - ok} ohne Verbindung zeigen keinen Code.` : ''}`;
+}
+
+async function oeffneZuordnen() {
+  if (generatoren.some(g => g.lauf)) { alert('Zuerst alle Generatoren stoppen («Alle stoppen»), dann zuordnen.'); return; }
+  const dlg = $('#zuordnen'), raster = $('.zu-raster', dlg);
+  const anzahl = Math.max(24, generatoren.length);
+  raster.innerHTML = Array.from({ length: anzahl }, (_, i) => `<label><span>Gerät ${i + 1}</span><input inputmode="numeric" data-geraet="${i + 1}" maxlength="3" autocomplete="off"></label>`).join('');
+  raster.onkeydown = (ev) => {                                          // Enter springt ins nächste Feld
+    if (ev.key !== 'Enter') return;
+    ev.preventDefault();
+    const felder = [...raster.querySelectorAll('input')], i = felder.indexOf(ev.target);
+    if (i >= 0 && i + 1 < felder.length) felder[i + 1].focus(); else $('.btn-zu-ok', dlg).focus();
+  };
+  $('.btn-zu-ok', dlg).onclick = uebernehmeZuordnung;
+  $('.btn-zu-neu', dlg).onclick = sendeCodes;
+  $('.btn-zu-ab', dlg).onclick = async () => {
+    dlg.close();
+    for (const g of generatoren) if (g.verbunden && !g.lauf) { try { await g.sende([['Ausgang 1 aus', K.Befehl.ausgang(0, false)], ['Ausgang 2 aus', K.Befehl.ausgang(1, false)]]); } catch (e) {} g.setzeStatus('bereit'); }
+  };
+  dlg.showModal();
+  raster.querySelector('input').focus();
+  await sendeCodes();
+}
+
+/** Eingaben prüfen und alle Nummern auf einmal setzen. Anschlüsse ohne Eintrag (z. B. ohne Verbindung) bekommen die übrigen Nummern. */
+async function uebernehmeZuordnung() {
+  const dlg = $('#zuordnen'), meldung = $('.zu-meldung', dlg);
+  const felder = [...dlg.querySelectorAll('.zu-raster input')];
+  const zuteilung = new Map(), fehler = [];
+  felder.forEach(f => f.classList.remove('fehler'));
+  const gesehen = new Map();
+  for (const f of felder) {
+    const t = f.value.trim();
+    if (!t) continue;
+    const code = parseInt(t, 10), g = zuCodes.get(code);
+    if (!g) { f.classList.add('fehler'); fehler.push(`Gerät ${f.dataset.geraet}: Code ${t} gibt es nicht`); continue; }
+    if (gesehen.has(code)) { f.classList.add('fehler'); gesehen.get(code).classList.add('fehler'); fehler.push(`Code ${code} zweimal eingetragen (Gerät ${gesehen.get(code).dataset.geraet} und ${f.dataset.geraet})`); continue; }
+    gesehen.set(code, f);
+    zuteilung.set(g, f.dataset.geraet);
+  }
+  if (fehler.length) { meldung.className = 'zu-meldung'; meldung.textContent = fehler.join(' · '); return; }
+  if (!zuteilung.size) { meldung.className = 'zu-meldung'; meldung.textContent = 'Noch nichts eingetragen.'; return; }
+  // Übrige Anschlüsse: freie Nummern, möglichst ihre bisherige
+  const belegt = new Set(zuteilung.values());
+  for (const g of generatoren) {
+    if (zuteilung.has(g)) continue;
+    let nr = g.einst.nr;
+    if (belegt.has(nr)) { let n = 1; while (belegt.has(String(n))) n++; nr = String(n); }
+    zuteilung.set(g, nr); belegt.add(nr);
+  }
+  speichereAlle();                                                      // Stand unter den bisherigen Nummern sichern
+  for (const [g, nr] of zuteilung) if (g.einst.nr !== nr) { g.log(`Zuordnen: Nummer ${g.einst.nr} → ${nr}`); g.ladeEinst(nr); g.zeigeEinst(); }
+  speichereAlle();
+  dlg.close();
+  // Zur Kontrolle: jedes Gerät zeigt jetzt seine eigene Nummer (Test, Ausgänge aus)
+  await Promise.all(generatoren.filter(g => g.verbunden).map(g => g.teste()));
+  if (gezeigt) zeige(gezeigt);
+  aktualisiereLeiste();
 }
 
 // ------------------------------------------------------------------ PC wach halten, solange ein Generator läuft oder wartet
@@ -1168,6 +1258,7 @@ async function init() {
   $('#btn-alle-stopp').onclick = () => { for (const g of generatoren) { if (g.lauf) g.stoppe('gestoppt'); else if (g.imTest) g.beendeTest(); } };
   $('#leiste').onclick = (ev) => { const b = ev.target.closest('button[data-nr]'); if (b) springeZu(b.dataset.nr); };
   $('#btn-ansicht').onclick = () => setzeAnsicht(!ansicht.einzel);
+  $('#btn-zuordnen').onclick = oeffneZuordnen;
   setzeAnsicht(ansicht.einzel);
   window.addEventListener('resize', setzeKopfHoehe);
   beobachteScrollen();

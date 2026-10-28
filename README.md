@@ -54,6 +54,11 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.4.8
+- **Zuordnen** (Knopf oben): jeder verbundene Generator zeigt einen Code ab 101 auf dem Display (Ausgänge aus). Pro Gerät am Regal den Code eintragen (Enter springt weiter), «Übernehmen» – alle Nummern stimmen auf einmal, Programmlisten und Kunden bleiben bei ihrer Nummer. Danach zeigt jedes Gerät zur Kontrolle seine eigene Nummer. Geräte ohne Code (keine Verbindung) leer lassen
+- **Fehler behoben:** beim Neuladen wurde die gespeicherte Zuordnung nach dem ersten Generator abgeschnitten – die Nummern verrutschten bei jedem Start
+- «Alle zeigen»: Karten nach Nummer sortiert
+
 ## Stand Version 0.4.7
 - **Verbindung wird geprüft:** beim Start, bei «Testen»/«Alle testen» und vor jedem Start bekommt jeder Generator «Ausgänge aus» und muss mit «ok» antworten. Chip neben der Nummer: ✓ verbunden, ✗ keine Antwort / belegt / getrennt
 - Antwortet er nicht: Anschluss schliessen, neu öffnen, dann andere Baudraten (115200, 38400, 19200, 9600) versuchen. Gefundene Baudrate steht im Chip. «ok» ohne Zeilenende wird angenommen
