@@ -54,6 +54,14 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.6.4 (Brücke bleibt 1.2.1)
+- **GX-Test:** «Testen» auf einer GX-Pro-Karte (1, 2, 23, 24) öffnet den Anschluss mit 115200 Baud, fragt die Firmware (`:n00=$`), schaltet die Ausgänge aus (`:w11=0,0,`) und schickt die Kartennummer als Frequenz auf Out1 und Out2 (`:w24=…,` / `:w25=…,`, GX-Zahlenform). Alles mit Antwort im Protokoll. Darunter ein Feld für eigene Zeilen (Vorgaben aus dem Chat). «Test beenden» schaltet aus und gibt den Anschluss wieder frei. Spooky2 muss dafür aus sein
+- «Alle testen» lässt die GX weiterhin in Ruhe; Programme starten auf GX noch nicht
+- Enthält 0.6.3
+
+## Stand Version 0.6.3 (Brücke bleibt 1.2.1)
+- **Fehler behoben (am Gerät, 2. Anlauf):** Der XM übernimmt einen neuen Frequenzbereich (tief unter 600 Hz / normal) erst, wenn sich der Frequenzwert ändert. 0.6.2 schickte bei `10000=…, 10=…` denselben Wert nochmals – das Display blieb auf 10'000 Hz. Jetzt kommt nach dem Bereichswechsel kurz ein Nachbarwert (0,01 Hz bzw. 0,00001 Hz daneben), dann der richtige Wert. Im Protokoll als «anstossen (Bereich übernehmen)»
+
 ## Stand Version 0.6.2 (Brücke bleibt 1.2.1)
 - **Fehler behoben (gefunden am Gerät):** Nach einem Wechsel zwischen tiefem (unter 600 Hz) und normalem Frequenzbereich wird die Frequenz jetzt immer neu geschickt. Vorher blieb z. B. bei `10000=…, 10=…` das Display auf 10'000 Hz stehen, weil 10 Hz × 100'000 und 10'000 Hz × 100 denselben Wert ergeben (betrifft alle Paare 1:1000, z. B. 1/1000, 7.83/7830)
 - Kopf: neues Logo (Mensch im Kreis), Untertitel «zurück zum Ursprung» entfernt

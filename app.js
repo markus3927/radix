@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.6.2';
+const VERSION = '0.6.4';
 const $ = (s, el = document) => el.querySelector(s);
 const K = window.Kern;
 const SPEICHER = 'radix-generatoren-v2';   // { zuordnung: [Nummer je Anschluss], gen: { Nummer: Einstellungen } }
@@ -189,10 +189,11 @@ function beobachteQuellen() {
 
 // ------------------------------------------------------------------ Serielle Verbindung
 const BAUDRATEN = [57600, 115200, 38400, 19200, 9600];          // 57600 = Spooky2 XM (geprüft); übrige nur als Suche
-const zeigeRoh = (t) => String(t).slice(0, 40).replace(/[\x00-\x1f\x7f-￿]/g, c => c === '\r' ? '\\r' : c === '\n' ? '\\n' : `\\x${c.charCodeAt(0).toString(16).padStart(2, '0')}`);
+const zeigeRoh = (t, max = 40) => String(t).slice(0, max).replace(/[\x00-\x1f\x7f-￿]/g, c => c === '\r' ? '\\r' : c === '\n' ? '\\n' : `\\x${c.charCodeAt(0).toString(16).padStart(2, '0')}`);
 
 /** Spooky2 GeneratorX Pro: Doppel-Chip CH342 (USB 1a86:55d2), 115200 Baud, eigenes Protokoll («:w24=…,»).
- *  Von RADIX noch nicht unterstützt – der Anschluss wird nie geöffnet, damit Spooky2 ihn gleichzeitig betreiben kann. */
+ *  Von RADIX noch nicht gesteuert. Der Anschluss wird nur für den GX-Test geöffnet (Knopf «Testen» auf der GX-Karte)
+ *  und danach wieder freigegeben, damit Spooky2 ihn betreiben kann. */
 const istGX = (port) => { const i = port.getInfo(); return i.usbVendorId === 0x1a86 && i.usbProductId === 0x55d2; };
 
 class Leitung {
@@ -234,6 +235,19 @@ class Leitung {
         if (Date.now() - start > timeout) throw new Error(this.rx ? `unverständliche Antwort «${zeigeRoh(this.rx)}»` : 'keine Antwort');
         await new Promise(r => setTimeout(r, 5));
       }
+    });
+    this.kette = auftrag.catch(() => {});
+    return auftrag;
+  }
+  /** GX-Test: Zeile senden (wie getippt) und alles sammeln, was in «warte» ms zurückkommt. Keine Erwartung an die Antwort. */
+  roh(text, warte = 700) {
+    const auftrag = this.kette.then(async () => {
+      if (!this.offen) throw new Error('Anschluss nicht offen');
+      this.rx = '';
+      await this.schreibe(text);
+      await new Promise(r => setTimeout(r, warte));
+      const a = this.rx; this.rx = '';
+      return a;
     });
     this.kette = auftrag.catch(() => {});
     return auftrag;
@@ -518,9 +532,9 @@ class Generator {
   zeigeGX() {
     const c = $('.chip', this.karte);
     c.textContent = this.leitung.p ? `${this.leitung.p.com} · GX Pro` : 'GX Pro · Spooky2'; c.className = 'chip gx';
-    c.title = this.leitung.p ? `GeneratorX Pro an ${this.leitung.p.com}, USB-Steckplatz ${this.leitung.p.ort || '?'}. RADIX steuert ihn noch nicht und lässt den Anschluss frei – er läuft mit Spooky2.`
+    c.title = this.leitung.p ? `GeneratorX Pro an ${this.leitung.p.com}, USB-Steckplatz ${this.leitung.p.ort || '?'}. RADIX steuert ihn noch nicht und lässt den Anschluss frei – er läuft mit Spooky2. «Testen» öffnet ihn kurz (Spooky2 muss dafür aus sein).`
       : 'Spooky2 GeneratorX Pro (CH342). RADIX steuert ihn noch nicht und lässt den Anschluss frei – er läuft mit Spooky2.';
-    if (!this.lauf) this.setzeStatus('GeneratorX Pro – läuft vorerst mit Spooky2. RADIX lässt diesen Anschluss frei.', 'gx');
+    if (!this.lauf && !this.imTest) this.setzeStatus('GeneratorX Pro – läuft vorerst mit Spooky2. RADIX lässt diesen Anschluss frei. «Testen» prüft die Verbindung (Spooky2 dafür aus).', 'gx');
   }
   verbinde(leise = false) {
     if (this.gx) { this.verbunden = false; this.zeigeGX(); return Promise.resolve(false); }
@@ -657,6 +671,8 @@ class Generator {
     $('.vorschau', k).onclick = (ev) => { const b = ev.target.closest('button[data-z]'); if (b) this.setzeVariante(+b.dataset.z, b.dataset.v); };
     $('.protokoll', k).ontoggle = () => { $('.protokoll pre', k).textContent = this.protokoll.join('\n'); };
     $('.btn-kopieren', k).onclick = () => this.kopiereProtokoll();
+    $('.btn-gx-senden', k).onclick = () => this.gxEigene();
+    $('.gx-befehl', k).onkeydown = (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); this.gxEigene(); } };
     $('#generatoren').appendChild(k);
     this.zeigeEinst();
   }
@@ -955,6 +971,7 @@ class Generator {
   /** Zuordnung prüfen: Display des angeschlossenen Generators zeigt die Kartennummer als Frequenz (Ausgänge aus, kein Signal). */
   async teste() {
     if (this.lauf) return;
+    if (this.gx) return this.testeGX();
     try {
       if (!(await this.verbinde())) return;
       const nr = parseInt(this.einst.nr, 10);
@@ -975,10 +992,61 @@ class Generator {
   }
   /** Test beenden: Ausgänge sicher aus, Karte wieder bereit. (Die Zahl bleibt auf dem Display, bis ein Programm startet.) */
   async beendeTest() {
+    if (this.gx) return this.beendeTestGX();
     this.setzeTest(false);
     try { await this.sende([['Ausgang 1 aus', K.Befehl.ausgang(0, false)], ['Ausgang 2 aus', K.Befehl.ausgang(1, false)]]); } catch (e) { /* Gerät weg */ }
     this.setzeStatus('Test beendet – bereit');
     this.log('Test beendet');
+  }
+
+  // ---------------------------------------------------------------- GeneratorX Pro: Test (0.6.4)
+  /** Eine Zeile an den GX schicken, Befehl und Antwort ins Protokoll. Rückgabe: Antwort (Text, evtl. leer). */
+  async gxSende(text, warte = 700) {
+    const zeile = /\r?\n$/.test(text) ? text : text + '\r\n';
+    const a = await this.leitung.roh(zeile, warte);
+    this.log(`GX → ${zeigeRoh(zeile, 120)}   ← ${a ? zeigeRoh(a, 300) : '(keine Antwort)'}`);
+    return a;
+  }
+  /** GX-Test: Anschluss mit 115200 öffnen, Firmware fragen, Ausgänge aus, Kartennummer als Frequenz auf beide Ausgänge. */
+  async testeGX() {
+    if (this.lauf) return;
+    const G = K.GX, nr = parseInt(this.einst.nr, 10);
+    this.setzeTest(true);
+    $('.gx-test', this.karte).hidden = false;
+    $('.protokoll', this.karte).open = true;
+    $('.protokoll pre', this.karte).textContent = this.protokoll.join('\n');
+    const c = $('.chip', this.karte);
+    try {
+      await this.leitung.oeffne(G.BAUD);
+      this.log(`GX-Test: Anschluss offen mit ${G.BAUD} Baud`);
+      c.className = 'chip gx offen'; c.textContent = `${this.leitung.p ? this.leitung.p.com + ' · ' : ''}GX Pro · Test`;
+      const ver = await this.gxSende(G.version);
+      await this.gxSende(G.ausgaenge(0, 0));
+      const f1 = await this.gxSende(G.frequenz(0, nr));
+      const f2 = await this.gxSende(G.frequenz(1, nr));
+      const antwort = [ver, f1, f2].some(Boolean);
+      this.setzeStatus(`GX-Test: Display soll ${nr} Hz zeigen (Ausgänge aus). ${antwort ? 'Der GX antwortet (siehe Protokoll).' : 'Keine Antwort vom GX.'} Was steht auf dem Display? Protokoll «Kopieren» und im Chat einfügen. Ende mit «Test beenden».`, 'warnung');
+    } catch (e) {
+      this.log(`GX-Test: ${e.message}`);
+      this.setzeStatus(`GX-Test: Anschluss lässt sich nicht öffnen (${e.message}). Spooky2 ganz geschlossen?`, 'fehler');
+    }
+  }
+  /** GX-Test beenden: Ausgänge aus, Anschluss wieder frei für Spooky2. */
+  async beendeTestGX() {
+    this.setzeTest(false);
+    $('.gx-test', this.karte).hidden = true;
+    try { if (this.leitung.offen) await this.gxSende(K.GX.ausgaenge(0, 0), 300); } catch (e) { /* Gerät weg */ }
+    try { await this.leitung.schliesse(); } catch (e) {}
+    this.log('GX-Test beendet, Anschluss wieder frei');
+    this.zeigeGX();
+    this.setzeStatus('GX-Test beendet – Anschluss wieder frei für Spooky2', 'gx');
+  }
+  /** Eigene Zeile aus dem GX-Testfeld senden (für Versuche, die Claude im Chat vorgibt). */
+  async gxEigene() {
+    const feld = $('.gx-befehl', this.karte), text = feld.value.trim();
+    if (!text || !this.imTest) return;
+    try { await this.gxSende(text); feld.select(); }
+    catch (e) { this.log(`GX: ${e.message}`); this.setzeStatus(`GX: ${e.message}`, 'fehler'); }
   }
 
   // ---------------------------------------------------------------- Ablauf
@@ -1457,7 +1525,7 @@ async function init() {
   if (!('serial' in navigator) || !('showDirectoryPicker' in window)) { $('#kein-chrome').hidden = false; return; }
   $('#btn-ordner').onclick = waehleOrdner;
   $('#btn-hinzu').onclick = async () => { try { await fuegeHinzu(await navigator.serial.requestPort()); } catch (e) { /* abgebrochen */ } };
-  $('#btn-alle-testen').onclick = () => { for (const g of generatoren) if (!g.lauf) g.teste(); };
+  $('#btn-alle-testen').onclick = () => { for (const g of generatoren) if (!g.lauf && !g.gx) g.teste(); };   // GX nur mit eigenem «Testen»
   $('#btn-alle-stopp').onclick = () => { for (const g of generatoren) { if (g.lauf) g.stoppe('gestoppt'); else if (g.imTest) g.beendeTest(); } };
   $('#leiste').onclick = (ev) => { const b = ev.target.closest('button[data-nr]'); if (b) springeZu(b.dataset.nr); };
   $('#btn-ansicht').onclick = () => setzeAnsicht(!ansicht.einzel);

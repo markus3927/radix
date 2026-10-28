@@ -81,6 +81,12 @@
   #leiste button.lg.x{background:#EEF1F5;color:#7A8796;border:2px dashed #9AA6B4;box-shadow:none}
   .chip.gx{background:#EDE7F6;color:#5E35B1;font-weight:600}
   .status.gx{color:#5E35B1}
+  .chip.gx.offen{background:#5E35B1;color:#fff}
+  .gx-test{margin:8px 0;padding:8px 10px;border:1px dashed #9575CD;border-radius:8px;background:#F6F2FC}
+  .gx-test[hidden]{display:none}
+  .gx-test label{color:#5E35B1}
+  .gx-reihe{display:flex;gap:8px;align-items:center}
+  .gx-reihe input{flex:1;min-width:0;font-family:ui-monospace,Consolas,monospace}
   #leiste button.lg.aktiv{text-decoration:underline 2px;text-underline-offset:3px}   /* im Kontrollblatt angeklicktes Blatt */
   #leiste button.lg.gezeigt{outline:3px solid #fff;outline-offset:2px;transform:scale(1.1)}   /* gerade gross angezeigt */
   .chip.ok{background:#E3F2E5;color:#2E7D32} .chip.pruefe{background:var(--gold-bg);color:var(--gold)} .chip.fehler{background:var(--rot-bg);color:var(--rot);font-weight:600}
@@ -268,6 +274,10 @@
     <div class="zusammenfassung"></div>
     <div class="warnungen"></div>
     <div class="status"></div>
+    <div class="gx-test" hidden>
+      <label>GX-Test: eigene Zeile senden (Vorgabe aus dem Chat)</label>
+      <div class="gx-reihe"><input class="gx-befehl" spellcheck="false" autocomplete="off" placeholder=":w24=78,"><button class="ghost klein btn-gx-senden">Senden</button></div>
+    </div>
     <div class="balken"><div></div></div>
     <div class="knoepfe">
       <button class="btn-start">Start</button>

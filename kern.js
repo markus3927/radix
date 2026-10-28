@@ -463,7 +463,8 @@
   const Befehl = {
     w: (nr, wert) => `:w${String(nr).padStart(2, '0')}${wert}\r\n`,
     bereich: (kanal, tief) => Befehl.w(63 + kanal, tief ? 1 : 0),
-    frequenzWert: (kanal, hz) => Befehl.w(23 + kanal, Math.round(hz * (hz < 600 ? 100000 : 100))),
+    frequenzRoh: (hz) => Math.round(hz * (hz < 600 ? 100000 : 100)),
+    frequenzWert: (kanal, hz) => Befehl.w(23 + kanal, Befehl.frequenzRoh(hz)),
     amplitude: (kanal, volt) => Befehl.w(25 + kanal, Math.round(volt * 100)),
     offset: (kanal, prozent) => Befehl.w(27 + kanal, 100 + Math.round(prozent)),   // Kodierung aus s2, ungeprüft
     duty: (kanal, prozent) => Befehl.w(29 + kanal, Math.round(prozent * 10)),
@@ -472,6 +473,26 @@
     ausgang: (kanal, ein) => Befehl.w(61 + kanal, ein ? 1 : 0),
     sync: (ein) => Befehl.w(68, ein ? 1 : 0),
     eigeneWelle: (kanal, werte) => `:a0${kanal + 1}${werte.join(',')}\n`,
+  };
+
+  // ------------------------------------------------------------------ GeneratorX Pro (erst zum Testen, 0.6.4)
+  // 115200 Baud, Rahmen «:<Buchstabe><Nr>=<Wert>,<Wert>,» + CR LF, jeder Wert endet mit Komma (aus der GX-Firmware, opengx).
+  // Frequenz Out1 «:w24=v,», Out2 «:w25=v,»: v = m·10 + e, Frequenz = m·10^e · 10⁻⁸ Hz (37 500 Hz = 3750007). Ausgänge «:w11=a,b,».
+  // Gesichert ist nur, was die Anzeige versteht – was die Generator-Platine daraus macht, zeigt erst der Test am Gerät.
+  const GX = {
+    BAUD: 115200,
+    /** Frequenz in Hz -> GX-Zahl (höchstens 8 Nullen in den Exponenten, wie die GX-Firmware selbst: 20 kHz = 200008). */
+    zahl(hz) {
+      let n = Math.round(hz * 1e8), e = 0;
+      if (!(n > 0)) return 0;
+      while (e < 8 && n % 10 === 0) { n /= 10; e++; }
+      return n * 10 + e;
+    },
+    /** GX-Zahl -> Hz (zum Prüfen und für die Anzeige im Protokoll). */
+    hz(v) { return Math.floor(v / 10) * Math.pow(10, v % 10) / 1e8; },
+    frequenz: (kanal, hz) => `:w${24 + kanal}=${GX.zahl(hz)},\r\n`,
+    ausgaenge: (a, b) => `:w11=${a ? 1 : 0},${b ? 1 : 0},\r\n`,
+    version: ':n00=$\r\n',
   };
 
   /** Wellenform-Namen vergleichen: Spooky2 schreibt mal «_», mal Leerzeichen (UDB_Square = «UDB Square.csv»). */
@@ -522,8 +543,16 @@
       const tief = hz < 600;
       // Nach einem Bereichswechsel die Frequenz immer neu schicken: 10 Hz (tief, ×100'000) und 10'000 Hz (normal, ×100)
       // ergeben denselben Wert – ohne Neusenden zeigte der XM weiter 10'000 Hz (gefunden am Gerät 28.10.2026)
-      if (zustand.bereich[kanal] !== tief) { b.push([`Bereich Out${kanal + 1} ${tief ? 'tief' : 'normal'}`, Befehl.bereich(kanal, tief)]); zustand.bereich[kanal] = tief; zustand.wert[kanal] = null; }
+      // 0.6.3: auch das reichte nicht – der XM übernimmt den neuen Bereich erst, wenn sich der Frequenzwert ändert (am Gerät 28.10.2026:
+      // 10000 → 10 blieb stehen, 10000 → 727 → 10 ging). Darum nach dem Bereichswechsel kurz einen Nachbarwert (+1 = 0,01 Hz bzw.
+      // 0,00001 Hz daneben) schicken, wenn der alte Wert gleich oder unbekannt ist, dann den richtigen Wert
       const wert = Befehl.frequenzWert(kanal, hz);
+      if (zustand.bereich[kanal] !== tief) {
+        const vorher = zustand.wert[kanal];
+        b.push([`Bereich Out${kanal + 1} ${tief ? 'tief' : 'normal'}`, Befehl.bereich(kanal, tief)]);
+        if (vorher === null || vorher === wert) b.push([`Frequenz Out${kanal + 1} anstossen (Bereich übernehmen)`, Befehl.w(23 + kanal, Befehl.frequenzRoh(hz) + 1)]);
+        zustand.bereich[kanal] = tief; zustand.wert[kanal] = null;
+      }
       if (zustand.wert[kanal] !== wert) { b.push([`Frequenz Out${kanal + 1} ${+hz.toFixed(6)} Hz`, wert]); zustand.wert[kanal] = wert; }
     }
     return b;
@@ -540,7 +569,7 @@
   const Kern = {
     STANDARD_DWELL, lesePresets, baueKatalog, loeseBasis, einstellungen, leseFrequenzzeile, programmeAusPreset,
     inBereich, erstellePlan, frequenzenBei, taktBei, wobbleAus, wobbleFaktor, Befehl, welleZuWerten, leseWellenCsv, findeWelle, einrichtung,
-    frequenzBefehle, ausgangBefehle, neuerZustand,
+    frequenzBefehle, ausgangBefehle, neuerZustand, GX,
     lesePresetAngabe, finderDaten, finderKatalog, deuteListenZeile, sauber,
     kontrolleEintraege, kontrolleZeile, leseKontrolle, kontrolleHeute, datumText,
   };
