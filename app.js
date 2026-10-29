@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.7.2';
+const VERSION = '0.7.3';
 const $ = (s, el = document) => el.querySelector(s);
 const K = window.Kern;
 const SPEICHER = 'radix-generatoren-v2';   // { zuordnung: [Nummer je Anschluss], gen: { Nummer: Einstellungen } }
@@ -1317,9 +1317,9 @@ class Generator {
     const s = l.plan.schritte[l.schritt];
     const b = [];
     const ausgaenge = this.gx ? K.gxAusgangBefehle : K.ausgangBefehle;
-    if (s.luecke) {                              // 0.7.2: MW-Lücke wie Spooky2 – Amplitude 0, Ausgänge bleiben an
+    if (s.pause && !s.marke) {                   // 0.7.3: Lücke und Pause wie Spooky2 – Amplitude 0, Ausgänge bleiben an (Mitschnitt 29.10.2026)
       if (!l.zustand.ampNull) { const e = l.einst[s.ei ?? l.aktivEi]?.e; if (e) { b.push(...K.amplitudeBefehle(e, true, this.gx)); l.zustand.ampNull = true; } }
-    } else if (s.pause) b.push(...ausgaenge(false, l.zustand));
+    } else if (s.pause) b.push(...ausgaenge(false, l.zustand));   // Warten auf Zeitmarke («um 6.00»): Ausgänge aus
     else {
       const e = l.einst[s.ei].e, { f1, f2 } = K.frequenzenBei(s, l.tImSchritt, e);
       b.push(...(this.gx ? K.gxFrequenzBefehle(f1, f2, l.zustand, neu, e.out2Modus.art === 'gleich') : K.frequenzBefehle(f1, f2, l.zustand)));
@@ -1438,7 +1438,8 @@ class Generator {
     if (s.marke) { this.setzeStatus(`Wartet bis ${fmtUhr(s.zeitMs)} (Zeitmarke ${s.um}), Ausgänge aus`, 'warnung'); return; }
     const vorher = l.plan.schritte.slice(0, l.schritt).reduce((a, x) => a + x.sek, 0) + l.tImSchritt;
     const rest = l.plan.gesamtSek - vorher + (l.durchlaeufe ? (l.durchlaeufe - l.durchlauf) * l.plan.gesamtSek : 0);
-    this.setzeStatus(`${it.code} · ${s.pause ? 'Pause' : `Out1 ${fmtHz(l.f1)} · Out2 ${fmtHz(l.f2)}`} · Programm ${s.pi + 1}/${l.items.length} · Durchlauf ${l.durchlauf}${l.durchlaeufe ? '/' + l.durchlaeufe : ''} · ${l.durchlaeufe ? 'noch ' + fmtZeit(rest) : 'endlos'}`, 'ok');
+    const was = s.luecke && l.f1 != null ? `Out1 ${fmtHz(l.f1)} · Out2 ${fmtHz(l.f2)}` : s.pause ? 'Pause (0 V, Ausgänge an)' : `Out1 ${fmtHz(l.f1)} · Out2 ${fmtHz(l.f2)}`;   // MW-Lücke: Anzeige bleibt ruhig
+    this.setzeStatus(`${it.code} · ${was} · Programm ${s.pi + 1}/${l.items.length} · Durchlauf ${l.durchlauf}${l.durchlaeufe ? '/' + l.durchlaeufe : ''} · ${l.durchlaeufe ? 'noch ' + fmtZeit(rest) : 'endlos'}`, 'ok');
     $('.balken > div', this.karte).style.width = `${Math.min(100, vorher / l.plan.gesamtSek * 100)}%`;
   }
 

@@ -54,6 +54,10 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.7.3 (Brücke bleibt 1.2.1) – Pausen wie Spooky2, ruhige Anzeige
+- **Pausen** (`0=4` in Peptiden, pa15–pa60, `0=…` in eigenen Zeilen): Ausgänge bleiben an, nur die Spannung ist 0 V – wie Spooky2 (Mitschnitt: Spooky2 schaltet die Ausgänge nur bei Start und Stopp). Beim Warten auf eine Startzeit («um 6.00») bleiben die Ausgänge aus
+- **Anzeige hüpft nicht mehr:** Statuszeile im Lauf fest zwei Zeilen hoch, in der MW-Lücke bleibt die Frequenzanzeige stehen
+
 ## Stand Version 0.7.2 (Brücke bleibt 1.2.1) – MW-Lücke wie Spooky2
 - **Fehler behoben (am Gerät 29.10., 11:10, pp1334):** Bei Peptiden/MW schaltete RADIX zwischen den Aminosäuren jede Sekunde die Ausgänge aus und ein. Jetzt wie Spooky2: Ausgänge bleiben an, nur die Spannung geht für 0,28 s auf 0 V und dann zurück
 - Protokoll wird bei MW-Programmen nicht mehr mit jeder Aminosäure gefüllt (nur Programmstart)
