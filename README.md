@@ -54,6 +54,10 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.7.2 (Brücke bleibt 1.2.1) – MW-Lücke wie Spooky2
+- **Fehler behoben (am Gerät 29.10., 11:10, pp1334):** Bei Peptiden/MW schaltete RADIX zwischen den Aminosäuren jede Sekunde die Ausgänge aus und ein. Jetzt wie Spooky2: Ausgänge bleiben an, nur die Spannung geht für 0,28 s auf 0 V und dann zurück
+- Protokoll wird bei MW-Programmen nicht mehr mit jeder Aminosäure gefüllt (nur Programmstart)
+
 ## Stand Version 0.7.1 (Brücke bleibt 1.2.1) – Peptid-Nummern pp0001–pp1513
 - **pp-Nummern** aus dem Peptide-Finder v7 / Kontrollblatt R361 laufen wie pr-Nummern: eintippen (`pp0004`, `pp4`), Doppelklick im Kontrollblatt, «Heute/Morgen aus Kontrollblatt», «Programme des Kunden»
 - RADIX ordnet die Nummer dem Spooky2-Preset zu (pp0004 → «Acid Reflux (R)» aus `C:\Spooky2\Preset Collections\JW_Peptides`) und spielt dessen Programme mit der MW-Umrechnung aus 0.7.0. Preset kommt automatisch mit

@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.7.1';
+const VERSION = '0.7.2';
 const $ = (s, el = document) => el.querySelector(s);
 const K = window.Kern;
 const SPEICHER = 'radix-generatoren-v2';   // { zuordnung: [Nummer je Anschluss], gen: { Nummer: Einstellungen } }
@@ -1317,19 +1317,22 @@ class Generator {
     const s = l.plan.schritte[l.schritt];
     const b = [];
     const ausgaenge = this.gx ? K.gxAusgangBefehle : K.ausgangBefehle;
-    if (s.pause) b.push(...ausgaenge(false, l.zustand));
+    if (s.luecke) {                              // 0.7.2: MW-Lücke wie Spooky2 – Amplitude 0, Ausgänge bleiben an
+      if (!l.zustand.ampNull) { const e = l.einst[s.ei ?? l.aktivEi]?.e; if (e) { b.push(...K.amplitudeBefehle(e, true, this.gx)); l.zustand.ampNull = true; } }
+    } else if (s.pause) b.push(...ausgaenge(false, l.zustand));
     else {
       const e = l.einst[s.ei].e, { f1, f2 } = K.frequenzenBei(s, l.tImSchritt, e);
       b.push(...(this.gx ? K.gxFrequenzBefehle(f1, f2, l.zustand, neu, e.out2Modus.art === 'gleich') : K.frequenzBefehle(f1, f2, l.zustand)));
+      if (l.zustand.ampNull) { b.push(...K.amplitudeBefehle(e, false, this.gx)); l.zustand.ampNull = false; }
       b.push(...ausgaenge(true, l.zustand));
       l.f1 = f1; l.f2 = f2;
     }
     l.letzterTakt = K.taktBei(s, l.tImSchritt);
-    this.leise = !neu;                           // Wobble- und Sweep-Schritte nicht einzeln protokollieren
+    this.leise = !neu || s.mw;                   // Wobble-, Sweep- und MW-Schritte nicht einzeln protokollieren
     try { if (b.length) await this.sende(b); } finally { this.leise = false; }
     if (neu) {
       if (s.pi !== l.aktivPi) { l.aktivPi = s.pi; const it = l.items[s.pi]; this.log(`Programm ${s.pi + 1}/${l.items.length}: ${it.code} ${it.name}`); this.markiereAktiv(); }
-      this.log(s.marke ? `Schritt ${l.schritt + 1}/${l.plan.schritte.length}: Ausgänge aus, warten bis ${fmtUhr(s.zeitMs)}` : `Schritt ${l.schritt + 1}/${l.plan.schritte.length}: ${s.pause ? 'Pause' : `${fmtHz(l.f1)} / ${fmtHz(l.f2)}`} für ${s.sek} s`);
+      if (!s.mw) this.log(s.marke ? `Schritt ${l.schritt + 1}/${l.plan.schritte.length}: Ausgänge aus, warten bis ${fmtUhr(s.zeitMs)}` : `Schritt ${l.schritt + 1}/${l.plan.schritte.length}: ${s.pause ? 'Pause' : `${fmtHz(l.f1)} / ${fmtHz(l.f2)}`} für ${s.sek} s`);
     }
   }
 

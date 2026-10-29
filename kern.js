@@ -258,11 +258,12 @@
         const sek = (x.standard && e.forceDwell > 0 ? e.forceDwell : x.sek) * e.dwellFaktor;
         for (let r = 0; r < e.wdhFrequenz; r++) liste.push({ ...x, sek });
       }
+      const anfang = schritte.length;
       for (let rp = 0; rp < e.wdhProgramm; rp++) {
         for (let i = 0; i < liste.length; i++) {
           const x = liste[i];
           const text = `${prog.name}`;
-          if (mitMW) schritte.push({ sek: MW_LUECKE, pause: true, luecke: true, text });   // Spooky2: vor jedem Schritt eines MW-Programms 0,28 s 0 V
+          if (mitMW) schritte.push({ sek: MW_LUECKE, pause: true, luecke: true, text });   // Spooky2: vor jedem Schritt eines MW-Programms 0,28 s 0 V (Amplitude 0, Ausgänge bleiben an)
           if (x.art === 'pause') { schritte.push({ sek: x.sek, pause: true, text }); continue; }
           if (x.art === 'sweep') {
             if (e.out2Modus.art === 'dual') ungenutzt.add('Sweep in Dual-Preset: Out2 läuft gleich wie Out1');
@@ -280,6 +281,7 @@
           schritte.push({ sek: x.sek, f1, f2: f2Von(x.hz, f1), text, wobble });
         }
       }
+      if (mitMW) for (let k = anfang; k < schritte.length; k++) schritte[k].mw = true;   // MW-Programm: Schritte nicht einzeln protokollieren
     }
     for (const s of schritte) if (!s.wobble) delete s.wobble;
     warnungen.push(...ungenutzt);
@@ -689,6 +691,17 @@
   }
   const neuerZustand = () => ({ bereich: [null, null], wert: [null, null], aus: [true, true] });
 
+  /**
+   * MW-Lücke wie Spooky2 (Mitschnitt 29.10.2026): Ausgänge bleiben an, nur die Amplitude geht kurz auf 0 und danach zurück.
+   * (0.7.0 schaltete die Ausgänge aus und ein – am Gerät sichtbar als dauerndes An/Aus.)
+   */
+  function amplitudeBefehle(e, null_, gx = false) {
+    return [0, 1].map(k => {
+      const o = k ? e.out2 : e.out1, v = null_ ? 0 : gx ? GX.begrenzt(o.amp, o.offset) : o.amp;
+      return [`Amplitude Out${k + 1} ${+v.toFixed(2)} V`, gx ? GX.amplitude(k, v) : Befehl.amplitude(k, v)];
+    });
+  }
+
   /** Ausgänge passend zum Schritt ein- oder ausschalten (Pause = aus). */
   function ausgangBefehle(ein, zustand) {
     const b = [];
@@ -699,7 +712,7 @@
   const Kern = {
     STANDARD_DWELL, MW_LUECKE, lesePresets, baueKatalog, loeseBasis, einstellungen, leseFrequenzzeile, programmeAusPreset,
     inBereich, erstellePlan, frequenzenBei, taktBei, wobbleAus, wobbleFaktor, Befehl, welleZuWerten, leseWellenCsv, findeWelle, einrichtung,
-    frequenzBefehle, ausgangBefehle, neuerZustand, GX, gxEinrichtung, gxFrequenzBefehle, gxAusgangBefehle, gxWarnungen, gxWerte,
+    frequenzBefehle, ausgangBefehle, amplitudeBefehle, neuerZustand, GX, gxEinrichtung, gxFrequenzBefehle, gxAusgangBefehle, gxWarnungen, gxWerte,
     lesePresetAngabe, finderDaten, finderKatalog, deuteListenZeile, sauber, zeitmarke,
     kontrolleEintraege, kontrolleZeile, leseKontrolle, kontrolleHeute, datumText,
   };
