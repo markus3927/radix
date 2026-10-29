@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.7.5';
+const VERSION = '0.7.6';
 const $ = (s, el = document) => el.querySelector(s);
 const K = window.Kern;
 const SPEICHER = 'radix-generatoren-v2';   // { zuordnung: [Nummer je Anschluss], gen: { Nummer: Einstellungen } }
@@ -520,6 +520,14 @@ function bereiteListeVor(text, standardPreset) {
   return { items, einst, plan: { schritte, gesamtSek: schritte.reduce((a, s) => a + s.sek, 0) }, warnungen, blockiert };
 }
 
+// ------------------------------------------------------------------ Farbe je Programm (0.7.6)
+/** k = Killing (rot), h = Healing/übrige (blau), m = Preset-Programm oder MW (grün). Gilt für Leiste, Preset-Anzeige,
+ *  Laufschrift und Vorschau. it = Eintrag der Programmliste, e = Einstellungen des Presets, s = laufender Schritt. */
+function farbArt(it, e, s) {
+  if ((it && it.r && it.r.art === 'preset') || (s && s.mw) || (e && e.mwFaktor > 0)) return 'm';
+  return /killing/i.test((e && e.name) || (it && it.preset) || '') ? 'k' : 'h';
+}
+
 // ------------------------------------------------------------------ Generator
 const generatoren = [];
 // Einstellungen gehören zur Generator-Nummer (= Kontrollblatt), nicht zum COM-Anschluss: nach einem Neustart kann Windows
@@ -767,11 +775,11 @@ class Generator {
     $('#generatoren').appendChild(k);
     this.zeigeEinst();
   }
-  /** Laufendes Preset gross im Kartenkopf (rot = Killing, grün = übrige); leer = Generator steht. */
-  zeigePreset(name, wechsel = false) {
+  /** Laufendes Preset gross im Kartenkopf (rot = Killing, blau = Healing, grün = Preset/MW); leer = Generator steht. */
+  zeigePreset(name, wechsel = false, art = null) {
     const el = $('.preset-aktiv', this.karte);
     el.textContent = name ? (wechsel ? '→ ' : '') + name : '';
-    el.className = 'preset-aktiv' + (name ? (/killing/i.test(name) ? ' k' : ' h') : '') + (wechsel ? ' wechsel' : '');
+    el.className = 'preset-aktiv' + (name ? ' ' + (art || (/killing/i.test(name) ? 'k' : 'h')) : '') + (wechsel ? ' wechsel' : '');
     el.title = name ? (wechsel ? 'Generator wird umgestellt auf ' : 'Laufendes Preset: ') + name : '';
   }
   setzeStatus(text, art = '') { const s = $('.status', this.karte); s.textContent = text; s.className = 'status ' + art; }
@@ -1117,7 +1125,8 @@ class Generator {
         ? ` <button class="ghost klein wechsel" data-z="${it.zeilenNr}" data-v="${andere}" title="Dieses Programm als ${andere} spielen">→ ${andere}</button>` : '';
       const kannDual = !it.fehler && i > aktPi && daten.geladen && (it.dual || (it.preset && !/\(dual\)/i.test(it.preset) && dualPreset(it.preset)));
       const dualKnopf = kannDual ? ` <button class="ghost klein dual${it.dual ? ' an' : ''}" data-dual="${it.zeilenNr}" title="${it.dual ? 'Zurück auf das Preset ohne Dual' : 'Dieses Programm im Dual-Modus spielen (Out2 spielt jeweils die nächste Frequenz)'}">${it.dual ? 'Dual aus' : 'Dual'}</button>` : '';
-      const preset = it.preset ? `<b class="${/killing/i.test(it.preset) ? 'k' : 'h'}">${esc(it.preset)}</b>` : '';
+      const ie = it.preset ? anzeigen.einst.find(x => x.key === it.preset) : null;
+      const preset = it.preset ? `<b class="${farbArt(it, ie && ie.e)}">${esc(it.preset)}</b>` : '';
       const wob = it.wobble ? ` · <span class="w" title="Frequency Wobble, Dreieck ${it.wobble.stufen} Stufen, ${it.wobble.hz} Stufen/s – am Gerät noch nicht gegen Spooky2 geprüft">Wobble ${String(it.wobble.prozent).replace('.', ',')} % (vorläufig)</span>` : '';
       const wahl = /NF oder HF/.test(it.fehler || '') ? ` <button class="ghost klein" data-z="${it.zeilenNr}" data-v="NF">NF</button> <button class="ghost klein" data-z="${it.zeilenNr}" data-v="HF">HF</button>` : '';
       const hinweis = it.fehler ? esc(it.fehler) + wahl : (it.warnungen || []).filter(x => !NICHT_UNTERSTUETZT.test(x)).map(esc).join(' · ');
@@ -1291,7 +1300,8 @@ class Generator {
       let ei = s[l.schritt].ei;
       if (s[l.schritt].pause) { const n = s.slice(l.schritt).find(x => !x.pause) || s.find(x => !x.pause); if (n) ei = n.ei; }
       const ein = l.einst[ei], key = ein.key;
-      this.zeigePreset(ein.e.name, true);
+      const fs = s.slice(l.schritt).find(x => !x.pause && x.ei === ei) || s[l.schritt], fArt = farbArt(l.items[fs.pi], ein.e, fs);
+      this.zeigePreset(ein.e.name, true, fArt);
       this.setzeStatus(`Generator wird eingerichtet: ${ein.e.name || 'Preset'} …`);
       if (!this.verbunden || !this.leitung.offen) {
         if (this.gx) { if (!(await this.verbindeGX())) throw new Error(this.gxGrund || 'GX Pro nicht bereit'); }
@@ -1301,7 +1311,7 @@ class Generator {
       await this.sende(this.gx ? K.gxEinrichtung(ein.e, daten.wellen, `RADIX ${this.einst.nr} - ${ein.e.name}`) : K.einrichtung(ein.e, daten.wellen));
       if (!this.lauf) return;
       l.aktivEi = l.einst.findIndex(x => x.key === key);
-      this.zeigePreset(ein.e.name);
+      this.zeigePreset(ein.e.name, false, fArt);
       this.log(`Preset aktiv: ${ein.e.name}`);
       l.status = 'laeuft';
       speichereAlle();
@@ -1335,7 +1345,10 @@ class Generator {
     this.leise = !neu || s.mw;                   // Wobble-, Sweep- und MW-Schritte nicht einzeln protokollieren
     try { if (b.length) await this.sende(b); } finally { this.leise = false; }
     if (neu) {
-      if (s.pi !== l.aktivPi) { l.aktivPi = s.pi; const it = l.items[s.pi]; this.log(`Programm ${s.pi + 1}/${l.items.length}: ${it.code} ${it.name}`); this.markiereAktiv(); }
+      if (s.pi !== l.aktivPi) {
+        l.aktivPi = s.pi; const it = l.items[s.pi]; this.log(`Programm ${s.pi + 1}/${l.items.length}: ${it.code} ${it.name}`); this.markiereAktiv();
+        const ein = l.einst[l.aktivEi]; if (ein && !s.marke) this.zeigePreset(ein.e.name, false, farbArt(it, ein.e, s));   // 0.7.6: Farbe folgt dem Programm
+      }
       if (!s.mw) this.log(s.marke ? `Schritt ${l.schritt + 1}/${l.plan.schritte.length}: Ausgänge aus, warten bis ${fmtUhr(s.zeitMs)}` : `Schritt ${l.schritt + 1}/${l.plan.schritte.length}: ${s.pause ? 'Pause' : `${fmtHz(l.f1)} / ${fmtHz(l.f2)}`} für ${s.sek} s`);
     }
   }
@@ -1443,7 +1456,8 @@ class Generator {
     const vorher = l.plan.schritte.slice(0, l.schritt).reduce((a, x) => a + x.sek, 0) + l.tImSchritt;
     const rest = l.plan.gesamtSek - vorher + (l.durchlaeufe ? (l.durchlaeufe - l.durchlauf) * l.plan.gesamtSek : 0);
     const was = s.luecke && l.f1 != null ? `Out1 ${fmtHz(l.f1)} · Out2 ${fmtHz(l.f2)}` : s.pause ? 'Pause (0 V, Ausgänge an)' : `Out1 ${fmtHz(l.f1)} · Out2 ${fmtHz(l.f2)}`;   // MW-Lücke: Anzeige bleibt ruhig
-    this.setzeStatus(`${it.code} · ${was} · Programm ${s.pi + 1}/${l.items.length} · Durchlauf ${l.durchlauf}${l.durchlaeufe ? '/' + l.durchlaeufe : ''} · ${l.durchlaeufe ? 'noch ' + fmtZeit(rest) : 'endlos'}`, 'ok');
+    const ein = l.einst[s.ei ?? l.aktivEi];
+    this.setzeStatus(`${it.code} · ${was} · Programm ${s.pi + 1}/${l.items.length} · Durchlauf ${l.durchlauf}${l.durchlaeufe ? '/' + l.durchlaeufe : ''} · ${l.durchlaeufe ? 'noch ' + fmtZeit(rest) : 'endlos'}`, 'ok lauf-' + farbArt(it, ein && ein.e, s));   // 0.7.6: Laufschrift rot/blau/grün
     $('.balken > div', this.karte).style.width = `${Math.min(100, vorher / l.plan.gesamtSek * 100)}%`;
   }
 
@@ -1476,7 +1490,7 @@ class Generator {
 // ------------------------------------------------------------------ Übersicht: ein Knopf pro Generator im Kopf
 const zahl = (g) => parseInt(g.einst.nr, 10) || 0;
 
-/** Zustand für die Leiste: k = Killing läuft, h = übriges Preset läuft, w = wartet/stellt um, f = Fehler, '' = steht. */
+/** Zustand für die Leiste: k = Killing läuft, h = Healing läuft, m = Preset-Programm/MW läuft, w = wartet/stellt um, f = Fehler, '' = steht. */
 function zustand(g) {
   const l = g.lauf, st = $('.status', g.karte);
   if (l) {
@@ -1484,7 +1498,7 @@ function zustand(g) {
     const st = l.plan.schritte[l.schritt];
     if (st && st.marke) return { art: 'w', text: `wartet bis ${st.um}` };
     const e = l.einst[l.aktivEi], name = e ? e.e.name : '';
-    return { art: /killing/i.test(name) ? 'k' : 'h', text: `läuft · ${name}` };
+    return { art: farbArt(st && l.items[st.pi], e && e.e, st), text: `läuft · ${name}` };
   }
   if (g.gx && !st.classList.contains('fehler') && !g.imTest) return { art: 'x', text: 'GeneratorX Pro – bereit, Anschluss frei (verbindet beim Start)' };
   if (st.classList.contains('fehler') && g.aus && !g.laufFehler) return { art: 'aus', text: 'aus (ausgeschaltet oder ohne Strom) – verbindet von selbst, sobald er eingeschaltet ist' };
@@ -1514,7 +1528,7 @@ function aktualisiereLeiste() {
   leistenStand = stand;
   nav.hidden = liste.length < 1;
   nav.innerHTML = '<div class="nummern">' + liste.map(x => `<button class="lg ${x.art}${x.nr === aktiv ? ' aktiv' : ''}${x.nr === gz ? ' gezeigt' : ''}" data-nr="${x.nr}" title="${esc(x.titel)}"${x.art === 'fehlt' ? ' disabled' : ''}>${x.nr}</button>`).join('') + '</div>' +
-    `<span class="legende">rot Killing · blau Healing · gelb stellt um oder wartet · weiss steht · blass aus · orange umrandet Störung · grau gestrichelt GX Pro bereit (Anschluss frei)</span>`;
+    `<span class="legende">rot Killing · blau Healing · grün Preset/MW · gelb stellt um oder wartet · weiss steht · blass aus · orange umrandet Störung · grau gestrichelt GX Pro bereit (Anschluss frei)</span>`;
   setzeKopfHoehe();
 }
 

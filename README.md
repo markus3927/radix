@@ -54,6 +54,11 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.7.6 (Brücke bleibt 1.2.1) – Farbe je Programm
+- Rot = Killing, blau = Healing, **grün = Preset-Programm oder MW** (z. B. Peptide «Dry Mouth (R)», MW-Presets). Gilt überall gleich: Knopf in der Leiste (pastell, kräftiger Rand), Preset-Anzeige, Laufschrift unter den Einstellungen und Preset-Name in der Vorschau. Wechselt das Programm, wechselt die Farbe mit.
+- «Start» pastellgrün mit kräftigem grünem Rand. Legende «… grün Preset/MW …».
+- Nur Aussehen, Ablauf unverändert. Test v076_test.py (23 Prüfungen) grün.
+
 ## Stand Version 0.7.5 (Brücke bleibt 1.2.1) – Farben Leiste und Knöpfe
 - Leiste: Killing pastellrot mit kräftig rotem Rand, Healing pastell-royalblau mit kräftig blauem Rand – heben sich vom blauen Kopf und vom Stopp-Knopf ab.
 - Störung (GX gesperrt, belegt, Lauf abgebrochen) jetzt **orange** umrandet statt rot, damit sie nicht wie Killing aussieht. Legende angepasst.

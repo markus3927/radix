@@ -14,7 +14,7 @@
     --royal:#1565C0; --royal-dark:#0D3E6A; --royal-deep:#082A4A; --royal-light:#E3EEF9; --royal-soft:#F2F7FC;
     --logo:#2552AE; --bg:#EEF3F8; --page:#FFFFFF; --text:#22303C; --text-light:#5A6A7A; --divider:#D6E0EA;
     --ok:#1565C0; --ok-bg:#E3EEF9; --rot:#C62828; --rot-bg:#FDECEA; --gold:#9A6A00; --gold-bg:#FFF6DD;
-    --kill:#C8102E; --heal:#2B52CE;   /* wie im Kontrollblatt: Killing rot, Healing blau */
+    --kill:#C8102E; --heal:#2B52CE; --mw:#1B7F3B;   /* wie im Kontrollblatt: Killing rot, Healing blau */
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 "Segoe UI",system-ui,-apple-system,sans-serif}
@@ -51,11 +51,11 @@
     box-shadow:0 3px 0 #9DBBE0,0 5px 10px rgba(8,42,74,.12),inset 0 1px 0 #fff}
   button.stop:hover:not(:disabled){background:linear-gradient(180deg,#FFF5F5 0%,#FDECEA 100%);color:#9E1B1B}
   button.stop:active:not(:disabled){box-shadow:0 0 0 #9DBBE0,0 2px 4px rgba(8,42,74,.12)}
-  /* 0.7.5: Start pastell-royalblau mit kräftigem blauem Rand, wie Healing in der Leiste */
-  button.btn-start{color:#0B2470;border:2px solid #4D8BFF;background:linear-gradient(180deg,#DCE5FF 0%,#C9D6FF 100%);
-    box-shadow:0 3px 0 #2A5FD0,0 5px 10px rgba(8,42,74,.18),inset 0 1px 0 rgba(255,255,255,.6)}
-  button.btn-start:hover:not(:disabled){background:linear-gradient(180deg,#CBD8FF 0%,#B4C6FF 100%);color:#0B2470}
-  button.btn-start:active:not(:disabled){box-shadow:0 0 0 #2A5FD0,0 2px 4px rgba(8,42,74,.18)}
+  /* 0.7.6: Start pastellgrün mit kräftigem grünem Rand */
+  button.btn-start{color:#0B4A1E;border:2px solid #1FAE4B;background:linear-gradient(180deg,#E2F7E8 0%,#C8EFD2 100%);
+    box-shadow:0 3px 0 #127A33,0 5px 10px rgba(8,42,74,.18),inset 0 1px 0 rgba(255,255,255,.6)}
+  button.btn-start:hover:not(:disabled){background:linear-gradient(180deg,#CDEFD7 0%,#B2E6C0 100%);color:#0B4A1E}
+  button.btn-start:active:not(:disabled){box-shadow:0 0 0 #127A33,0 2px 4px rgba(8,42,74,.18)}
   header button.ghost{border-color:#fff;box-shadow:0 3px 0 #0F1F5C,0 5px 10px rgba(0,0,0,.25),inset 0 1px 0 #fff}
   header button.ghost:active:not(:disabled){box-shadow:0 0 0 #0F1F5C}
   header button.stop{border-color:#fff;box-shadow:0 3px 0 #0F1F5C,0 5px 10px rgba(0,0,0,.25),inset 0 1px 0 #fff}
@@ -82,6 +82,7 @@
   /* 0.7.5: Killing pastellrot / Healing pastell-royalblau, je kräftig umrandet (heben sich von Leiste und Stopp ab) */
   #leiste button.lg.k{background:#FFC2C2;border:2px solid #FF1030;color:#7A0016;box-shadow:0 2px 0 #B0001C}
   #leiste button.lg.h{background:#C9D6FF;border:2px solid #4D8BFF;color:#0B2470;box-shadow:0 2px 0 #2A5FD0}
+  #leiste button.lg.m{background:#C8EFD2;border:2px solid #1FAE4B;color:#0B4A1E;box-shadow:0 2px 0 #127A33}   /* 0.7.6: Preset-Programm / MW grün */
   #leiste button.lg.w{background:#FFD966;border-color:#9A6A00;color:#5A3E00;box-shadow:0 2px 0 #9A6A00}
   #leiste button.lg.f{background:#fff;border:2px solid #FF9800;color:#B35C00;box-shadow:0 2px 0 #C46F00}   /* 0.7.5: Störung orange (rot = Killing) */
   header .info.ok{background:#2E7D32;color:#fff} header .info.fehler{background:#C62828;color:#fff}
@@ -130,7 +131,7 @@
   .preset-aktiv{font-size:15px;font-weight:700;border-radius:8px;padding:5px 10px;overflow-wrap:anywhere}
   .preset-aktiv::before{content:'Preset: ';font-weight:400;font-size:13px;opacity:.8}
   .preset-aktiv:empty{display:none}
-  .preset-aktiv.k{background:#FBE3E6;color:var(--kill)} .preset-aktiv.h{background:var(--ok-bg);color:var(--heal)}
+  .preset-aktiv.k{background:#FBE3E6;color:var(--kill)} .preset-aktiv.h{background:var(--ok-bg);color:var(--heal)} .preset-aktiv.m{background:#E3F4E8;color:var(--mw)}
   .preset-aktiv.wechsel{background:var(--gold-bg);color:var(--gold)}
   label.auto{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--royal-dark);margin:0;cursor:pointer}
   label.auto input{width:auto;margin:0}
@@ -171,14 +172,14 @@
   .vorschau .zeit{color:var(--text-light);text-align:right}
   .vorschau .pinfo{grid-column:2/4;color:var(--text-light);font-size:12px}
   .vorschau .pinfo b{font-weight:600}
-  .vorschau .pinfo .k{color:var(--kill)} .vorschau .pinfo .h{color:var(--heal)}
+  .vorschau .pinfo .k{color:var(--kill)} .vorschau .pinfo .h{color:var(--heal)} .vorschau .pinfo .m{color:var(--mw)}
   .vorschau .pinfo .w{color:var(--gold)}
   .zusammenfassung{font-size:12.5px;color:var(--text-light)}
   .warnungen{font-size:12.5px;color:var(--rot);background:var(--rot-bg);border-radius:6px;padding:5px 8px}
   .warnungen:empty{display:none}
   .warnungen.ok{color:var(--royal-dark);background:var(--royal-light)}
   .status{font-size:13.5px;font-weight:600;min-height:20px;color:var(--royal-dark);overflow-wrap:anywhere}
-  .status.ok{color:var(--ok)} .status.fehler{color:var(--rot)} .status.warnung{color:var(--gold)}
+  .status.ok{color:var(--ok)} .status.lauf-k{color:var(--kill)} .status.lauf-h{color:var(--heal)} .status.lauf-m{color:var(--mw)}   /* 0.7.6: Laufschrift in der Farbe des Programms */ .status.fehler{color:var(--rot)} .status.warnung{color:var(--gold)}
   .gen.laeuft .status{min-height:2.9em}   /* 0.7.3: im Lauf zwei Zeilen fest, damit darunter nichts hüpft */
   .balken{height:6px;background:var(--royal-light);border-radius:3px;overflow:hidden}
   .balken > div{height:100%;width:0;background:var(--royal);transition:width .25s}
