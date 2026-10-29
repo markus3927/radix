@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.7.3';
+const VERSION = '0.7.4';
 const $ = (s, el = document) => el.querySelector(s);
 const K = window.Kern;
 const SPEICHER = 'radix-generatoren-v2';   // { zuordnung: [Nummer je Anschluss], gen: { Nummer: Einstellungen } }
@@ -568,12 +568,16 @@ class Generator {
     this.protokoll = [];
     this.neue = [];
     this.verbunden = false;                                                 // Generator hat auf einen Befehl geantwortet
+    this.aus = false;                                                       // antwortet nicht / USB weg: ausgeschaltet (Leiste blass, nicht rot)
+    this.laufFehler = false;                                                // Lauf mit Fehler abgebrochen: bleibt rot, bis er wieder verbunden ist
     this.verbindet = null;                                                  // laufende Verbindungsprüfung (Promise)
     this.baueKarte();
   }
 
   /** Verbindungszustand im Chip neben dem Namen: ✓ verbunden, … prüft, ✗ keine Verbindung. */
   zeigeVerbindung(art, text = '') {
+    if (art === 'ok') { this.aus = false; this.laufFehler = false; }
+    else if (art === 'fehler') this.aus = text === 'keine Antwort' || text === 'getrennt';
     const c = $('.chip', this.karte);
     c.textContent = `${this.chipTyp} ${art === 'ok' ? '✓' : art === 'pruefe' ? '…' : '✗'}${text ? ' ' + text : ''}`;
     c.className = 'chip ' + art;
@@ -1446,6 +1450,7 @@ class Generator {
   async stoppe(grund, fehler = false) {
     const l = this.lauf;
     this.lauf = null;
+    if (fehler) this.laufFehler = true;
     if (l && l.status !== 'wartet' && (!this.gx || this.verbunden)) {   // GX nicht verbunden (gesperrt): nichts senden, Anschluss bleibt zu
       try { await this.sende(this.ausBefehle()); } catch (e) { /* Gerät weg */ }
     }
@@ -1482,6 +1487,7 @@ function zustand(g) {
     return { art: /killing/i.test(name) ? 'k' : 'h', text: `läuft · ${name}` };
   }
   if (g.gx && !st.classList.contains('fehler') && !g.imTest) return { art: 'x', text: 'GeneratorX Pro – bereit, Anschluss frei (verbindet beim Start)' };
+  if (st.classList.contains('fehler') && g.aus && !g.laufFehler) return { art: 'aus', text: 'aus (ausgeschaltet oder ohne Strom) – verbindet von selbst, sobald er eingeschaltet ist' };
   if (st.classList.contains('fehler')) return { art: 'f', text: st.textContent };
   return { art: '', text: st.textContent || 'steht' };
 }
@@ -1498,7 +1504,7 @@ function aktualisiereLeiste() {
   // nichts herumspringt und man sieht, welche noch fehlen
   if (modus === 'bruecke') {
     const da = new Set(liste.map(x => x.nr));
-    for (let n = 1; n <= hoechsteNummer(); n++) if (!da.has(n)) liste.push({ nr: n, art: 'fehlt', titel: `Generator ${n}: noch nicht gemeldet – wartet auf Anschluss (Strom, USB-Kabel, Hub?)` });
+    for (let n = 1; n <= hoechsteNummer(); n++) if (!da.has(n)) liste.push({ nr: n, art: 'fehlt', titel: `Generator ${n}: aus (ausgeschaltet oder USB getrennt) – erscheint von selbst, sobald er eingeschaltet ist` });
     liste.sort((a, b) => a.nr - b.nr);
   }
   for (const g of generatoren) g.karte.style.order = zahl(g);          // Karten nach Nummer sortiert
@@ -1508,7 +1514,7 @@ function aktualisiereLeiste() {
   leistenStand = stand;
   nav.hidden = liste.length < 1;
   nav.innerHTML = '<div class="nummern">' + liste.map(x => `<button class="lg ${x.art}${x.nr === aktiv ? ' aktiv' : ''}${x.nr === gz ? ' gezeigt' : ''}" data-nr="${x.nr}" title="${esc(x.titel)}"${x.art === 'fehlt' ? ' disabled' : ''}>${x.nr}</button>`).join('') + '</div>' +
-    `<span class="legende">rot Killing · blau Healing · gelb stellt um oder wartet · weiss steht · rot umrandet keine Verbindung · grau gestrichelt GX Pro bereit (Anschluss frei)${modus === 'bruecke' ? ' · blass noch nicht da' : ''}</span>`;
+    `<span class="legende">rot Killing · blau Healing · gelb stellt um oder wartet · weiss steht · blass aus · rot umrandet Störung · grau gestrichelt GX Pro bereit (Anschluss frei)</span>`;
   setzeKopfHoehe();
 }
 

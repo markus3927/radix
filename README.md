@@ -54,6 +54,11 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.7.4 (Brücke bleibt 1.2.1) – ausgeschaltete Generatoren einheitlich blass
+- Leiste: Ein ausgeschalteter Generator ist blass gestrichelt («aus»), egal ob Windows seinen USB-Anschluss noch sieht (XM ohne Strom, Chip am USB) oder gar nicht. Bisher war der erste Fall rot umrandet.
+- Rot umrandet heisst jetzt nur noch Störung: GX gesperrt, Anschluss belegt, Lauf mit Fehler abgebrochen (Verbindung verloren). Bleibt rot, bis er wieder verbunden ist.
+- Einschalten genügt: wird von selbst bzw. mit «Testen» wieder weiss. Test v074_test.py (15 Prüfungen) und alle bisherigen Tests grün.
+
 ## Stand Version 0.7.3 (Brücke bleibt 1.2.1) – Pausen wie Spooky2, ruhige Anzeige
 - **Pausen** (`0=4` in Peptiden, pa15–pa60, `0=…` in eigenen Zeilen): Ausgänge bleiben an, nur die Spannung ist 0 V – wie Spooky2 (Mitschnitt: Spooky2 schaltet die Ausgänge nur bei Start und Stopp). Beim Warten auf eine Startzeit («um 6.00») bleiben die Ausgänge aus
 - **Anzeige hüpft nicht mehr:** Statuszeile im Lauf fest zwei Zeilen hoch, in der MW-Lücke bleibt die Frequenzanzeige stehen
