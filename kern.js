@@ -129,6 +129,7 @@
       warnungen.push(`Out2 hat ${w2.length} Wellenformen gleichzeitig (noch nicht unterstützt)`);
     } else if (w1[0]) {
       if (wahr(p.Out2_Follow_Out1_Wave) || wahr(p.Follow_Out1_Wave)) welle2 = { ...w1[0] };
+      else if (wahr(p.InverseWave) && zahl(p.Force_MW_to_Hz_Factor) > 0) { w1[0] = { ...w1[0], negiert: true }; welle2 = { ...w1[0], invertiert: true }; }   // MW-Presets: Spooky2 dreht schon Out1 um, Out2 = Inverse davon (Mitschnitt 29.10.2026)
       else if (wahr(p.InverseWave)) welle2 = { ...w1[0], invertiert: true };
       else { welle2 = { ...w1[0] }; warnungen.push('Out2 ohne eigene Wellenform, nehme Out1'); }
     }
@@ -216,10 +217,13 @@
       .map((z, i) => ({ name: (namen[i] || `Programm ${i + 1}`).trim(), eintraege: leseFrequenzzeile(z) }));
   }
 
+  /** Lücke vor jedem Schritt eines MW-Programms (Spooky2-Mitschnitt 29.10.2026: 1 s an, 0,28 s 0 V). */
+  const MW_LUECKE = 0.28;
+
   /** Frequenz in den erlaubten Bereich bringen (Spooky2: durch Oktaven oder ungerade Zahlen teilen). */
   function inBereich(hz, maxHz, teilung) {
     if (!maxHz || hz <= maxHz) return hz;
-    if (teilung === 'Odd') { let n = 3; while (hz / n > maxHz) n += 2; return hz / n; }
+    if (teilung === 'Odd') { let f = hz; while (f > maxHz) f /= 3; return f; }   // Spooky2 «Odd»: durch 3, 9, 27 … (Mitschnitt MW 29.10.2026)
     let f = hz; while (f > maxHz) f /= 2; return f;
   }
 
@@ -247,8 +251,10 @@
     for (const prog of programme) {
       // ein Programm, Wiederholungen ausgeschrieben
       const liste = [];
-      for (const x of prog.eintraege) {
-        if (x.art === 'mw' || x.art === 'unbekannt') { ungenutzt.add(x.art === 'mw' ? 'MW-Frequenzen (M…) noch nicht unterstützt' : `Unbekannter Eintrag «${x.text}»`); continue; }
+      const mitMW = e.mwFaktor > 0 && prog.eintraege.some(x => x.art === 'mw');
+      for (let x of prog.eintraege) {
+        if (x.art === 'mw' && e.mwFaktor > 0) x = { ...x, art: 'hz', hz: x.da * e.mwFaktor, mw: x.da };   // Molekulargewicht (Da) -> Hz, dann wie jede Frequenz herunterteilen
+        if (x.art === 'mw' || x.art === 'unbekannt') { ungenutzt.add(x.art === 'mw' ? 'MW-Frequenzen (M…) mit diesem Preset nicht unterstützt – MW-Preset wählen (z. B. MW Emulate (R) - JW)' : `Unbekannter Eintrag «${x.text}»`); continue; }
         const sek = (x.standard && e.forceDwell > 0 ? e.forceDwell : x.sek) * e.dwellFaktor;
         for (let r = 0; r < e.wdhFrequenz; r++) liste.push({ ...x, sek });
       }
@@ -256,6 +262,7 @@
         for (let i = 0; i < liste.length; i++) {
           const x = liste[i];
           const text = `${prog.name}`;
+          if (mitMW) schritte.push({ sek: MW_LUECKE, pause: true, luecke: true, text });   // Spooky2: vor jedem Schritt eines MW-Programms 0,28 s 0 V
           if (x.art === 'pause') { schritte.push({ sek: x.sek, pause: true, text }); continue; }
           if (x.art === 'sweep') {
             if (e.out2Modus.art === 'dual') ungenutzt.add('Sweep in Dual-Preset: Out2 läuft gleich wie Out1');
@@ -366,9 +373,15 @@
    * Ergebnis: { art: 'finder', code, programm } | { art: 'zeile', zeile } | { art: 'fehler', text } | null (leer)
    * Versteht auch Zeilen aus dem Kontrollblatt («pr0409<TAB>54min<TAB>Schaufensterkrankheit … - HF (kHz)»).
    */
-  function deuteListenZeile(text, katalog) {
+  function deuteListenZeile(text, katalog, peptide = null) {
     const t = sauber(text).replace(/\s+/g, ' ').trim();
     if (!t || t.startsWith('#')) return null;
+    const pp = t.match(/^pp\s?(\d{1,4})\b/i);                        // 0.7.1: Peptid-Nummer (Peptide-Finder v7) -> JW_Peptides-Preset
+    if (pp) {
+      const code = `pp${pp[1].padStart(4, '0')}`, e = peptide && peptide[code];
+      if (!peptide) return { art: 'fehler', text: 'Peptid-Liste fehlt', code };
+      return e ? { art: 'peptid', code, spooky2: e[0], deutsch: e[1] || '' } : { art: 'fehler', text: `${code} nicht in der Peptid-Liste`, code };
+    }
     const kurz = t.match(/^(pa|sm)\s?(\d{2})\b/i);
     if (kurz) {
       const code = (kurz[1] + kurz[2]).toLowerCase();
@@ -412,7 +425,7 @@
       if (!z.trim()) continue;
       const um = zeitmarke(z);                                          // 0.6.7: «um 6.00» in der Tageszeile -> Zeitmarke
       if (um) { liste.push({ code: 'um', um, text: `um ${um}`, abschnitt }); continue; }
-      const code = z.match(/^\s*(pr\d{4}|pa\d{2}|sm\d{2})\b/i);
+      const code = z.match(/^\s*(pr\d{4}|pp\d{4}|pa\d{2}|sm\d{2})\b/i);
       if (code) { liste.push({ code: code[1].toLowerCase(), text: z.trim(), abschnitt }); continue; }
       if (/^\t\t\t/.test(roh)) { abschnitt = z.trim(); continue; }      // Spartenkopf im Feld «Programme»
       if (/^\t/.test(z) && liste.length) { liste[liste.length - 1].text += ' ' + z.trim(); continue; }
@@ -550,7 +563,7 @@
       const hoch = Math.round(1024 * Math.max(0, Math.min(100, duty)) / 100);
       return Array.from({ length: 1024 }, (_, i) => ((i < hoch) !== welle.invertiert ? 1023 : 0));
     }
-    return welleZuWerten(findeWelle(wellen, welle.datei), welle.invertiert);
+    return tabelleFuer(welle, wellen);
   }
 
   /** Was der GX (noch) nicht kann – zusätzlich zu den allgemeinen Warnungen von einstellungen(). */
@@ -569,7 +582,7 @@
     const syncen = e.out2Modus.art === 'gleich';
     const amp = [e.out1, e.out2].map(o => GX.begrenzt(o.amp, o.offset));
     const ampText = (o, a) => `${+a.toFixed(2)} V${a < o.amp ? ` (Preset ${o.amp} V, wegen Offset ${o.offset} % begrenzt)` : ''}`;
-    const welleText = (w) => `${w.datei}${w.invertiert ? ' gespiegelt' : ''}${w.typ === 'Square' && e.duty !== 50 ? ` Duty ${e.duty} %` : ''}`;
+    const welleText = (w) => `${w.datei}${w.negiert ? ' umgedreht (MW)' : ''}${w.invertiert ? ' gespiegelt' : ''}${w.typ === 'Square' && e.duty !== 50 ? ` Duty ${e.duty} %` : ''}`;
     return [
       ['Ausgänge aus', GX.ausgaenge(0, 0)],
       ['Frequenz vorbereiten (w13)', GX.neueFrequenz],
@@ -617,10 +630,15 @@
   }
 
   /** CSV-Werte (-1…+1) -> 0…1023, optional gespiegelt. */
-  function welleZuWerten(csv, invertiert = false) {
+  function welleZuWerten(csv, invertiert = false, negiert = false) {
     if (!csv || csv.length !== 1024) throw new Error(`Wellenform braucht 1024 Werte, hat ${csv ? csv.length : 0}`);
-    return csv.map(x => { const v = Math.max(0, Math.min(1023, Math.round(512 + x * 512))); return invertiert ? 1023 - v : v; });
+    // Wie Spooky2 (Mitschnitte GX 28.10. und XM 29.10.2026, Wert für Wert): 511,5 + 511,5·x gerundet; «Inverse» = 1023 − Wert;
+    // negiert (MW-Presets, Out1 und Out2): x wird vorher umgedreht
+    return csv.map(x => { const v = Math.max(0, Math.min(1023, Math.round(511.5 + (negiert ? -x : x) * 511.5))); return invertiert ? 1023 - v : v; });
   }
+  const tabelleFuer = (welle, wellen) => welleZuWerten(findeWelle(wellen, welle.datei), welle.invertiert, welle.negiert);
+
+  const welleText = (w) => `${w.datei}${w.negiert ? ' umgedreht (MW)' : ''}${w.invertiert ? ' gespiegelt' : ''}`;
 
   /** CSV-Text einer Wellenform-Datei -> Zahlen. */
   function leseWellenCsv(text) { return String(text).split(/[\s,;]+/).filter(Boolean).map(Number); }
@@ -633,8 +651,8 @@
     const b = [
       ['Ausgang 1 aus', Befehl.ausgang(0, false)],
       ['Ausgang 2 aus', Befehl.ausgang(1, false)],
-      [`Wellenform Out1 ${e.out1.welle.datei}${e.out1.welle.invertiert ? ' gespiegelt' : ''}`, Befehl.eigeneWelle(0, welleZuWerten(findeWelle(wellen, e.out1.welle.datei), e.out1.welle.invertiert)), 5000],
-      [`Wellenform Out2 ${e.out2.welle.datei}${e.out2.welle.invertiert ? ' gespiegelt' : ''}`, Befehl.eigeneWelle(1, welleZuWerten(findeWelle(wellen, e.out2.welle.datei), e.out2.welle.invertiert)), 5000],
+      [`Wellenform Out1 ${welleText(e.out1.welle)}`, Befehl.eigeneWelle(0, tabelleFuer(e.out1.welle, wellen)), 5000],
+      [`Wellenform Out2 ${welleText(e.out2.welle)}`, Befehl.eigeneWelle(1, tabelleFuer(e.out2.welle, wellen)), 5000],
       ['Out1 auf eigene Wellenform', Befehl.wellenform(0, 101)],
       ['Out2 auf eigene Wellenform', Befehl.wellenform(1, 102)],
       [`Amplitude Out1 ${e.out1.amp} V`, Befehl.amplitude(0, e.out1.amp)],
@@ -679,7 +697,7 @@
   }
 
   const Kern = {
-    STANDARD_DWELL, lesePresets, baueKatalog, loeseBasis, einstellungen, leseFrequenzzeile, programmeAusPreset,
+    STANDARD_DWELL, MW_LUECKE, lesePresets, baueKatalog, loeseBasis, einstellungen, leseFrequenzzeile, programmeAusPreset,
     inBereich, erstellePlan, frequenzenBei, taktBei, wobbleAus, wobbleFaktor, Befehl, welleZuWerten, leseWellenCsv, findeWelle, einrichtung,
     frequenzBefehle, ausgangBefehle, neuerZustand, GX, gxEinrichtung, gxFrequenzBefehle, gxAusgangBefehle, gxWarnungen, gxWerte,
     lesePresetAngabe, finderDaten, finderKatalog, deuteListenZeile, sauber, zeitmarke,

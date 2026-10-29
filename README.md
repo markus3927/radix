@@ -54,6 +54,38 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.7.1 (Brücke bleibt 1.2.1) – Peptid-Nummern pp0001–pp1513
+- **pp-Nummern** aus dem Peptide-Finder v7 / Kontrollblatt R361 laufen wie pr-Nummern: eintippen (`pp0004`, `pp4`), Doppelklick im Kontrollblatt, «Heute/Morgen aus Kontrollblatt», «Programme des Kunden»
+- RADIX ordnet die Nummer dem Spooky2-Preset zu (pp0004 → «Acid Reflux (R)» aus `C:\Spooky2\Preset Collections\JW_Peptides`) und spielt dessen Programme mit der MW-Umrechnung aus 0.7.0. Preset kommt automatisch mit
+- Neue Datei **`peptide.js`** (Liste der 1513 Nummern, fest). Neue Peptide bekommen im Finder die nächste Nummer – dann `peptide.js` ergänzen
+- Meldungen: «pp9999 nicht in der Peptid-Liste», «Peptid-Preset «…(R)» nicht im Spooky2-Ordner»
+
+## Stand Version 0.7.0 (Brücke bleibt 1.2.1) – MW-Programme (Peptide, MW Emulate)
+- **MW-Frequenzen (`M113.084` …) laufen jetzt**, mit jedem Preset, das einen MW-Faktor hat (Peptid-Presets, MW Emulate, Protein, MW Remove, DNA, Killing Low Freq). Regel aus dem Spooky2-Mitschnitt vom 29.10.2026, alle 165 gemessenen Schritte stimmen auf 0,01 Hz:
+  - Hz = Dalton × 2,2523430883 × 10²³
+  - Out1 («Odd»): durch 3, 9, 27 … bis unter 5 MHz · Out2 («Octave»): durch 2, 4, 8 … bis unter 5 MHz
+  - jede Aminosäure 1 s, vor jedem Schritt 0,28 s 0 V (wie Spooky2), `0=4` = 4 s Pause
+  - Wellenform bei MW-Presets wie Spooky2: Out1 umgedreht, Out2 die Inverse davon
+- **Preset-Name als Zeile:** `Adenoiditis (R)` in die Programmliste schreiben → RADIX spielt die Programme dieses Spooky2-Presets mit dessen Einstellungen (wie Spooky2)
+- MW-Zeile mit einem Preset ohne MW-Faktor (z. B. Healing): Start gesperrt, Hinweis «MW-Preset wählen»
+- **Wellentabellen jetzt genau wie Spooky2** (511,5 + 511,5 × Wert, «Inverse» = 1023 − Wert): die GX-Tabellen aus dem Mitschnitt vom 28.10. stimmen Wert für Wert (vorher ±1)
+- «Odd» bedeutet bei Spooky2 «durch 3 teilen» (nicht 3, 5, 7 …). Betrifft nur Frequenzen über 5 MHz, also praktisch nur MW
+- Am Gerät noch nicht geprüft: MW auf den GX (1, 2, 23, 24)
+
+## Stand Version 0.6.9 (Brücke bleibt 1.2.1) – Dual pro Programm, frischer Tag, Kopfleiste
+- **Knopf «Dual»** in der Vorschau bei jedem Programm, zu dessen Preset es eine Dual-Variante gibt (Killing (R) - JW → Killing (Dual) (R) - JW, Healing → Healing (Dual)). In der Liste steht dann `[Dual]` am Zeilenende; «Dual aus» stellt zurück. Auch während dem Lauf für Programme, die noch nicht dran waren. Dual: Out2 spielt jeweils die nächste Frequenz, Laufzeit etwa halb so lang
+- **Nach «Fertig»** (alle Durchläufe gelaufen) leert RADIX die Programmliste und «Start um». Was lief, steht im Protokoll; die Einträge von heute im Kontrollblatt gelten als erledigt. Die Zeile von morgen bleibt offen. Stopp von Hand leert nicht
+- **Kopfleiste:** Nummern in 2 Reihen à 12 mit mehr Abstand, der weisse Rahmen des gewählten Generators berührt die Nachbarn nicht mehr
+- Enthält 0.6.8 (Zeile von morgen aus dem Kontrollblatt)
+
+## Stand Version 0.6.8 (Brücke bleibt 1.2.1) – Zeile von morgen aus dem Kontrollblatt
+- **Doppelklicks in die Zeile von morgen** kommen jetzt auch an, sobald dort zuoberst eine Startzeit steht (`um 6.00`). Ohne Startzeit zuoberst: Hinweis, nichts angehängt
+- Neues von heute kommt in der Programmliste **vor** den Block von morgen (läuft also noch heute)
+- **«Heute aus Kontrollblatt»** bringt die Zeile von heute und die Zeile von morgen (wenn sie mit einer Startzeit beginnt)
+- **«Morgen aus Kontrollblatt»** braucht kein «Start um» mehr, wenn die Zeile von morgen mit einer Startzeit beginnt
+- Tageswechsel: Was gestern schon als «morgen» übernommen wurde, wird heute nicht nochmals angehängt
+- Steht am Listenende eine Startzeit ohne Programm danach, wird sie durch die neue ersetzt (keine doppelte «um 06:00»). Zwei gleiche Startzeiten direkt hintereinander gelten als derselbe Zeitpunkt
+
 ## Stand Version 0.6.7 (Brücke bleibt 1.2.1) – Zeitmarke aus dem Kontrollblatt, Sprung beim Doppelklick
 - **Zeitmarke im Kontrollblatt:** Eine Zeile `um 6.00` (auch `um 06:00`, `ab 6:00`, `um 6.00 Uhr`) in der Tageszeile kommt mit «Heute aus Kontrollblatt», «Morgen aus Kontrollblatt» und dem Doppelklick in die Programmliste. Programme davor laufen sofort, danach wartet der Generator mit Ausgängen aus bis zu dieser Uhrzeit. `6.00` allein ist keine Zeitmarke (wird übergangen)
 - **Doppelklick im Kontrollblatt** springt in RADIX gleich zum Generator dieses Blatts. Andere Änderungen im Kontrollblatt (Notiz usw.) lösen keinen Sprung aus

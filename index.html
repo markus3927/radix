@@ -70,7 +70,7 @@
   body.gescrollt .marke img{height:40px} 
   body.gescrollt .marke b{font-size:19px} body.gescrollt .marke span{font-size:11.5px;margin-top:2px}
   body.gescrollt header button{padding:5px 13px}
-  #leiste{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;padding:8px 12px 9px;background:linear-gradient(180deg,#2c49b3,#182f83);border-bottom:2px solid #42A5F5;box-shadow:0 3px 10px rgba(24,47,131,.3)}
+  #leiste{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;padding:11px 14px 9px;background:linear-gradient(180deg,#2c49b3,#182f83);border-bottom:2px solid #42A5F5;box-shadow:0 3px 10px rgba(24,47,131,.3)}
   #leiste button.lg{min-width:40px;padding:4px 8px;font-size:14px;border-radius:8px;color:var(--royal-dark);background:#fff;border-color:#9DBBE0;box-shadow:0 2px 0 #9DBBE0}
   #leiste button.lg.k{background:var(--kill);border-color:#8E0B20;color:#fff;box-shadow:0 2px 0 #8E0B20}
   #leiste button.lg.h{background:var(--heal);border-color:#1A3690;color:#fff;box-shadow:0 2px 0 #1A3690}
@@ -88,7 +88,7 @@
   .gx-reihe{display:flex;gap:8px;align-items:center}
   .gx-reihe input{flex:1;min-width:0;font-family:ui-monospace,Consolas,monospace}
   #leiste button.lg.aktiv{text-decoration:underline 2px;text-underline-offset:3px}   /* im Kontrollblatt angeklicktes Blatt */
-  #leiste button.lg.gezeigt{outline:3px solid #fff;outline-offset:2px;transform:scale(1.1)}   /* gerade gross angezeigt */
+  #leiste button.lg.gezeigt{outline:3px solid #fff;outline-offset:2px;transform:scale(1.06)}   /* gerade gross angezeigt */
   .chip.ok{background:#E3F2E5;color:#2E7D32} .chip.pruefe{background:var(--gold-bg);color:var(--gold)} .chip.fehler{background:var(--rot-bg);color:var(--rot);font-weight:600}
   .gen-innen{display:flex;flex-direction:column;gap:8px;min-width:0}
   .spalte{display:contents}
@@ -108,6 +108,8 @@
   }
   body.einzel .preset-aktiv{font-size:18px}
   body.einzel .status{font-size:15px}
+  #leiste .nummern{display:grid;grid-template-columns:repeat(12,auto);justify-content:center;gap:14px 15px}   /* 2 Reihen à 12, Abstand für den weissen Rahmen */
+  @media (max-width:720px){#leiste .nummern{grid-template-columns:repeat(8,auto)}}
   #leiste .legende{flex-basis:100%;text-align:center;font-size:11.5px;color:#D6E8F7;margin-top:-1px}   /* eigene Zeile, damit die Nummern mittig stehen */
   .kopf{display:flex;align-items:center;gap:8px;min-width:0}
   .kopf .nr{width:52px;flex:none;font-weight:700;font-size:18px;color:var(--royal-dark);text-align:center;padding:5px 2px}
@@ -134,6 +136,8 @@
   .label-reihe{display:flex;align-items:flex-end;gap:6px;flex-wrap:wrap;margin-bottom:3px}
   .label-reihe label{margin:0;flex:1}
   .vorschau button.wechsel{padding:0 6px;font-size:11.5px;margin-left:4px;vertical-align:baseline}
+  .vorschau button.dual{padding:0 6px;font-size:11.5px;margin-left:4px;vertical-align:baseline}
+  .vorschau button.dual.an{background:var(--kill);border-color:#8E0B20;color:#fff}
   .reihe{display:flex;gap:8px;align-items:flex-end}
   .reihe > div{flex:1;min-width:0}
   .neu{font-size:12.5px;background:var(--gold-bg);color:var(--gold);border-radius:6px;padding:5px 8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -301,6 +305,7 @@
 </footer>
 
 <script src="kern.js"></script>
+<script src="peptide.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
