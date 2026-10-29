@@ -46,13 +46,20 @@
   button.ghost:active:not(:disabled){box-shadow:0 0 0 #9DBBE0,0 2px 4px rgba(8,42,74,.12)}
   button.klein{padding:3px 10px;font-size:12.5px;border-radius:7px;box-shadow:0 2px 0 #9DBBE0,inset 0 1px 0 #fff}
   button.klein:active:not(:disabled){transform:translateY(2px);box-shadow:none}
-  button.stop{border-color:#A61B1B;color:#fff;background:linear-gradient(180deg,#E04848 0%,var(--rot) 55%,#AE1F1F 100%);
-    box-shadow:0 3px 0 #7A1010,0 5px 10px rgba(122,16,16,.25),inset 0 1px 0 rgba(255,255,255,.3)}
-  button.stop:hover:not(:disabled){background:linear-gradient(180deg,#C93434 0%,#9e1f1f 100%)}
-  button.stop:active:not(:disabled){box-shadow:0 0 0 #7A1010,0 2px 4px rgba(122,16,16,.2)}
+  /* 0.7.5: Stopp weiss wie die übrigen Knöpfe, rote Schrift (oben «Alle stoppen» und unten in der Karte gleich) */
+  button.stop{color:var(--rot);border-color:#9DBBE0;background:linear-gradient(180deg,#FFFFFF 0%,#EEF4FB 100%);
+    box-shadow:0 3px 0 #9DBBE0,0 5px 10px rgba(8,42,74,.12),inset 0 1px 0 #fff}
+  button.stop:hover:not(:disabled){background:linear-gradient(180deg,#FFF5F5 0%,#FDECEA 100%);color:#9E1B1B}
+  button.stop:active:not(:disabled){box-shadow:0 0 0 #9DBBE0,0 2px 4px rgba(8,42,74,.12)}
+  /* 0.7.5: Start pastell-royalblau mit kräftigem blauem Rand, wie Healing in der Leiste */
+  button.btn-start{color:#0B2470;border:2px solid #4D8BFF;background:linear-gradient(180deg,#DCE5FF 0%,#C9D6FF 100%);
+    box-shadow:0 3px 0 #2A5FD0,0 5px 10px rgba(8,42,74,.18),inset 0 1px 0 rgba(255,255,255,.6)}
+  button.btn-start:hover:not(:disabled){background:linear-gradient(180deg,#CBD8FF 0%,#B4C6FF 100%);color:#0B2470}
+  button.btn-start:active:not(:disabled){box-shadow:0 0 0 #2A5FD0,0 2px 4px rgba(8,42,74,.18)}
   header button.ghost{border-color:#fff;box-shadow:0 3px 0 #0F1F5C,0 5px 10px rgba(0,0,0,.25),inset 0 1px 0 #fff}
   header button.ghost:active:not(:disabled){box-shadow:0 0 0 #0F1F5C}
-  header button.stop{box-shadow:0 3px 0 #5E0B0B,0 5px 10px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.3)}
+  header button.stop{border-color:#fff;box-shadow:0 3px 0 #0F1F5C,0 5px 10px rgba(0,0,0,.25),inset 0 1px 0 #fff}
+  header button.stop:active:not(:disabled){box-shadow:0 0 0 #0F1F5C}
   button:disabled{opacity:.4;cursor:not-allowed;box-shadow:none}
   main{padding:14px 18px 18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),600px));justify-content:center;gap:16px}   /* Karten mittig, 440–600 px breit (3 nebeneinander bei 1920 px) */
   @media (max-width:460px){main{grid-template-columns:1fr;padding:12px} .quellen{padding:10px 12px 0} header{padding:10px 12px}}
@@ -72,10 +79,11 @@
   body.gescrollt header button{padding:5px 13px}
   #leiste{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;padding:11px 14px 9px;background:linear-gradient(180deg,#2c49b3,#182f83);border-bottom:2px solid #42A5F5;box-shadow:0 3px 10px rgba(24,47,131,.3)}
   #leiste button.lg{min-width:40px;padding:4px 8px;font-size:14px;border-radius:8px;color:var(--royal-dark);background:#fff;border-color:#9DBBE0;box-shadow:0 2px 0 #9DBBE0}
-  #leiste button.lg.k{background:var(--kill);border-color:#8E0B20;color:#fff;box-shadow:0 2px 0 #8E0B20}
-  #leiste button.lg.h{background:var(--heal);border-color:#1A3690;color:#fff;box-shadow:0 2px 0 #1A3690}
+  /* 0.7.5: Killing pastellrot / Healing pastell-royalblau, je kräftig umrandet (heben sich von Leiste und Stopp ab) */
+  #leiste button.lg.k{background:#FFC2C2;border:2px solid #FF1030;color:#7A0016;box-shadow:0 2px 0 #B0001C}
+  #leiste button.lg.h{background:#C9D6FF;border:2px solid #4D8BFF;color:#0B2470;box-shadow:0 2px 0 #2A5FD0}
   #leiste button.lg.w{background:#FFD966;border-color:#9A6A00;color:#5A3E00;box-shadow:0 2px 0 #9A6A00}
-  #leiste button.lg.f{background:#fff;border:2px solid var(--rot);color:var(--rot);box-shadow:0 2px 0 var(--rot)}
+  #leiste button.lg.f{background:#fff;border:2px solid #FF9800;color:#B35C00;box-shadow:0 2px 0 #C46F00}   /* 0.7.5: Störung orange (rot = Killing) */
   header .info.ok{background:#2E7D32;color:#fff} header .info.fehler{background:#C62828;color:#fff}
   #leiste button.lg.fehlt,#leiste button.lg.aus{background:transparent;color:#A9C4E8;border:1px dashed #6F8FD0;box-shadow:none;opacity:1;cursor:default}
   #leiste button.lg.aus{cursor:pointer}   /* ausgeschaltet, Anschluss noch da: gleich blass wie «fehlt», Karte aber anklickbar */

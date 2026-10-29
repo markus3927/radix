@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.7.4';
+const VERSION = '0.7.5';
 const $ = (s, el = document) => el.querySelector(s);
 const K = window.Kern;
 const SPEICHER = 'radix-generatoren-v2';   // { zuordnung: [Nummer je Anschluss], gen: { Nummer: Einstellungen } }
@@ -1514,7 +1514,7 @@ function aktualisiereLeiste() {
   leistenStand = stand;
   nav.hidden = liste.length < 1;
   nav.innerHTML = '<div class="nummern">' + liste.map(x => `<button class="lg ${x.art}${x.nr === aktiv ? ' aktiv' : ''}${x.nr === gz ? ' gezeigt' : ''}" data-nr="${x.nr}" title="${esc(x.titel)}"${x.art === 'fehlt' ? ' disabled' : ''}>${x.nr}</button>`).join('') + '</div>' +
-    `<span class="legende">rot Killing · blau Healing · gelb stellt um oder wartet · weiss steht · blass aus · rot umrandet Störung · grau gestrichelt GX Pro bereit (Anschluss frei)</span>`;
+    `<span class="legende">rot Killing · blau Healing · gelb stellt um oder wartet · weiss steht · blass aus · orange umrandet Störung · grau gestrichelt GX Pro bereit (Anschluss frei)</span>`;
   setzeKopfHoehe();
 }
 

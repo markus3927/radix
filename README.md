@@ -54,6 +54,12 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.7.5 (Brücke bleibt 1.2.1) – Farben Leiste und Knöpfe
+- Leiste: Killing pastellrot mit kräftig rotem Rand, Healing pastell-royalblau mit kräftig blauem Rand – heben sich vom blauen Kopf und vom Stopp-Knopf ab.
+- Störung (GX gesperrt, belegt, Lauf abgebrochen) jetzt **orange** umrandet statt rot, damit sie nicht wie Killing aussieht. Legende angepasst.
+- «Alle stoppen» oben und «Stopp» in der Karte weiss wie die übrigen Knöpfe, rote Schrift. «Start» pastell-royalblau mit blauem Rand.
+- Nur Aussehen, Ablauf unverändert. Test v075_test.py (15 Prüfungen) grün.
+
 ## Stand Version 0.7.4 (Brücke bleibt 1.2.1) – ausgeschaltete Generatoren einheitlich blass
 - Leiste: Ein ausgeschalteter Generator ist blass gestrichelt («aus»), egal ob Windows seinen USB-Anschluss noch sieht (XM ohne Strom, Chip am USB) oder gar nicht. Bisher war der erste Fall rot umrandet.
 - Rot umrandet heisst jetzt nur noch Störung: GX gesperrt, Anschluss belegt, Lauf mit Fehler abgebrochen (Verbindung verloren). Bleibt rot, bis er wieder verbunden ist.
