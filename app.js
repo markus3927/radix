@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.7.6';
+const VERSION = '0.7.8';
 const $ = (s, el = document) => el.querySelector(s);
 const K = window.Kern;
 const SPEICHER = 'radix-generatoren-v2';   // { zuordnung: [Nummer je Anschluss], gen: { Nummer: Einstellungen } }
@@ -1124,7 +1124,7 @@ class Generator {
       const wechsel = nv && !it.fehler && i > aktPi && daten.finder && daten.finder.programme.has(`${nv[1]} ${andere}`)
         ? ` <button class="ghost klein wechsel" data-z="${it.zeilenNr}" data-v="${andere}" title="Dieses Programm als ${andere} spielen">→ ${andere}</button>` : '';
       const kannDual = !it.fehler && i > aktPi && daten.geladen && (it.dual || (it.preset && !/\(dual\)/i.test(it.preset) && dualPreset(it.preset)));
-      const dualKnopf = kannDual ? ` <button class="ghost klein dual${it.dual ? ' an' : ''}" data-dual="${it.zeilenNr}" title="${it.dual ? 'Zurück auf das Preset ohne Dual' : 'Dieses Programm im Dual-Modus spielen (Out2 spielt jeweils die nächste Frequenz)'}">${it.dual ? 'Dual aus' : 'Dual'}</button>` : '';
+      const dualKnopf = kannDual ? ` <button class="ghost klein dual${it.dual ? ' an' : ''}" data-dual="${it.zeilenNr}" title="${it.dual ? 'Zurück auf das Preset ohne Dual' : 'Dieses Programm im Dual-Modus spielen wie Spooky2 (Out2 spielt gleichzeitig die nächste Frequenz bzw. den nächsten Sweep in der Zeit von Out1, etwa halbe Zeit)'}">${it.dual ? 'Dual aus' : 'Dual'}</button>` : '';
       const ie = it.preset ? anzeigen.einst.find(x => x.key === it.preset) : null;
       const preset = it.preset ? `<b class="${farbArt(it, ie && ie.e)}">${esc(it.preset)}</b>` : '';
       const wob = it.wobble ? ` · <span class="w" title="Frequency Wobble, Dreieck ${it.wobble.stufen} Stufen, ${it.wobble.hz} Stufen/s – am Gerät noch nicht gegen Spooky2 geprüft">Wobble ${String(it.wobble.prozent).replace('.', ',')} % (vorläufig)</span>` : '';

@@ -229,7 +229,7 @@
 
   // ------------------------------------------------------------------ Ablauf
   /**
-   * Plan: Liste von Schritten {sek, f1, f2, sweep?, pause?, text, wobble?}.
+   * Plan: Liste von Schritten {sek, f1, f2, sweep?, sweep2? (Dual: Sweep auf Out2), dual?, pause?, text, wobble?}.
    * optionen: { generatorMaxHz (Standard 5 MHz), wobble (überschreibt das Preset, z. B. aus dem Finder) }
    */
   function erstellePlan(e, programme, optionen = {}) {
@@ -265,19 +265,26 @@
           const text = `${prog.name}`;
           if (mitMW) schritte.push({ sek: MW_LUECKE, pause: true, luecke: true, text });   // Spooky2: vor jedem Schritt eines MW-Programms 0,28 s 0 V (Amplitude 0, Ausgänge bleiben an)
           if (x.art === 'pause') { schritte.push({ sek: x.sek, pause: true, text }); continue; }
+          if (e.out2Modus.art === 'dual') {
+            // 0.7.8: Dual genau wie Spooky2 (Mitschnitt 31.10.2026, claude/dual/mitschnitt_dual.md): Out1 spielt den Eintrag,
+            // Out2 gleichzeitig den nächsten – Einzelfrequenz oder Sweep. Dauer des Paars = Zeit des Out1-Eintrags;
+            // ein Sweep auf Out2 läuft in dieser Zeit ganz durch (z. B. 112 (180 s) + 120-128=600 → Sweep in 180 s).
+            // Ungerade Anzahl oder Pause danach: letzter Eintrag auf beiden Ausgängen.
+            const n = liste[i + 1];
+            const paar = n && (n.art === 'hz' || n.art === 'sweep');
+            const b = paar ? n : x;
+            const s = { sek: x.sek, dual: true, text, wobble };
+            if (x.art === 'sweep') { s.sweep = { von: x.von, bis: x.bis }; s.f1 = f1Von(x.von); } else s.f1 = f1Von(x.hz);
+            if (b.art === 'sweep') { s.sweep2 = { von: b.von, bis: b.bis }; s.f2 = inBereich(ziel(b.von), max2, e.out2.teilung); } else s.f2 = inBereich(ziel(b.hz), max2, e.out2.teilung);
+            schritte.push(s);
+            if (paar) i++;
+            continue;
+          }
           if (x.art === 'sweep') {
-            if (e.out2Modus.art === 'dual') ungenutzt.add('Sweep in Dual-Preset: Out2 läuft gleich wie Out1');
             schritte.push({ sek: x.sek, sweep: { von: x.von, bis: x.bis }, f1: f1Von(x.von), f2: f2Von(x.von, f1Von(x.von)), text, wobble });
             continue;
           }
           const f1 = f1Von(x.hz);
-          if (e.out2Modus.art === 'dual') {
-            const n = liste[i + 1];
-            const f2 = n && n.art === 'hz' ? inBereich(ziel(n.hz), max2, e.out2.teilung) : f1;
-            schritte.push({ sek: x.sek, f1, f2, text, wobble });
-            if (n && n.art === 'hz') i++;
-            continue;
-          }
           schritte.push({ sek: x.sek, f1, f2: f2Von(x.hz, f1), text, wobble });
         }
       }
@@ -291,22 +298,28 @@
   /** Momentane Frequenzen eines Schritts nach t Sekunden (Sweeps linear, Wobble als Faktor). */
   function frequenzenBei(schritt, t, e, optionen = {}) {
     const w = wobbleFaktor(schritt.wobble, t);
-    if (!schritt.sweep) return { f1: schritt.f1 * w, f2: schritt.f2 * w };
+    if (!schritt.sweep && !schritt.sweep2) return { f1: schritt.f1 * w, f2: schritt.f2 * w };
     const genMax = optionen.generatorMaxHz || 5e6;
-    const anteil = schritt.sek > 0 ? Math.min(1, Math.max(0, Math.floor(t) / schritt.sek)) : 0;   // Sweeps auf ganzen Sekunden
-    const roh = schritt.sweep.von + (schritt.sweep.bis - schritt.sweep.von) * anteil;
-    const ziel = roh * e.freqMultiplikator + e.freqKonstante;
-    const f1 = inBereich(ziel, e.out1.maxHz || genMax, e.out1.teilung);
-    let f2 = f1;
-    if (e.out2Modus.art === 'faktor') f2 = inBereich(f1 * e.out2Modus.faktor + e.out2Modus.konstante, e.out2.maxHz || genMax, e.out2.teilung);
-    else if (e.out2Modus.art === 'programm') f2 = inBereich(ziel, e.out2.maxHz || genMax, e.out2.teilung);
+    const anteil = (sw) => { const d = sw.sek || schritt.sek; return d > 0 ? Math.min(1, Math.max(0, Math.floor(t) / d)) : 0; };   // Sweeps auf ganzen Sekunden; Dual: jeder Sweep mit eigener Zeit
+    const zielBei = (sw) => (sw.von + (sw.bis - sw.von) * anteil(sw)) * e.freqMultiplikator + e.freqKonstante;
+    let f1 = schritt.f1, f2 = schritt.f2;
+    if (schritt.sweep) {
+      const ziel = zielBei(schritt.sweep);
+      f1 = inBereich(ziel, e.out1.maxHz || genMax, e.out1.teilung);
+      if (!schritt.dual) {
+        f2 = f1;
+        if (e.out2Modus.art === 'faktor') f2 = inBereich(f1 * e.out2Modus.faktor + e.out2Modus.konstante, e.out2.maxHz || genMax, e.out2.teilung);
+        else if (e.out2Modus.art === 'programm') f2 = inBereich(ziel, e.out2.maxHz || genMax, e.out2.teilung);
+      }
+    }
+    if (schritt.sweep2) f2 = inBereich(zielBei(schritt.sweep2), e.out2.maxHz || genMax, e.out2.teilung);   // 0.7.7 Dual: eigener Sweep auf Out2
     return { f1: f1 * w, f2: f2 * w };
   }
 
   /** Kennzahl, die sich ändert, sobald neue Frequenzen gesendet werden müssen (Sweep: jede Sekunde, Wobble: jeder Gate-Takt). */
   function taktBei(schritt, t) {
     if (schritt.wobble) return wobbleTakt(schritt.wobble, t);
-    if (schritt.sweep) return Math.floor(t);
+    if (schritt.sweep || schritt.sweep2) return Math.floor(t);
     return 0;
   }
 

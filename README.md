@@ -54,6 +54,20 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.7.8 (Brücke bleibt 1.2.1) – Dual genau wie Spooky2 (Mitschnitt 31.10.)
+- Mitschnitt Spooky2 mit pr0245 und Killing (Dual) (R) - JW (54 min, `claude/dual/mitschnitt_dual.md`): Out2 spielt den nächsten Eintrag (auch Sweeps) – wie 0.7.7. **Dauer eines Paars = Zeit des Out1-Eintrags**; ein Sweep auf Out2 läuft in dieser Zeit ganz durch (112 mit 180 s + `120-128=600` → Sweep in 180 s)
+- RADIX macht es jetzt genau so (0.7.7 nahm den längeren Eintrag). pr0245 Dual: 40 min wie Spooky2 (0.7.7: 1h 22min)
+- Getestet: `dual078.test.js` 5 ✓ (alle 11 Paare von pr0245 mit Frequenzen und Dauer wie im Mitschnitt), `v078_test.py` 10 ✓ (Lauf im Browser, Dual und Normal nebeneinander)
+
+## Stand Version 0.7.7 (Brücke bleibt 1.2.1) – Dual wie Spooky2 (auch Sweeps)
+- **Dual-Presets** (Killing (Dual), Healing (Dual), DNA (Dual) …, Knopf «Dual» in der Vorschau) laufen jetzt wie das Original: Out1 spielt einen Eintrag, Out2 **gleichzeitig den nächsten** – Einzelfrequenz **oder Sweep**. Bisher liefen Sweeps im Dual auf beiden Ausgängen gleich (Entscheid 29.10. aufgehoben, Markus 31.10.: «original Dual-Modus besser»)
+- Programme mit vielen Sweeps sind im Dual jetzt etwa halb so lang (vorher nur wenig kürzer)
+- Ein Paar dauert so lange wie der **längere** der beiden Einträge (**in 0.7.8 ersetzt**: Zeit von Out1 wie Spooky2)
+- Ungerade Anzahl oder Pause danach: letzter Eintrag auf beiden Ausgängen (wie bisher)
+- Hinweis «Sweep in Dual-Preset: Out2 läuft gleich wie Out1» entfällt
+- Ohne Dual: unverändert
+- Getestet: `dual077.test.js` 7 ✓ (echte Spooky2-Presets), `v077_test.py` 9 ✓ (App im Browser, Lauf mit Dual- und Normal-Preset nebeneinander, Befehle an die Generatoren geprüft). GX: Out1/Out2 getrennt (`:w24`/`:w25`) geprüft, am Gerät noch nicht
+
 ## Stand Version 0.7.6 (Brücke bleibt 1.2.1) – Farbe je Programm
 - Rot = Killing, blau = Healing, **grün = Preset-Programm oder MW** (z. B. Peptide «Dry Mouth (R)», MW-Presets). Gilt überall gleich: Knopf in der Leiste (pastell, kräftiger Rand), Preset-Anzeige, Laufschrift unter den Einstellungen und Preset-Name in der Vorschau. Wechselt das Programm, wechselt die Farbe mit.
 - «Start» pastellgrün mit kräftigem grünem Rand. Legende «… grün Preset/MW …».
