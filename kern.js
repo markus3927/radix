@@ -431,6 +431,27 @@
   }
 
   // ------------------------------------------------------------------ Kontrollblatt (Frequenz_Kontrolle.json)
+  /**
+   * 0.7.9: Zeilen, die die Kontrollapp aus dem RADIX-Laufbuch eingetragen hat (Endlosschleife: schon gelaufen), tragen hinter
+   * der Uhrzeit ein unsichtbares Zeichen (U+E0052, Tag-«R»). Die Kopplung lässt sie aus – sonst hängte RADIX sie nochmals an.
+   */
+  const LAUF_MARKE = '\uDB40\uDC52';
+
+  /** Laufbuch-Eintrag für einen Programmstart (Endlosschleife). code z. B. «pr0245 NF», «pp0004», «sm60». Sonst null. */
+  function laufbuchEintrag({ t, gen, code, name = '', sek = 0, durchlauf = 1 }) {
+    const m = String(code || '').trim().match(/^(pr\d{4}|pp\d{4}|pa\d{2}|sm\d{2})(?:\s+(NF|HF))?$/i);
+    const g = parseInt(gen, 10);
+    if (!m || !Number.isFinite(g) || !Number.isFinite(t)) return null;
+    const c = m[1].toLowerCase();
+    return { id: `${t}-${g}-${c}`, t, gen: g, code: c, var: m[2] ? m[2].toUpperCase() : '', name: String(name || '').replace(/\s+/g, ' ').trim(), sek: Math.round(sek) || 0, dl: durchlauf };
+  }
+  /** Laufbuch zusammenführen: alt (Datei) + neu, gleiche id nur einmal, älter als «tage» fällt weg, nach Zeit sortiert. */
+  function laufbuchMischen(alt, neu, jetztMs, tage = 4) {
+    const grenze = jetztMs - tage * 86400000, m = new Map();
+    for (const e of [...(Array.isArray(alt) ? alt : []), ...(Array.isArray(neu) ? neu : [])]) if (e && e.id && e.t > grenze) m.set(e.id, e);
+    return [...m.values()].sort((a, b) => a.t - b.t || (a.id < b.id ? -1 : 1));
+  }
+
   /** Mehrzeilige Programm-Einträge des Kontrollblatts zusammensetzen (Fortsetzungszeilen beginnen mit Tabulator). */
   function kontrolleEintraege(text) {
     const liste = [];
@@ -441,7 +462,7 @@
       const um = zeitmarke(z);                                          // 0.6.7: «um 6.00» in der Tageszeile -> Zeitmarke
       if (um) { liste.push({ code: 'um', um, text: `um ${um}`, abschnitt }); continue; }
       const code = z.match(/^\s*(pr\d{4}|pp\d{4}|pa\d{2}|sm\d{2})\b/i);
-      if (code) { liste.push({ code: code[1].toLowerCase(), text: z.trim(), abschnitt }); continue; }
+      if (code) { liste.push({ code: code[1].toLowerCase(), text: z.trim(), abschnitt, gelaufen: roh.includes(LAUF_MARKE) }); continue; }
       if (/^\t\t\t/.test(roh)) { abschnitt = z.trim(); continue; }      // Spartenkopf im Feld «Programme»
       if (/^\t/.test(z) && liste.length) { liste[liste.length - 1].text += ' ' + z.trim(); continue; }
     }
@@ -497,7 +518,7 @@
     if (!zeile) return { eintraege: [], hinweis: 'keine Zeile für heute' };
     const heute = datumText(datum);
     if (zeile.date && zeile.date !== heute && kontrolleEintraege(zeile.prog).length) return { eintraege: [], hinweis: `Zeile ${datum.getDate()} gehört zum ${zeile.date}` };
-    return { eintraege: kontrolleEintraege(zeile.prog), hinweis: '' };
+    return { eintraege: kontrolleEintraege(zeile.prog).filter(e => !e.gelaufen), hinweis: '' };   // 0.7.9: Laufbuch-Zeilen auslassen
   }
 
   // ------------------------------------------------------------------ Generator-Befehle (XM)
@@ -728,6 +749,7 @@
     frequenzBefehle, ausgangBefehle, amplitudeBefehle, neuerZustand, GX, gxEinrichtung, gxFrequenzBefehle, gxAusgangBefehle, gxWarnungen, gxWerte,
     lesePresetAngabe, finderDaten, finderKatalog, deuteListenZeile, sauber, zeitmarke,
     kontrolleEintraege, kontrolleZeile, leseKontrolle, kontrolleHeute, datumText,
+    LAUF_MARKE, laufbuchEintrag, laufbuchMischen,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = Kern;
   else root.Kern = Kern;

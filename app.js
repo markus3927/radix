@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.7.8';
+const VERSION = '0.7.9';
 const $ = (s, el = document) => el.querySelector(s);
 const K = window.Kern;
 const SPEICHER = 'radix-generatoren-v2';   // { zuordnung: [Nummer je Anschluss], gen: { Nummer: Einstellungen } }
@@ -184,6 +184,102 @@ function beobachteQuellen() {
     setInterval(async () => {
       try { if (q.handle && await q.handle.queryPermission({ mode: 'read' }) === 'granted') await ladeQuelle(name, true); } catch (e) { /* Datei kurz nicht lesbar */ }
     }, q.alleMs);
+  }
+}
+
+// ------------------------------------------------------------------ Laufbuch (0.7.9): Endlosschleife -> Kontrollblatt
+// Markus 01.11.2026: «kunden auf endlosschleife … täglich die gleichen programme getimert mit uhrzeit … radix soll die programme
+// die ablaufen automatisch in den entsprechenden tag bei der kontrollapp eintragen» · «beim start».
+// Bei Durchläufe 0 (endlos) kommt jeder Programmstart (pr/pp/pa/sm) in eine eigene Datei RADIX_Laufbuch.json – nur RADIX schreibt
+// dort. Die Kontrollapp liest sie und trägt die Starts in die Tageszeile ein. RADIX schreibt NICHT in die Sicherungsdatei des
+// Kontrollblatts (die speichert die Kontrollapp selbst nach jedem Eintrag – zwei Schreiber würden sich überschreiben).
+// Noch nicht geschriebene Einträge warten im Browser (localStorage), bis die Datei gewählt bzw. freigegeben ist.
+const LAUFBUCH_OFFEN = 'radix-laufbuch-offen';
+const laufbuch = { handle: null, offen: lade(LAUFBUCH_OFFEN, []), uhr: null, schreibt: false, nochmal: false, frei: false, zuletzt: '' };
+
+function laufbuchElemente() {
+  if (laufbuch.knopf) return;
+  // Knopf + Stand gleich nach dem Kontrollblatt im Kopf (index.html bleibt unverändert)
+  const kb = $('#btn-kontrolle'), ks = $('#kontrolle-status');
+  const knopf = document.createElement('button'); knopf.type = 'button'; knopf.id = 'btn-laufbuch';
+  knopf.className = kb ? kb.className : ''; knopf.textContent = 'Laufbuch wählen';
+  knopf.title = 'RADIX_Laufbuch.json – bei Endlosschleife (Durchläufe 0) kommt jeder Programmstart hierher, die Kontrollapp trägt ihn in die Tageszeile ein';
+  const stand = document.createElement('span'); stand.id = 'laufbuch-status'; stand.className = 'stand';
+  const box = document.createElement('span'); box.className = 'laufbuch-quelle'; box.style.cssText = 'display:inline-flex;align-items:center;gap:6px;margin-left:10px;flex-wrap:wrap';
+  const titel = document.createElement('b'); titel.textContent = 'Laufbuch'; titel.style.fontSize = '0.9em';
+  box.append(titel, knopf, stand);
+  if (ks && ks.parentNode) ks.after(box); else if (kb && kb.parentNode) kb.after(box); else ($('#kopfbereich') || document.body).appendChild(box);
+  knopf.onclick = laufbuchWaehlen;
+  laufbuch.knopf = knopf;
+}
+function laufbuchStand() {
+  laufbuchElemente();
+  const n = laufbuch.offen.length;
+  if (!laufbuch.handle) setzeQuelle('#laufbuch-status', n ? `${n} Start${n === 1 ? '' : 's'} warten – Laufbuch wählen` : 'nicht gewählt (nur für Endlosschleife)', n ? 'fehler' : '');
+  else if (!laufbuch.frei) setzeQuelle('#laufbuch-status', `${laufbuch.handle.name} gemerkt – Zugriff bestätigen${n ? ` (${n} warten)` : ''}`, 'fehler');
+  else setzeQuelle('#laufbuch-status', `${laufbuch.handle.name}${laufbuch.zuletzt ? ` · zuletzt ${laufbuch.zuletzt}` : ''}${n ? ` · ${n} warten` : ''}`, 'ok');
+}
+async function laufbuchWaehlen() {
+  try {
+    const h = await window.showSaveFilePicker({ id: 'laufbuch', suggestedName: 'RADIX_Laufbuch.json', types: [{ description: 'RADIX-Laufbuch (JSON)', accept: { 'application/json': ['.json'] } }] });
+    laufbuch.handle = h; laufbuch.frei = true;
+    await db.set('laufbuch', h);
+    laufbuch.knopf.textContent = 'Laufbuch wählen'; laufbuch.knopf.onclick = laufbuchWaehlen;
+    await laufbuchSchreiben();
+  } catch (e) { if (e.name !== 'AbortError') setzeQuelle('#laufbuch-status', e.message || String(e), 'fehler'); }
+  alleKarten(g => g.pruefe());
+}
+async function laufbuchBeimStart() {
+  laufbuchElemente();
+  const h = await db.get('laufbuch').catch(() => null);
+  if (h) {
+    laufbuch.handle = h;
+    laufbuch.frei = await h.queryPermission({ mode: 'readwrite' }).catch(() => 'denied') === 'granted';
+    if (!laufbuch.frei) {
+      laufbuch.knopf.textContent = 'Zugriff erlauben';
+      laufbuch.knopf.onclick = async () => {
+        if (await h.requestPermission({ mode: 'readwrite' }) === 'granted') {
+          laufbuch.frei = true; laufbuch.knopf.textContent = 'Laufbuch wählen'; laufbuch.knopf.onclick = laufbuchWaehlen;
+          await laufbuchSchreiben(); alleKarten(g => g.pruefe());
+        }
+      };
+    } else if (laufbuch.offen.length) laufbuchBald();
+  }
+  laufbuchStand();
+}
+/** Programmstart notieren (wartet im Browser, bis er in der Datei steht). */
+function laufbuchNotiere(e) {
+  laufbuch.offen.push(e);
+  speichere(LAUFBUCH_OFFEN, laufbuch.offen);
+  laufbuchBald();
+  laufbuchStand();
+}
+function laufbuchBald() { clearTimeout(laufbuch.uhr); laufbuch.uhr = setTimeout(laufbuchSchreiben, 1500); }
+async function laufbuchSchreiben() {
+  clearTimeout(laufbuch.uhr); laufbuch.uhr = null;
+  if (!laufbuch.handle || !laufbuch.frei) { laufbuchStand(); return; }
+  if (laufbuch.schreibt) { laufbuch.nochmal = true; return; }
+  laufbuch.schreibt = true;
+  const mit = laufbuch.offen.slice();
+  try {
+    let alt = [];
+    try { const f = await laufbuch.handle.getFile(); const t = await f.text(); if (t.trim()) { const j = JSON.parse(t); if (Array.isArray(j.eintraege)) alt = j.eintraege; } } catch (e) { /* neu oder unlesbar: neu anlegen */ }
+    const eintraege = K.laufbuchMischen(alt, mit, Date.now());
+    const w = await laufbuch.handle.createWritable();
+    await w.write(JSON.stringify({ radix: VERSION, stand: new Date().toISOString(), hinweis: 'Schreibt nur RADIX (Endlosschleife). Die Kontrollapp liest diese Datei.', eintraege }, null, 1));
+    await w.close();
+    const ids = new Set(mit.map(e => e.id));
+    laufbuch.offen = laufbuch.offen.filter(e => !ids.has(e.id));
+    speichere(LAUFBUCH_OFFEN, laufbuch.offen);
+    laufbuch.zuletzt = new Date().toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
+  } catch (e) {
+    if (e && e.name === 'NotAllowedError') { laufbuch.frei = false; laufbuchBeimStart(); }
+    else setzeQuelle('#laufbuch-status', `Laufbuch: ${e.message || e} – versuche wieder`, 'fehler');
+    clearTimeout(laufbuch.uhr); laufbuch.uhr = setTimeout(laufbuchSchreiben, 15000);
+  } finally {
+    laufbuch.schreibt = false;
+    laufbuchStand();
+    if (laufbuch.nochmal) { laufbuch.nochmal = false; laufbuchBald(); }
   }
 }
 
@@ -714,7 +810,7 @@ class Generator {
   }
   daten() {
     const l = this.lauf;
-    return { ...this.einst, uebernommen: this.uebernommen, uebernommenMorgen: this.uebernommenMorgen, geleert: this.geleert, lauf: l && l.status !== 'fertig' ? { schritt: l.schritt, tImSchritt: l.tImSchritt, durchlauf: l.durchlauf, status: l.status, startUm: l.startUmMs, liste: l.listeText } : null };
+    return { ...this.einst, uebernommen: this.uebernommen, uebernommenMorgen: this.uebernommenMorgen, geleert: this.geleert, lauf: l && l.status !== 'fertig' ? { schritt: l.schritt, tImSchritt: l.tImSchritt, durchlauf: l.durchlauf, status: l.status, startUm: l.startUmMs, liste: l.listeText, geloggt: l.geloggt || null } : null };
   }
   /** Ganzes Protokoll in die Zwischenablage (zum Einfügen im Chat). */
   async kopiereProtokoll() {
@@ -1137,7 +1233,7 @@ class Generator {
     w.textContent = [m ? m.text : '', ...anzeigen.warnungen.map(x => this.lauf ? 'Übersprungen, bis geklärt – ' + x : x)].filter(Boolean).join(' · ');
     w.className = 'warnungen' + (m && m.art === 'ok' && !anzeigen.warnungen.length ? ' ok' : '');
     const d = this.einst.durchlaeufe, n = anzeigen.items.filter(it => it.r.art !== 'zeit').length, nm = anzeigen.items.length - n;
-    z.textContent = !daten.geladen ? 'Zuerst den Spooky2-Ordner wählen.' : n ? `${n} Programm${n === 1 ? '' : 'e'} · ${anzeigen.einst.length} Preset${anzeigen.einst.length === 1 ? '' : 's'} · ${fmtZeit(anzeigen.plan.gesamtSek)} pro Durchlauf` + (d ? ` · ${d} × = ${fmtZeit(anzeigen.plan.gesamtSek * d)}` : ' · endlos') + (nm ? ` · ${nm} Zeitmarke${nm === 1 ? '' : 'n'} (Wartezeit nicht eingerechnet)` : '') : 'Liste leer';
+    z.textContent = !daten.geladen ? 'Zuerst den Spooky2-Ordner wählen.' : n ? `${n} Programm${n === 1 ? '' : 'e'} · ${anzeigen.einst.length} Preset${anzeigen.einst.length === 1 ? '' : 's'} · ${fmtZeit(anzeigen.plan.gesamtSek)} pro Durchlauf` + (d ? ` · ${d} × = ${fmtZeit(anzeigen.plan.gesamtSek * d)}` : ` · endlos${laufbuch.handle ? ' · Starts gehen ins Kontrollblatt' : ' · ⚠ oben «Laufbuch» wählen, sonst kommt nichts ins Kontrollblatt'}`) + (nm ? ` · ${nm} Zeitmarke${nm === 1 ? '' : 'n'} (Wartezeit nicht eingerechnet)` : '') : 'Liste leer';
     if (this.lauf) { this.markiereAktiv(); return this.lauf; }
     this.vorbereitet = anzeigen.blockiert ? null : anzeigen;
     $('.btn-start', this.karte).disabled = !this.vorbereitet;
@@ -1283,6 +1379,7 @@ class Generator {
       schritt, tImSchritt: stand && schritt === stand.schritt ? stand.tImSchritt ?? 0 : 0, durchlauf: stand?.durchlauf ?? 1,
       durchlaeufe: this.einst.durchlaeufe, zustand: K.neuerZustand(), status: startUmMs ? 'wartet' : 'einrichten',
       startUmMs, letzterTick: null, letzterTakt: null, beschaeftigt: false, aktivEi: null, aktivPi: null,
+      geloggt: stand?.geloggt ?? null,                                // 0.7.9: «Durchlauf:Programm», das schon im Laufbuch steht
     };
     this.rechneMarken(startUmMs || Date.now());
     this.sperre(true);
@@ -1350,7 +1447,26 @@ class Generator {
         const ein = l.einst[l.aktivEi]; if (ein && !s.marke) this.zeigePreset(ein.e.name, false, farbArt(it, ein.e, s));   // 0.7.6: Farbe folgt dem Programm
       }
       if (!s.mw) this.log(s.marke ? `Schritt ${l.schritt + 1}/${l.plan.schritte.length}: Ausgänge aus, warten bis ${fmtUhr(s.zeitMs)}` : `Schritt ${l.schritt + 1}/${l.plan.schritte.length}: ${s.pause ? 'Pause' : `${fmtHz(l.f1)} / ${fmtHz(l.f2)}`} für ${s.sek} s`);
+      this.laufbuchPruefen(s);
     }
+  }
+
+  /**
+   * 0.7.9: Endlosschleife (Durchläufe 0): Programmstart ins Laufbuch – einmal pro Programm und Durchlauf, nur am Anfang des
+   * Programms (nicht beim Fortsetzen mitten drin). Zeitmarken und eigene Frequenzzeilen ohne Nummer kommen nicht hinein.
+   */
+  laufbuchPruefen(s) {
+    const l = this.lauf;
+    if (!l || l.durchlaeufe || !s || s.marke) return;
+    const it = l.items[s.pi];
+    if (!it || it.r.art === 'zeit' || l.schritt !== it.start) return;
+    const key = `${l.durchlauf}:${s.pi}`;
+    if (l.geloggt === key) return;
+    l.geloggt = key;
+    const e = K.laufbuchEintrag({ t: Date.now(), gen: this.einst.nr, code: it.code, name: it.name, sek: it.sek, durchlauf: l.durchlauf });
+    if (!e) return;
+    laufbuchNotiere(e);
+    this.log(`→ Kontrollblatt (Endlosschleife): ${e.code}${e.var ? ' ' + e.var : ''}${laufbuch.handle ? '' : ' – Laufbuch noch nicht gewählt, wartet'}`);
   }
 
   /** Vorspulen: der Taktgeber führt den Sprung beim nächsten Takt aus (nie mitten in einem Befehl an den Generator). */
@@ -1793,7 +1909,7 @@ async function init() {
       }
     }, 10000);
   }
-  await Promise.all([ordnerBeimStart(), quelleBeimStart('finder'), quelleBeimStart('kontrolle')]);
+  await Promise.all([ordnerBeimStart(), quelleBeimStart('finder'), quelleBeimStart('kontrolle'), laufbuchBeimStart().catch(() => {})]);
   beobachteQuellen();
   starteTakt();
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});

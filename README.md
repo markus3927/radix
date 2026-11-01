@@ -9,6 +9,7 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
    - **Spooky2** → Ordner `C:\Spooky2`
    - **Frequenz-Finder** → `Frequenz-Finder.html`
    - **Kontrollblatt** → die Datei, in die das Kontrollblatt automatisch speichert (`Frequenz_Kontrolle.json`)
+   - **Laufbuch** (ab 0.7.9, nur für Endlosschleife) → `RADIX_Laufbuch.json` neu anlegen; dieselbe Datei in der Kontrollapp wählen
 3. «Generator hinzufügen» → COM-Anschluss wählen. Bereits erlaubte Generatoren verbinden sich beim Start selbst.
    **Nach einem PC-Neustart:** «Alle testen» → jedes Display zeigt die Kartennummer als Frequenz (Ausgänge bleiben aus).
    Stimmt eine Nummer nicht, auf der Karte die Nummer des Generators eintragen: die beiden Karten tauschen,
@@ -53,6 +54,16 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
     «⏭ Nächstes Programm» während dem Warten startet sofort. Mehrere Marken pro Liste möglich.
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
+
+## Stand Version 0.7.9 (Brücke bleibt 1.2.1) – Endlosschleife trägt ins Kontrollblatt ein
+- Markus 01.11.2026: Kunden auf Endlosschleife (täglich gleiche Programme mit Zeitmarken) – RADIX soll die gelaufenen Programme selbst in die Tageszeile der Kontrollapp bringen, **beim Start** des Programms
+- **Neue Quelle «Laufbuch»** im Kopf, gleich nach dem Kontrollblatt (einmal «Laufbuch wählen» → `RADIX_Laufbuch.json` neben `Frequenz_Kontrolle.json` anlegen; wird gemerkt, nach Neustart evtl. «Zugriff erlauben»)
+- Bei **Durchläufe 0 (endlos)** schreibt RADIX jeden Programmstart (pr/pp/pa/sm, mit NF/HF, Startzeit, Dauer, Generator-Nummer) ins Laufbuch – einmal pro Programm und Durchlauf, nicht beim Fortsetzen mitten im Programm (`lauf.geloggt` im Stand). Zeitmarken und eigene Frequenzzeilen ohne Nummer nicht. Mit festen Durchläufen (1, 2, 4 …) kommt nichts ins Laufbuch
+- RADIX schreibt **nicht** in die Sicherungsdatei des Kontrollblatts (zwei Schreiber würden sich überschreiben). Die Kontrollapp (ab R381) liest das Laufbuch und trägt ein
+- Ohne gewähltes Laufbuch warten die Starts im Browser (`radix-laufbuch-offen`) und kommen nach dem Wählen in die Datei. Zusammenfassung der Karte: «endlos · Starts gehen ins Kontrollblatt» bzw. «⚠ oben «Laufbuch» wählen …». Protokoll: «→ Kontrollblatt (Endlosschleife): pr2262 NF»
+- Laufbuch behält 4 Tage (`laufbuchMischen`), Datei: `{radix, stand, eintraege:[{id, t, gen, code, var, name, sek, dl}]}`
+- **Kopplung:** Zeilen, die die Kontrollapp aus dem Laufbuch eingetragen hat, tragen hinter der Uhrzeit das unsichtbare Zeichen U+E0052 (`K.LAUF_MARKE`). `kontrolleHeute` lässt sie aus → Doppelklick-Kopplung, «Heute/Morgen aus Kontrollblatt» und Leeren zählen nur Geplantes; nichts wird ein zweites Mal angehängt
+- Getestet: Kern in Node (Markierung, Filter, Mischen), Browser mit simuliertem XM: 2 Programme endlos → je Durchlauf genau ein Eintrag in Reihenfolge, ohne Laufbuch wartend und nachgeschrieben, Durchläufe 2 → nichts, Kopplung mit eingetragener Zeile → nur das geplante Programm kommt, Fortsetzen → kein zweiter Eintrag
 
 ## Stand Version 0.7.8 (Brücke bleibt 1.2.1) – Dual genau wie Spooky2 (Mitschnitt 31.10.)
 - Mitschnitt Spooky2 mit pr0245 und Killing (Dual) (R) - JW (54 min, `claude/dual/mitschnitt_dual.md`): Out2 spielt den nächsten Eintrag (auch Sweeps) – wie 0.7.7. **Dauer eines Paars = Zeit des Out1-Eintrags**; ein Sweep auf Out2 läuft in dieser Zeit ganz durch (112 mit 180 s + `120-128=600` → Sweep in 180 s)
