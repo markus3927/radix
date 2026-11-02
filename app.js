@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.8.0';
+const VERSION = '0.8.1';
 const $ = (s, el = document) => el.querySelector(s);
 const K = window.Kern;
 const SPEICHER = 'radix-generatoren-v2';   // { zuordnung: [Nummer je Anschluss], gen: { Nummer: Einstellungen } }
@@ -545,21 +545,30 @@ function dualPreset(name) {
 
 /** Programmliste einer Karte vorbereiten: Programme deuten, Presets zuordnen, gemeinsamen Ablauf bauen. */
 function bereiteListeVor(text, standardPreset) {
-  const items = [];
+  const items = [], loopOhne = [];
+  let loop = 0;                                                       // 0.8.1: «loop-10» wartet auf das Programm darunter
+  const nimm = (it) => {
+    if (loop > 1) for (let i = 1; i <= loop; i++) items.push({ ...it, lauf: i, laeufe: loop });
+    else items.push(it);
+    loop = 0;
+  };
   String(text || '').split('\n').forEach((zeile, zeilenNr) => {
+    const lp = K.loopmarke(zeile);
+    if (lp) { if (loop) loopOhne.push(loop); loop = lp; return; }
     const um = deuteZeitmarke(zeile);
-    if (um) { items.push({ zeile: zeile.trim(), zeilenNr, r: { art: 'zeit', um }, fehler: '' }); return; }
+    if (um) { if (loop) { loopOhne.push(loop); loop = 0; } items.push({ zeile: zeile.trim(), zeilenNr, r: { art: 'zeit', um }, fehler: '' }); return; }
     const dual = DUAL_MARKE.test(zeile);                              // 0.6.9: «[Dual]» am Zeilenende = Dual-Variante des Presets
     const pn = presetMitProgrammen(zeile);                            // 0.7.0: Name eines Spooky2-Presets («Adenoiditis (R)») -> seine Programme
-    if (pn) { items.push({ zeile: zeile.trim(), zeilenNr, r: { art: 'preset', name: pn }, dual: false, fehler: '' }); return; }
+    if (pn) { nimm({ zeile: zeile.trim(), zeilenNr, r: { art: 'preset', name: pn }, dual: false, fehler: '' }); return; }
     let r = K.deuteListenZeile(dual ? zeile.replace(DUAL_WEG, ' ').trim() : zeile, daten.finder, PEPTIDE);
     if (r && r.art === 'peptid') {                                    // 0.7.1: pp-Nummer -> JW_Peptides-Preset «<Name> (R)» aus dem Spooky2-Ordner
       const name = daten.geladen ? findePreset(`${r.spooky2} (R)`) : null;
       r = name ? { art: 'preset', name, code: r.code, titel: r.deutsch ? `${r.deutsch} (${r.spooky2})` : r.spooky2 }
         : { art: 'fehler', text: daten.geladen ? `${r.code}: Peptid-Preset «${r.spooky2} (R)» nicht im Spooky2-Ordner` : 'Spooky2-Ordner noch nicht gewählt', code: r.code, titel: r.deutsch || r.spooky2 };
     }
-    if (r) items.push({ zeile: zeile.trim(), zeilenNr, r, dual: r.art === 'preset' ? false : dual, fehler: r.art === 'fehler' ? r.text : '' });
+    if (r) nimm({ zeile: zeile.trim(), zeilenNr, r, dual: r.art === 'preset' ? false : dual, fehler: r.art === 'fehler' ? r.text : '' });
   });
+  if (loop) loopOhne.push(loop);
   // Preset je Programm: Finder-Kachel; Pause/Schumann übernehmen das Preset davor (sonst danach); eigene Zeilen das Karten-Preset
   const std = standardPreset || STD_PRESET;
   const grund = (it) => it.r.art === 'finder' && it.r.programm.art === 'pr' ? it.r.programm.preset : it.r.art === 'zeile' ? std : it.r.art === 'preset' ? it.r.name : null;
@@ -582,6 +591,7 @@ function bereiteListeVor(text, standardPreset) {
     const p = it.r.art === 'finder' ? it.r.programm : null;
     it.code = p ? p.code : it.r.code ? it.r.code : it.r.art === 'zeile' ? 'Zeile' : it.r.art === 'preset' ? 'Preset' : '?';
     it.name = p ? p.name.replace(/^(pa|sm)\d{2}\s+/i, '') : it.r.titel ? it.r.titel : it.r.art === 'zeile' ? it.r.zeile : it.r.art === 'preset' ? it.r.name : it.zeile;
+    if (it.laeufe) it.name += ` · Lauf ${it.lauf}/${it.laeufe}`;      // 0.8.1
     if (it.fehler) return;
     if (!daten.geladen) { it.fehler = 'Spooky2-Ordner noch nicht gewählt'; return; }
     const roh = daten.katalog.get(it.preset.toLowerCase());
@@ -608,7 +618,8 @@ function bereiteListeVor(text, standardPreset) {
     for (const s of plan.schritte) schritte.push({ ...s, ei, pi });
     it.ende = schritte.length;
   });
-  for (const it of items) if (it.fehler) warnungen.push(`${it.code !== '?' ? it.code : it.zeile.slice(0, 30)}: ${it.fehler}`);
+  for (const it of items) if (it.fehler && (!it.lauf || it.lauf === 1)) warnungen.push(`${it.code !== '?' ? it.code : it.zeile.slice(0, 30)}: ${it.fehler}`);
+  for (const n of loopOhne) warnungen.push(`loop-${n}: darunter steht kein Programm`);
   // Leere Liste ist kein Fehler (keine rote Meldung), Start bleibt aber gesperrt – die Zusammenfassung sagt «Liste leer»
   if (items.length && !schritte.some(s => !s.pause) && !warnungen.length) warnungen.push('Keine abspielbaren Frequenzen');
   else if (schritte.length && schritte[schritte.length - 1].marke) warnungen.push('Nach der letzten Zeitmarke steht kein Programm');
@@ -927,7 +938,7 @@ class Generator {
     $('.btn-morgen', this.karte).disabled = !b;
     // Programme des Kunden zum Antippen
     const menue = $('.menue', this.karte), liste = $('.menue-liste', this.karte);
-    const eintraege = b ? K.kontrolleEintraege(b.programme).filter(x => x.code !== 'um') : [];
+    const eintraege = b ? K.kontrolleEintraege(b.programme).filter(x => x.code !== 'um' && x.code !== 'loop') : [];
     menue.hidden = !eintraege.length;
     let html = '', sparte = null;
     eintraege.forEach((x, i) => {
@@ -1476,7 +1487,7 @@ class Generator {
     const key = `${l.durchlauf}:${s.pi}`;
     if (l.geloggt === key) return;
     l.geloggt = key;
-    const e = K.laufbuchEintrag({ t: Date.now(), gen: this.einst.nr, code: it.code, name: it.name, sek: it.sek, durchlauf: l.durchlauf });
+    const e = K.laufbuchEintrag({ t: Date.now(), gen: this.einst.nr, code: it.code, name: it.name.replace(/ · Lauf \d+\/\d+$/, ''), sek: it.sek, durchlauf: l.durchlauf });
     if (!e) return;
     laufbuchNotiere(e);
     this.log(`→ Kontrollblatt (Endlosschleife): ${e.code}${e.var ? ' ' + e.var : ''}${laufbuch.handle ? '' : ' – Laufbuch noch nicht gewählt, wartet'}`);

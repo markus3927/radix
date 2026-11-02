@@ -430,6 +430,15 @@
     return h < 24 && min < 60 ? `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}` : null;
   }
 
+  /**
+   * 0.8.1: «loop-10» auf eigener Zeile = das Programm direkt darunter läuft 10-mal hintereinander, danach geht es normal weiter
+   * (Markus 02.11.2026). Auch «loop 10», «loop10», «loop-10x». Gibt die Anzahl zurück, sonst 0.
+   */
+  function loopmarke(zeile) {
+    const m = sauber(zeile).match(/^\s*loop\s*[-–:x]?\s*(\d{1,3})\s*x?\s*$/i);
+    return m && +m[1] >= 1 ? +m[1] : 0;
+  }
+
   // ------------------------------------------------------------------ Kontrollblatt (Frequenz_Kontrolle.json)
   /**
    * 0.7.9: Zeilen, die die Kontrollapp aus dem RADIX-Laufbuch eingetragen hat (Endlosschleife: schon gelaufen), tragen hinter
@@ -465,7 +474,7 @@
    * in die Sicherung (einmal mit, einmal ohne sm30), kam sm30 jedes Mal neu in die Liste (Manuela 02.11.2026: 14-mal).
    * gesehen = { 'sm30|1152': 1, 'um 05:30|': 1 }. Was einmal übernommen wurde, bleibt gesehen, auch wenn es kurz aus der Datei verschwindet.
    */
-  const kontrolleSchluessel = (e) => (e.code === 'um' ? `um ${e.um}|` : `${e.code}|${e.uhr || ''}`);
+  const kontrolleSchluessel = (e) => (e.code === 'um' ? `um ${e.um}|` : e.code === 'loop' ? `loop-${e.loop}|` : `${e.code}|${e.uhr || ''}`);
   function kontrolleNeu(eintraege, gesehen) {
     const rest = { ...(gesehen || {}) }, offen = [];
     for (const e of eintraege) {                                         // zuerst genau gleiche Einträge abhaken
@@ -494,6 +503,8 @@
       if (!z.trim()) continue;
       const um = zeitmarke(z);                                          // 0.6.7: «um 6.00» in der Tageszeile -> Zeitmarke
       if (um) { liste.push({ code: 'um', um, text: `um ${um}`, abschnitt }); continue; }
+      const lp = loopmarke(z);                                          // 0.8.1
+      if (lp) { liste.push({ code: 'loop', loop: lp, text: `loop-${lp}`, abschnitt }); continue; }
       const code = z.match(/^\s*(pr\d{4}|pp\d{4}|pa\d{2}|sm\d{2})\b/i);
       if (code) { liste.push({ code: code[1].toLowerCase(), text: z.trim(), abschnitt, gelaufen: roh.includes(LAUF_MARKE), uhr: uhrmarke(roh) }); continue; }
       if (/^\t\t\t/.test(roh)) { abschnitt = z.trim(); continue; }      // Spartenkopf im Feld «Programme»
@@ -501,6 +512,7 @@
     }
     for (const e of liste) {
       if (e.code === 'um') { Object.assign(e, { dauer: '', name: `Start um ${e.um}`, tageszeit: '', variante: '', zeile: `um ${e.um}` }); continue; }
+      if (e.code === 'loop') { Object.assign(e, { dauer: '', name: `${e.loop}-mal`, tageszeit: '', variante: '', zeile: `loop-${e.loop}` }); continue; }
       const teile = e.text.split('\t').map(s => s.trim()).filter(Boolean);
       e.dauer = /^(\d+h)?\s*(\d+\s*(min|s))?$/.test(teile[1] || '') && /\d/.test(teile[1] || '') ? teile[1] : '';   // «1h 09min», «54min»
       e.name = teile.slice(e.dauer ? 2 : 1).filter(x => !/^(morgens|tagsüber|nachts|abends|mittags|vor Essen|nach Essen)$/i.test(x)).join(' ').replace(/\s+/g, ' ').trim();
@@ -551,7 +563,9 @@
     if (!zeile) return { eintraege: [], hinweis: 'keine Zeile für heute' };
     const heute = datumText(datum);
     if (zeile.date && zeile.date !== heute && kontrolleEintraege(zeile.prog).length) return { eintraege: [], hinweis: `Zeile ${datum.getDate()} gehört zum ${zeile.date}` };
-    return { eintraege: kontrolleEintraege(zeile.prog).filter(e => !e.gelaufen), hinweis: '' };   // 0.7.9: Laufbuch-Zeilen auslassen
+    const eintraege = kontrolleEintraege(zeile.prog).filter(e => !e.gelaufen);                    // 0.7.9: Laufbuch-Zeilen auslassen
+    while (eintraege.length && eintraege[eintraege.length - 1].code === 'loop') eintraege.pop();  // 0.8.1: «loop-10» kommt erst mit dem Programm darunter (sonst halb getipptes «loop-1»)
+    return { eintraege, hinweis: '' };
   }
 
   // ------------------------------------------------------------------ Generator-Befehle (XM)
@@ -780,7 +794,7 @@
     STANDARD_DWELL, MW_LUECKE, lesePresets, baueKatalog, loeseBasis, einstellungen, leseFrequenzzeile, programmeAusPreset,
     inBereich, erstellePlan, frequenzenBei, taktBei, wobbleAus, wobbleFaktor, Befehl, welleZuWerten, leseWellenCsv, findeWelle, einrichtung,
     frequenzBefehle, ausgangBefehle, amplitudeBefehle, neuerZustand, GX, gxEinrichtung, gxFrequenzBefehle, gxAusgangBefehle, gxWarnungen, gxWerte,
-    lesePresetAngabe, finderDaten, finderKatalog, deuteListenZeile, sauber, zeitmarke,
+    lesePresetAngabe, finderDaten, finderKatalog, deuteListenZeile, sauber, zeitmarke, loopmarke,
     kontrolleEintraege, kontrolleZeile, leseKontrolle, kontrolleHeute, datumText, kontrolleSchluessel, kontrolleNeu, kontrolleGesehen,
     LAUF_MARKE, laufbuchEintrag, laufbuchMischen,
   };

@@ -18,6 +18,7 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
    - `pr0245 NF`, `pr0409 HF`, `pr0001` – Programm aus dem Finder, Preset kommt aus der Kachel
    - `pa15`–`pa60` (Pause), `sm15`–`sm60` (Schumann) – übernehmen das Preset davor
    - eigene Frequenzzeile `437=240, 727=420, 120-128=600` – läuft mit «Preset für eigene Zeilen»
+   - `loop-10` auf eigener Zeile – das Programm direkt darunter läuft 10-mal hintereinander
    - «Heute aus Kontrollblatt» übernimmt die heutige Zeile; «Programme des Kunden» zum Antippen
 5. Durchläufe, optional Startzeit → Start. Zwischen Programmen mit anderem Preset stellt RADIX den Generator selbst um.
 6. **Doppelklick im Kontrollblatt** (Blatt 1) geht nach wenigen Sekunden auf Generator 1: steht er, startet er sofort mit dem
@@ -54,6 +55,13 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
     «⏭ Nächstes Programm» während dem Warten startet sofort. Mehrere Marken pro Liste möglich.
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
+
+## Stand Version 0.8.1 (Brücke bleibt 1.2.1) – loop: ein Programm mehrmals hintereinander
+- Markus 02.11.2026: «um 21.00, prxxx, loop-10, prxxx, prxxx»: Zeile `loop-10` (auch `loop 10`, `loop10`, `loop-10x`, 1–999) gilt nur für das Programm direkt darunter. In der Liste und in der Tageszeile der Kontrollapp
+- Umsetzung: `bereiteListeVor` macht aus dem Programm 10 Einträge mit gleicher Zeile (`lauf`, `laeufe`), Name «… · Lauf 3/10». Preset-Wechsel, Zeitmarken, Weiter-Knopf, Protokoll und Laufbuch laufen darum wie bei 10 einzelnen Zeilen
+- Ist der Loop vor der nächsten Zeitmarke fertig: Ausgänge aus, warten. Läuft er noch: Abbruch an der Zeitmarke, weiter nach Zeitplan
+- Kopplung: `loop-10` zuunterst in der Tageszeile wartet, bis ein Programm darunter steht. Danach übernommen wie jeder andere Eintrag
+- `loop-10` ohne Programm darunter (Listenende oder Zeitmarke): Warnung, Start gesperrt
 
 ## Stand Version 0.8.0 (Brücke bleibt 1.2.1) – Kontrollblatt-Einträge erkannt statt gezählt
 - Markus 02.11.2026, Manuela Gen 15: sm30 14-mal in der Liste. Zwei Kontrollapp-Fenster schrieben abwechselnd die Sicherung, einmal mit und einmal ohne sm30; die Kopplung zählte nur die Einträge der Zeile, also galt jedes Wiederauftauchen als neu
