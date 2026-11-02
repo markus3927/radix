@@ -55,6 +55,12 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.8.0 (Brücke bleibt 1.2.1) – Kontrollblatt-Einträge erkannt statt gezählt
+- Markus 02.11.2026, Manuela Gen 15: sm30 14-mal in der Liste. Zwei Kontrollapp-Fenster schrieben abwechselnd die Sicherung, einmal mit und einmal ohne sm30; die Kopplung zählte nur die Einträge der Zeile, also galt jedes Wiederauftauchen als neu
+- `kontrolleNeu` / `kontrolleGesehen` (kern.js): Eintrag = Nummer + unsichtbare Uhrzeit (Zeitmarken: «um 05:30»), mit Anzahl, falls derselbe Eintrag zweimal in derselben Minute steht. Was einmal übernommen wurde, bleibt gesehen, auch wenn es kurz aus der Datei verschwindet. `uebernommen`, `uebernommenMorgen` und `geleert` tragen dazu `gesehen`; alte Stände ohne `gesehen` werden beim ersten Blick aus `anzahl` ergänzt
+- Eintrag ohne Uhrzeit (von Hand getippt), der sie später bekommt, zählt als derselbe Eintrag
+- Weiterhin zweimal: eine ganze Zeile, die von Hand in den Tag davor oder danach verschoben wird (andere Zeile = neue Einträge)
+
 ## Stand Version 0.7.9 (Brücke bleibt 1.2.1) – Endlosschleife trägt ins Kontrollblatt ein
 - Markus 01.11.2026: Kunden auf Endlosschleife (täglich gleiche Programme mit Zeitmarken) – RADIX soll die gelaufenen Programme selbst in die Tageszeile der Kontrollapp bringen, **beim Start** des Programms
 - **Neue Quelle «Laufbuch»** im Kopf, gleich nach dem Kontrollblatt (einmal «Laufbuch wählen» → `RADIX_Laufbuch.json` neben `Frequenz_Kontrolle.json` anlegen; wird gemerkt, nach Neustart evtl. «Zugriff erlauben»)

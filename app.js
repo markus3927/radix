@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.7.9';
+const VERSION = '0.8.0';
 const $ = (s, el = document) => el.querySelector(s);
 const K = window.Kern;
 const SPEICHER = 'radix-generatoren-v2';   // { zuordnung: [Nummer je Anschluss], gen: { Nummer: Einstellungen } }
@@ -906,8 +906,18 @@ class Generator {
   /** Heutige Zeile ohne das, was beim letzten «Leeren» schon drin stand (erledigt). */
   heute() {
     const h = this.heuteAlle(), g = this.geleert;
-    if (g && g.blatt === parseInt(this.einst.nr, 10) && g.datum === K.datumText(new Date())) h.eintraege = h.eintraege.slice(Math.min(g.anzahl, h.eintraege.length));
+    if (g && g.blatt === parseInt(this.einst.nr, 10) && g.datum === K.datumText(new Date())) h.eintraege = g.gesehen ? K.kontrolleNeu(h.eintraege, g.gesehen).neu : h.eintraege.slice(Math.min(g.anzahl, h.eintraege.length));
     return h;
+  }
+  /** 0.8.0: Stand «alles von heute ist übernommen» – behält, was früher schon gesehen wurde, auch wenn es gerade nicht in der Datei steht. */
+  merkeHeute() {
+    const nr = parseInt(this.einst.nr, 10), datum = K.datumText(new Date()), e = this.heuteAlle().eintraege, u = this.uebernommen;
+    return { blatt: nr, datum, anzahl: e.length, gesehen: K.kontrolleNeu(e, u && u.blatt === nr && u.datum === datum ? u.gesehen : {}).gesehen };
+  }
+  /** 0.8.0: dasselbe für die Zeile von morgen. */
+  merkeMorgen(m, marke) {
+    const nr = parseInt(this.einst.nr, 10), u = this.uebernommenMorgen;
+    return { blatt: nr, datum: m.datum, anzahl: m.eintraege.length, gesehen: K.kontrolleNeu(m.eintraege, u && u.blatt === nr && u.datum === m.datum ? u.gesehen : {}).gesehen, marke };
   }
 
   aktualisiereKunde() {
@@ -952,11 +962,13 @@ class Generator {
     const h = this.heuteAlle();
     if (!h.hinweis) {
       let u = this.uebernommen;
-      const vonGestern = this.uebernommenMorgen && this.uebernommenMorgen.blatt === nr && this.uebernommenMorgen.datum === heute ? this.uebernommenMorgen.anzahl : 0;
-      if (!u || u.blatt !== nr) u = { blatt: nr, datum: heute, anzahl: h.eintraege.length };   // erster Blick: Bestehendes nicht übernehmen
-      else if (u.datum !== heute) u = { blatt: nr, datum: heute, anzahl: vonGestern };       // neuer Tag: neu ist, was nicht schon gestern als «morgen» kam
-      if (h.eintraege.length < u.anzahl) u.anzahl = h.eintraege.length;                       // Zeile im Kontrollblatt gekürzt
-      neuHeute = h.eintraege.slice(u.anzahl).map(zeile);
+      const gestern = this.uebernommenMorgen && this.uebernommenMorgen.blatt === nr && this.uebernommenMorgen.datum === heute ? this.uebernommenMorgen : null;
+      if (!u || u.blatt !== nr) u = { blatt: nr, datum: heute, anzahl: h.eintraege.length, gesehen: K.kontrolleGesehen(h.eintraege) };   // erster Blick: Bestehendes nicht übernehmen
+      else if (u.datum !== heute) u = { blatt: nr, datum: heute, anzahl: gestern ? gestern.anzahl : 0, gesehen: gestern ? gestern.gesehen || K.kontrolleGesehen(h.eintraege.slice(0, gestern.anzahl)) : {} };   // neuer Tag: neu ist, was nicht schon gestern als «morgen» kam
+      else if (!u.gesehen) u.gesehen = K.kontrolleGesehen(h.eintraege.slice(0, u.anzahl));   // Stand von vor 0.8.0
+      const r = K.kontrolleNeu(h.eintraege, u.gesehen);                                      // 0.8.0: erkannt an Nummer + Uhrzeit, nicht gezählt
+      neuHeute = r.neu.map(zeile);
+      u.gesehen = r.gesehen;
       u.anzahl = h.eintraege.length;
       this.uebernommen = u;
     }
@@ -964,13 +976,15 @@ class Generator {
     const m = this.morgenZeile();
     let um = this.uebernommenMorgen;
     if (!m.hinweis) {
-      if (!um || um.blatt !== nr || um.datum !== m.datum) um = { blatt: nr, datum: m.datum, anzahl: this.morgenErsterBlick ? m.eintraege.length : 0, marke: '' };
+      if (!um || um.blatt !== nr || um.datum !== m.datum) um = { blatt: nr, datum: m.datum, anzahl: this.morgenErsterBlick ? m.eintraege.length : 0, gesehen: this.morgenErsterBlick ? K.kontrolleGesehen(m.eintraege) : {}, marke: '' };
+      else if (!um.gesehen) um.gesehen = K.kontrolleGesehen(m.eintraege.slice(0, um.anzahl));   // Stand von vor 0.8.0
       this.morgenErsterBlick = false;
       if (m.eintraege.length < um.anzahl) um.anzahl = m.eintraege.length;
+      const rm = K.kontrolleNeu(m.eintraege, um.gesehen);
       if (m.marke) {
-        neuMorgen = m.eintraege.slice(um.anzahl).map(zeile);
-        um.anzahl = m.eintraege.length; um.marke = m.marke;
-      } else if (m.eintraege.length > um.anzahl && !this.morgenGemeldet) {
+        neuMorgen = rm.neu.map(zeile);
+        um.gesehen = rm.gesehen; um.anzahl = m.eintraege.length; um.marke = m.marke;
+      } else if (rm.neu.length && !this.morgenGemeldet) {
         this.morgenGemeldet = true;
         this.melde(`Kontrollblatt morgen (${m.datum}): zuoberst eine Startzeit eintragen, z. B. «um 6.00» – dann kommt die Zeile von morgen hierher`, 'fehler');
       }
@@ -1045,9 +1059,9 @@ class Generator {
     const m = this.morgenZeile();                                     // 0.6.8: Zeile von morgen mit Startzeit zuoberst kommt mit
     if (!m.hinweis && m.marke) {
       zeilen.push(...m.eintraege.map(x => K.kontrolleZeile(x, b, daten.finder)));
-      this.uebernommenMorgen = { blatt: nr, datum: m.datum, anzahl: m.eintraege.length, marke: m.marke };
+      this.uebernommenMorgen = this.merkeMorgen(m, m.marke);
     }
-    this.uebernommen = { blatt: nr, datum: K.datumText(new Date()), anzahl: this.heuteAlle().eintraege.length };
+    this.uebernommen = this.merkeHeute();
     const text = zeilen.join('\n');
     $('.liste', this.karte).value = text;
     this.setzeListe(text);
@@ -1067,7 +1081,7 @@ class Generator {
     if (!mz.hinweis && mz.marke) {                                     // 0.6.8: Startzeit steht schon in der Zeile von morgen
       const zeilen = mz.eintraege.map(x => K.kontrolleZeile(x, b, daten.finder));
       this.fuegeZeilenAn(zeilen);
-      this.uebernommenMorgen = { blatt: parseInt(this.einst.nr, 10), datum: tag, anzahl: mz.eintraege.length, marke: mz.marke };
+      this.uebernommenMorgen = this.merkeMorgen(mz, mz.marke);
       speichereAlle();
       this.log(`Morgen ${tag} aus Kontrollblatt ${parseInt(this.einst.nr, 10)}: ${zeilen.length - 1} Programme ab ${mz.marke.slice(3)}`);
       this.melde(`Morgen (${tag}): ab ${mz.marke.slice(3)} angehängt${this.lauf ? '' : ' – jetzt Start drücken'}`, 'ok');
@@ -1093,11 +1107,11 @@ class Generator {
       if (!confirm(`Generator ${this.einst.nr} stoppen und die Programmliste leeren?`)) return;
       await this.stoppe('Gestoppt, Liste geleert');
     }
-    const nr = parseInt(this.einst.nr, 10), heute = K.datumText(new Date()), anzahl = this.heuteAlle().eintraege.length;
-    this.geleert = { blatt: nr, datum: heute, anzahl };
-    this.uebernommen = { blatt: nr, datum: heute, anzahl };
+    const anzahl = this.heuteAlle().eintraege.length;
+    this.uebernommen = this.merkeHeute();
+    this.geleert = { ...this.uebernommen };
     const mz = this.morgenZeile();
-    if (!mz.hinweis) this.uebernommenMorgen = { blatt: nr, datum: mz.datum, anzahl: mz.eintraege.length, marke: '' };   // nicht von selbst wieder anhängen
+    if (!mz.hinweis) this.uebernommenMorgen = this.merkeMorgen(mz, '');   // nicht von selbst wieder anhängen
     this.meldung = null;
     $('.liste', this.karte).value = '';
     this.setzeListe('');
@@ -1110,10 +1124,9 @@ class Generator {
    * (die ist noch nicht gelaufen und kommt wie gewohnt). Was lief, steht im Protokoll.
    */
   leereNachLauf() {
-    const nr = parseInt(this.einst.nr, 10), heute = K.datumText(new Date()), anzahl = this.heuteAlle().eintraege.length;
     const war = this.einst.liste.split('\n').filter(z => z.trim()).length;
-    this.geleert = { blatt: nr, datum: heute, anzahl };
-    this.uebernommen = { blatt: nr, datum: heute, anzahl };
+    this.uebernommen = this.merkeHeute();
+    this.geleert = { ...this.uebernommen };
     this.fortsetzen = null; $('.btn-weiter', this.karte).hidden = true;
     $('.liste', this.karte).value = '';
     this.einst.liste = '';

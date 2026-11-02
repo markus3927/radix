@@ -452,6 +452,39 @@
     return [...m.values()].sort((a, b) => a.t - b.t || (a.id < b.id ? -1 : 1));
   }
 
+  /** Unsichtbare Uhrzeit des Eintrags (die Kontrollapp schreibt sie als U+E0030–E0039 hinter die Nummer), z. B. «1152». */
+  function uhrmarke(roh) {
+    let u = '';
+    for (const c of String(roh || '')) { const p = c.codePointAt(0); if (p >= 0xE0030 && p <= 0xE0039) u += String(p - 0xE0030); }
+    return u;
+  }
+
+  /**
+   * 0.8.0: Einträge einer Tageszeile werden an Nummer + Uhrzeit erkannt, nicht mehr gezählt.
+   * Vorher: «Zeile kürzer» setzte den Zähler zurück, «Zeile wieder länger» galt als neu. Schrieben zwei Kontrollapp-Fenster abwechselnd
+   * in die Sicherung (einmal mit, einmal ohne sm30), kam sm30 jedes Mal neu in die Liste (Manuela 02.11.2026: 14-mal).
+   * gesehen = { 'sm30|1152': 1, 'um 05:30|': 1 }. Was einmal übernommen wurde, bleibt gesehen, auch wenn es kurz aus der Datei verschwindet.
+   */
+  const kontrolleSchluessel = (e) => (e.code === 'um' ? `um ${e.um}|` : `${e.code}|${e.uhr || ''}`);
+  function kontrolleNeu(eintraege, gesehen) {
+    const rest = { ...(gesehen || {}) }, offen = [];
+    for (const e of eintraege) {                                         // zuerst genau gleiche Einträge abhaken
+      const s = kontrolleSchluessel(e);
+      if (rest[s] > 0) rest[s]--; else offen.push(e);
+    }
+    const neu = [];
+    for (const e of offen) {                                             // Eintrag ohne Uhrzeit, der sie erst später bekommt (Text von Hand getippt)
+      const s = kontrolleSchluessel(e), basis = s.split('|')[0], ohne = `${basis}|`;
+      const k = s !== ohne ? (rest[ohne] > 0 ? ohne : '') : Object.keys(rest).find(x => rest[x] > 0 && x.split('|')[0] === basis) || '';
+      if (k) rest[k]--; else neu.push(e);
+    }
+    const merk = {};
+    for (const e of eintraege) { const s = kontrolleSchluessel(e); merk[s] = (merk[s] || 0) + 1; }
+    for (const [s, n] of Object.entries(rest)) if (n > 0) merk[s] = (merk[s] || 0) + n;
+    return { neu, gesehen: merk };
+  }
+  const kontrolleGesehen = (eintraege) => kontrolleNeu(eintraege, {}).gesehen;
+
   /** Mehrzeilige Programm-Einträge des Kontrollblatts zusammensetzen (Fortsetzungszeilen beginnen mit Tabulator). */
   function kontrolleEintraege(text) {
     const liste = [];
@@ -462,7 +495,7 @@
       const um = zeitmarke(z);                                          // 0.6.7: «um 6.00» in der Tageszeile -> Zeitmarke
       if (um) { liste.push({ code: 'um', um, text: `um ${um}`, abschnitt }); continue; }
       const code = z.match(/^\s*(pr\d{4}|pp\d{4}|pa\d{2}|sm\d{2})\b/i);
-      if (code) { liste.push({ code: code[1].toLowerCase(), text: z.trim(), abschnitt, gelaufen: roh.includes(LAUF_MARKE) }); continue; }
+      if (code) { liste.push({ code: code[1].toLowerCase(), text: z.trim(), abschnitt, gelaufen: roh.includes(LAUF_MARKE), uhr: uhrmarke(roh) }); continue; }
       if (/^\t\t\t/.test(roh)) { abschnitt = z.trim(); continue; }      // Spartenkopf im Feld «Programme»
       if (/^\t/.test(z) && liste.length) { liste[liste.length - 1].text += ' ' + z.trim(); continue; }
     }
@@ -748,7 +781,7 @@
     inBereich, erstellePlan, frequenzenBei, taktBei, wobbleAus, wobbleFaktor, Befehl, welleZuWerten, leseWellenCsv, findeWelle, einrichtung,
     frequenzBefehle, ausgangBefehle, amplitudeBefehle, neuerZustand, GX, gxEinrichtung, gxFrequenzBefehle, gxAusgangBefehle, gxWarnungen, gxWerte,
     lesePresetAngabe, finderDaten, finderKatalog, deuteListenZeile, sauber, zeitmarke,
-    kontrolleEintraege, kontrolleZeile, leseKontrolle, kontrolleHeute, datumText,
+    kontrolleEintraege, kontrolleZeile, leseKontrolle, kontrolleHeute, datumText, kontrolleSchluessel, kontrolleNeu, kontrolleGesehen,
     LAUF_MARKE, laufbuchEintrag, laufbuchMischen,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = Kern;
