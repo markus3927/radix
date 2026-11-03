@@ -5,7 +5,7 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 
 ## Benutzung
 1. Spooky2 schliessen (sonst sind die Anschlüsse belegt).
-2. Oben drei Quellen wählen (werden gemerkt):
+2. Oben die Quellen wählen (vier gleiche Felder, Klick aufs ganze Feld, wird gemerkt):
    - **Spooky2** → Ordner `C:\Spooky2`
    - **Frequenz-Finder** → `Frequenz-Finder.html`
    - **Kontrollblatt** → die Datei, in die das Kontrollblatt automatisch speichert (`Frequenz_Kontrolle.json`)
@@ -21,9 +21,9 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
    - `loop-10` auf eigener Zeile – das Programm direkt darunter läuft 10-mal hintereinander
    - «Heute aus Kontrollblatt» übernimmt die heutige Zeile; «Programme des Kunden» zum Antippen
 5. Durchläufe, optional Startzeit → Start. Zwischen Programmen mit anderem Preset stellt RADIX den Generator selbst um.
-6. **Doppelklick im Kontrollblatt** (Blatt 1) geht nach wenigen Sekunden auf Generator 1: steht er, startet er sofort mit dem
-   richtigen Preset; läuft er, wird hinten angehängt. Fehlt im Kontrollblatt NF/HF, sucht RADIX es im selben Blatt, sonst Knopf NF/HF.
-   Das laufende Preset steht gross auf der Karte (rot Killing, grün Healing). Schalter «Doppelklick im Kontrollblatt startet hier»
+6. **«→ RADIX» in der Tageszeile des Kontrollblatts** (Blatt 1, ab 0.8.5) geht nach wenigen Sekunden auf Generator 1: Das Neue der Zeile
+   wird hinten angehängt, gestartet wird von Hand. Fehlt im Kontrollblatt NF/HF, sucht RADIX es im selben Blatt, sonst Knopf NF/HF.
+   Das laufende Preset steht gross auf der Karte (rot Killing, grün Healing). Schalter «→ RADIX im Kontrollblatt kommt hierher»
    pro Generator; aus = nur Hinweis mit «Anhängen».
 7. **Während dem Lauf** bleibt die Programmliste offen: Programme nach dem laufenden dürfen dazukommen, sich ändern oder
    wegfallen; das laufende und die schon gelaufenen bleiben gesperrt (Meldung über der Vorschau). Offenes NF/HF wird
@@ -55,6 +55,19 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
     «⏭ Nächstes Programm» während dem Warten startet sofort. Mehrere Marken pro Liste möglich.
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
+
+## Stand Version 0.8.5 (Brücke bleibt 1.2.1) – nur noch «→ RADIX» schickt Programme her
+- Der Sendeautomat ist weg. Ein Doppelklick im Kontrollblatt schreibt nur noch in die Tageszeile, dort kann man in Ruhe korrigieren. Erst der Knopf **«→ RADIX»** der Zeile (Kontrollapp ab R397) schickt sie los.
+- Technik: Der Knopf setzt `days[n].rxT = Date.now()` und speichert sofort. RADIX merkt sich den Stempel (`uebernommen.rxT`, `uebernommenMorgen.rxT`) und nimmt nur bei geändertem Stempel das noch nicht Gesehene dieser Zeile. `K.kontrolleSendeStempel(blatt, datum)` liest ihn.
+- Bleibt gleich: Nachträge kommen als Neues hinten dran (erkannt an Nummer + Uhrmarke), «Heute/Morgen aus Kontrollblatt» und der Haken pro Generator wirken wie bisher, gestartet wird von Hand.
+- Morgen braucht weiterhin zuoberst «um 6.00». Die Kontrollapp sperrt den Knopf sonst; RADIX meldet es zur Sicherheit trotzdem.
+- **Kontrollapp ab R397 nötig.** Mit einer älteren Kontrollapp kommt nichts mehr automatisch an.
+
+## Stand Version 0.8.4 (Brücke bleibt 1.2.1) – vier gleiche Quellen-Felder
+- Spooky2, Frequenz-Finder, Kontrollblatt und Laufbuch sind vier gleich breite klickbare Zweizeiler: oben Name und was der Klick macht («Datei wählen», «Zugriff erlauben»), unten der Stand. Das ganze Feld ist der Knopf.
+- Laufbuch hat ein eigenes Feld (vorher in das Kontrollblatt-Feld geklemmt, darum stand dessen Knopf halb draussen).
+- Fenster bis 1000 px breit: zwei Reihen à zwei Felder, bis 520 px untereinander. Zu langer Stand wird mit «…» gekürzt, ganzer Text beim Drüberfahren.
+- Nur Darstellung, am Ablauf ändert sich nichts.
 
 ## Stand Version 0.8.3 (Brücke bleibt 1.2.1) – Peptid-Liste nach dem Ordner Remote
 - `peptide.js` neu aus dem Ordner `JW_Peptides\Remote` des RADIX-PC: 2012 Programme, alle lesbar, dazu 20 ältere Nummern, die auf ihr Nachfolge-Programm zeigen (z. B. pp0004 → Acid Reflux (Gastroesophageal Reflux Disease)). 10 alte Nummern ohne Datei und die Nummern ab pp1514 ohne Datei sind entfernt.

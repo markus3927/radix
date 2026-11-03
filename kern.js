@@ -560,6 +560,16 @@
     return { blaetter, aktiv: Number.isFinite(a) ? a : null, aktivZeit: d.aktivZeit ?? null };
   }
 
+  /**
+   * 0.8.5: Zeitstempel des letzten Drucks auf «→ RADIX» in der Tageszeile (0 = nie gedrückt). Nur dieser Knopf schickt Programme hierher.
+   * Älter als 3 Tage zählt nicht: Die Zeile gehört dann noch zum Vormonat (Zeile = Monatstag), sonst ginge sie am neuen Tag von selbst los.
+   */
+  function kontrolleSendeStempel(blatt, datum = new Date()) {
+    const zeile = blatt && blatt.days && blatt.days[datum.getDate() - 1];
+    const t = zeile && +zeile.rxT || 0;
+    return t && datum.getTime() - t < 3 * 864e5 ? t : 0;
+  }
+
   /** Heutige Zeile eines Blatts (Zeile = Monatstag, wie im Kontrollblatt). */
   function kontrolleHeute(blatt, datum = new Date()) {
     const zeile = blatt && blatt.days && blatt.days[datum.getDate() - 1];
@@ -798,7 +808,7 @@
     inBereich, erstellePlan, frequenzenBei, taktBei, wobbleAus, wobbleFaktor, Befehl, welleZuWerten, leseWellenCsv, findeWelle, einrichtung,
     frequenzBefehle, ausgangBefehle, amplitudeBefehle, neuerZustand, GX, gxEinrichtung, gxFrequenzBefehle, gxAusgangBefehle, gxWarnungen, gxWerte,
     lesePresetAngabe, finderDaten, finderKatalog, deuteListenZeile, sauber, zeitmarke, loopmarke,
-    kontrolleEintraege, kontrolleZeile, leseKontrolle, kontrolleHeute, datumText, kontrolleSchluessel, kontrolleNeu, kontrolleGesehen,
+    kontrolleEintraege, kontrolleZeile, leseKontrolle, kontrolleHeute, kontrolleSendeStempel, datumText, kontrolleSchluessel, kontrolleNeu, kontrolleGesehen,
     LAUF_MARKE, laufbuchEintrag, laufbuchMischen,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = Kern;

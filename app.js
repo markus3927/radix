@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.8.3';
+const VERSION = '0.8.5';
 const $ = (s, el = document) => el.querySelector(s);
 const K = window.Kern;
 const SPEICHER = 'radix-generatoren-v2';   // { zuordnung: [Nummer je Anschluss], gen: { Nummer: Einstellungen } }
@@ -20,6 +20,8 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<':
 function lade(key, std) { try { return JSON.parse(localStorage.getItem(key)) ?? std; } catch (e) { return std; } }
 function speichere(key, wert) { try { localStorage.setItem(key, JSON.stringify(wert)); } catch (e) { /* voll oder gesperrt */ } }
 function setzeQuelle(sel, text, art = '') { const s = $(sel); s.textContent = text; s.title = text; s.className = 'stand ' + art; }
+/** 0.8.4: Quellen sind klickbare Zweizeiler – nur die Beschriftung oben rechts wechselt, Titel und Stand bleiben. */
+const setzeAktion = (knopf, text) => { $('.aktion', knopf).textContent = text; };
 
 // ------------------------------------------------------------------ Gemerkte Ordner und Dateien (Handles in IndexedDB)
 const db = {
@@ -103,10 +105,10 @@ async function ordnerBeimStart() {
   const fehler = (e) => setzeQuelle('#ordner-status', e.message || String(e), 'fehler');
   if (await h.queryPermission({ mode: 'read' }) === 'granted') { await ladeSpooky2(h).catch(fehler); return; }
   const b = $('#btn-ordner');
-  b.textContent = 'Zugriff erlauben';
+  setzeAktion(b, 'Zugriff erlauben');
   setzeQuelle('#ordner-status', 'C:\\Spooky2 gemerkt – Zugriff bestätigen', 'fehler');
   b.onclick = async () => {
-    if (await h.requestPermission({ mode: 'read' }) === 'granted') { b.textContent = 'Ordner wählen'; b.onclick = waehleOrdner; await ladeSpooky2(h).catch(fehler); }
+    if (await h.requestPermission({ mode: 'read' }) === 'granted') { setzeAktion(b, 'Ordner wählen'); b.onclick = waehleOrdner; await ladeSpooky2(h).catch(fehler); }
   };
 }
 
@@ -170,10 +172,10 @@ async function quelleBeimStart(name) {
   if (await h.queryPermission({ mode: 'read' }) === 'granted') { await ladeQuelle(name).catch(e => setzeQuelle(q.status, e.message, 'fehler')); }
   else {
     const b = $(q.knopf);
-    b.textContent = 'Zugriff erlauben';
+    setzeAktion(b, 'Zugriff erlauben');
     setzeQuelle(q.status, `${h.name} gemerkt – Zugriff bestätigen`, 'fehler');
     b.onclick = async () => {
-      if (await h.requestPermission({ mode: 'read' }) === 'granted') { b.textContent = 'Datei wählen'; b.onclick = () => waehleDatei(name); await ladeQuelle(name).catch(e => setzeQuelle(q.status, e.message, 'fehler')); }
+      if (await h.requestPermission({ mode: 'read' }) === 'granted') { setzeAktion(b, 'Datei wählen'); b.onclick = () => waehleDatei(name); await ladeQuelle(name).catch(e => setzeQuelle(q.status, e.message, 'fehler')); }
     };
   }
 }
@@ -199,18 +201,8 @@ const laufbuch = { handle: null, offen: lade(LAUFBUCH_OFFEN, []), uhr: null, sch
 
 function laufbuchElemente() {
   if (laufbuch.knopf) return;
-  // Knopf + Stand gleich nach dem Kontrollblatt im Kopf (index.html bleibt unverändert)
-  const kb = $('#btn-kontrolle'), ks = $('#kontrolle-status');
-  const knopf = document.createElement('button'); knopf.type = 'button'; knopf.id = 'btn-laufbuch';
-  knopf.className = kb ? kb.className : ''; knopf.textContent = 'Laufbuch wählen';
-  knopf.title = 'RADIX_Laufbuch.json – bei Endlosschleife (Durchläufe 0) kommt jeder Programmstart hierher, die Kontrollapp trägt ihn in die Tageszeile ein';
-  const stand = document.createElement('span'); stand.id = 'laufbuch-status'; stand.className = 'stand';
-  const box = document.createElement('span'); box.className = 'laufbuch-quelle'; box.style.cssText = 'display:inline-flex;align-items:center;gap:6px;margin-left:10px;flex-wrap:wrap';
-  const titel = document.createElement('b'); titel.textContent = 'Laufbuch'; titel.style.fontSize = '0.9em';
-  box.append(titel, knopf, stand);
-  if (ks && ks.parentNode) ks.after(box); else if (kb && kb.parentNode) kb.after(box); else ($('#kopfbereich') || document.body).appendChild(box);
-  knopf.onclick = laufbuchWaehlen;
-  laufbuch.knopf = knopf;
+  laufbuch.knopf = $('#btn-laufbuch');                                   // 0.8.4: vierter Zweizeiler in index.html
+  laufbuch.knopf.onclick = laufbuchWaehlen;
 }
 function laufbuchStand() {
   laufbuchElemente();
@@ -224,7 +216,7 @@ async function laufbuchWaehlen() {
     const h = await window.showSaveFilePicker({ id: 'laufbuch', suggestedName: 'RADIX_Laufbuch.json', types: [{ description: 'RADIX-Laufbuch (JSON)', accept: { 'application/json': ['.json'] } }] });
     laufbuch.handle = h; laufbuch.frei = true;
     await db.set('laufbuch', h);
-    laufbuch.knopf.textContent = 'Laufbuch wählen'; laufbuch.knopf.onclick = laufbuchWaehlen;
+    setzeAktion(laufbuch.knopf, 'Datei wählen'); laufbuch.knopf.onclick = laufbuchWaehlen;
     await laufbuchSchreiben();
   } catch (e) { if (e.name !== 'AbortError') setzeQuelle('#laufbuch-status', e.message || String(e), 'fehler'); }
   alleKarten(g => g.pruefe());
@@ -236,10 +228,10 @@ async function laufbuchBeimStart() {
     laufbuch.handle = h;
     laufbuch.frei = await h.queryPermission({ mode: 'readwrite' }).catch(() => 'denied') === 'granted';
     if (!laufbuch.frei) {
-      laufbuch.knopf.textContent = 'Zugriff erlauben';
+      setzeAktion(laufbuch.knopf, 'Zugriff erlauben');
       laufbuch.knopf.onclick = async () => {
         if (await h.requestPermission({ mode: 'readwrite' }) === 'granted') {
-          laufbuch.frei = true; laufbuch.knopf.textContent = 'Laufbuch wählen'; laufbuch.knopf.onclick = laufbuchWaehlen;
+          laufbuch.frei = true; setzeAktion(laufbuch.knopf, 'Datei wählen'); laufbuch.knopf.onclick = laufbuchWaehlen;
           await laufbuchSchreiben(); alleKarten(g => g.pruefe());
         }
       };
@@ -915,6 +907,8 @@ class Generator {
     const m = b ? K.kontrolleHeute(b, d) : { eintraege: [], hinweis: '' };
     return { ...m, datum: K.datumText(d), marke: m.eintraege.length && m.eintraege[0].code === 'um' ? m.eintraege[0].zeile : '' };
   }
+  /** 0.8.5: Stempel «→ RADIX» der Zeile von morgen. */
+  morgenStempel() { const d = new Date(); d.setDate(d.getDate() + 1); return K.kontrolleSendeStempel(this.blatt(), d); }
   /** Heutige Zeile ohne das, was beim letzten «Leeren» schon drin stand (erledigt). */
   heute() {
     const h = this.heuteAlle(), g = this.geleert;
@@ -924,12 +918,12 @@ class Generator {
   /** 0.8.0: Stand «alles von heute ist übernommen» – behält, was früher schon gesehen wurde, auch wenn es gerade nicht in der Datei steht. */
   merkeHeute() {
     const nr = parseInt(this.einst.nr, 10), datum = K.datumText(new Date()), e = this.heuteAlle().eintraege, u = this.uebernommen;
-    return { blatt: nr, datum, anzahl: e.length, gesehen: K.kontrolleNeu(e, u && u.blatt === nr && u.datum === datum ? u.gesehen : {}).gesehen };
+    return { blatt: nr, datum, anzahl: e.length, gesehen: K.kontrolleNeu(e, u && u.blatt === nr && u.datum === datum ? u.gesehen : {}).gesehen, rxT: K.kontrolleSendeStempel(this.blatt()) };
   }
   /** 0.8.0: dasselbe für die Zeile von morgen. */
   merkeMorgen(m, marke) {
     const nr = parseInt(this.einst.nr, 10), u = this.uebernommenMorgen;
-    return { blatt: nr, datum: m.datum, anzahl: m.eintraege.length, gesehen: K.kontrolleNeu(m.eintraege, u && u.blatt === nr && u.datum === m.datum ? u.gesehen : {}).gesehen, marke };
+    return { blatt: nr, datum: m.datum, anzahl: m.eintraege.length, gesehen: K.kontrolleNeu(m.eintraege, u && u.blatt === nr && u.datum === m.datum ? u.gesehen : {}).gesehen, marke, rxT: this.morgenStempel() };
   }
 
   aktualisiereKunde() {
@@ -959,9 +953,10 @@ class Generator {
   }
 
   /**
-   * Kopplung: jeder neue Eintrag in der heutigen Zeile des Kontrollblatts (Doppelklick dort) geht auf diesen Generator
-   * und wird hinten an die Programmliste angehängt. Gestartet wird von Hand (Start oder Startzeit); läuft er schon,
-   * kommt das Neue nach dem laufenden Programm dran.
+   * Kopplung (0.8.5, Markus 03.11.2026: «besser wäre wenn ich bei jeder tageszeile einen an radix senden knopf hätte und der
+   * sendeautomat nicht mehr ist»): Einträge der Tageszeile warten, bis in der Kontrollapp «→ RADIX» gedrückt wurde (days[n].rxT).
+   * Dann geht das noch nicht Gesehene dieser Zeile auf diesen Generator und wird hinten an die Programmliste angehängt.
+   * Gestartet wird von Hand (Start oder Startzeit); läuft er schon, kommt das Neue nach dem laufenden Programm dran.
    */
   koppeln() {
     $('.neu', this.karte).hidden = true;
@@ -975,36 +970,42 @@ class Generator {
     if (!h.hinweis) {
       let u = this.uebernommen;
       const gestern = this.uebernommenMorgen && this.uebernommenMorgen.blatt === nr && this.uebernommenMorgen.datum === heute ? this.uebernommenMorgen : null;
-      if (!u || u.blatt !== nr) u = { blatt: nr, datum: heute, anzahl: h.eintraege.length, gesehen: K.kontrolleGesehen(h.eintraege) };   // erster Blick: Bestehendes nicht übernehmen
-      else if (u.datum !== heute) u = { blatt: nr, datum: heute, anzahl: gestern ? gestern.anzahl : 0, gesehen: gestern ? gestern.gesehen || K.kontrolleGesehen(h.eintraege.slice(0, gestern.anzahl)) : {} };   // neuer Tag: neu ist, was nicht schon gestern als «morgen» kam
+      if (!u || u.blatt !== nr) u = { blatt: nr, datum: heute, anzahl: h.eintraege.length, gesehen: K.kontrolleGesehen(h.eintraege), rxT: K.kontrolleSendeStempel(b) };   // erster Blick: Bestehendes nicht übernehmen
+      else if (u.datum !== heute) u = { blatt: nr, datum: heute, anzahl: gestern ? gestern.anzahl : 0, gesehen: gestern ? gestern.gesehen || K.kontrolleGesehen(h.eintraege.slice(0, gestern.anzahl)) : {}, rxT: gestern ? gestern.rxT || 0 : 0 };   // neuer Tag: neu ist, was nicht schon gestern als «morgen» kam
       else if (!u.gesehen) u.gesehen = K.kontrolleGesehen(h.eintraege.slice(0, u.anzahl));   // Stand von vor 0.8.0
-      const r = K.kontrolleNeu(h.eintraege, u.gesehen);                                      // 0.8.0: erkannt an Nummer + Uhrzeit, nicht gezählt
-      neuHeute = r.neu.map(zeile);
-      u.gesehen = r.gesehen;
-      u.anzahl = h.eintraege.length;
+      const stempel = K.kontrolleSendeStempel(b);                                            // 0.8.5: nur nach «→ RADIX»
+      if (stempel && stempel !== u.rxT) {
+        const r = K.kontrolleNeu(h.eintraege, u.gesehen);                                    // 0.8.0: erkannt an Nummer + Uhrzeit, nicht gezählt
+        neuHeute = r.neu.map(zeile);
+        u.gesehen = r.gesehen;
+        u.anzahl = h.eintraege.length;
+        u.rxT = stempel;
+      }
       this.uebernommen = u;
     }
     // ---- Zeile von morgen (0.6.8): kommt mit, sobald sie zuoberst eine Zeitmarke hat («um 6.00»)
     const m = this.morgenZeile();
     let um = this.uebernommenMorgen;
     if (!m.hinweis) {
-      if (!um || um.blatt !== nr || um.datum !== m.datum) um = { blatt: nr, datum: m.datum, anzahl: this.morgenErsterBlick ? m.eintraege.length : 0, gesehen: this.morgenErsterBlick ? K.kontrolleGesehen(m.eintraege) : {}, marke: '' };
+      if (!um || um.blatt !== nr || um.datum !== m.datum) um = { blatt: nr, datum: m.datum, anzahl: this.morgenErsterBlick ? m.eintraege.length : 0, gesehen: this.morgenErsterBlick ? K.kontrolleGesehen(m.eintraege) : {}, marke: '', rxT: this.morgenErsterBlick ? this.morgenStempel() : 0 };
       else if (!um.gesehen) um.gesehen = K.kontrolleGesehen(m.eintraege.slice(0, um.anzahl));   // Stand von vor 0.8.0
       this.morgenErsterBlick = false;
       if (m.eintraege.length < um.anzahl) um.anzahl = m.eintraege.length;
-      const rm = K.kontrolleNeu(m.eintraege, um.gesehen);
-      if (m.marke) {
-        neuMorgen = rm.neu.map(zeile);
-        um.gesehen = rm.gesehen; um.anzahl = m.eintraege.length; um.marke = m.marke;
-      } else if (rm.neu.length && !this.morgenGemeldet) {
-        this.morgenGemeldet = true;
-        this.melde(`Kontrollblatt morgen (${m.datum}): zuoberst eine Startzeit eintragen, z. B. «um 6.00» – dann kommt die Zeile von morgen hierher`, 'fehler');
+      const stempelM = this.morgenStempel();                                                 // 0.8.5: nur nach «→ RADIX»
+      if (stempelM && stempelM !== um.rxT) {
+        um.rxT = stempelM;
+        const rm = K.kontrolleNeu(m.eintraege, um.gesehen);
+        if (m.marke) {
+          neuMorgen = rm.neu.map(zeile);
+          um.gesehen = rm.gesehen; um.anzahl = m.eintraege.length; um.marke = m.marke;
+        } else if (rm.neu.length) {                                                          // Kontrollapp sperrt das schon; nur zur Sicherheit
+          this.melde(`Kontrollblatt morgen (${m.datum}): zuoberst eine Startzeit eintragen, z. B. «um 6.00», dann nochmals «→ RADIX» drücken`, 'fehler');
+        }
       }
       this.uebernommenMorgen = um;
     }
     speichereAlle();
     if (!neuHeute.length && !neuMorgen.length) return;
-    this.morgenGemeldet = false;
     if (neuHeute.length) {
       // Heutiges gehört vor den Block von morgen (falls der schon in der Liste steht)
       const vor = um && um.marke && um.anzahl > neuMorgen.length ? um.marke : '';
