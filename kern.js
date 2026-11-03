@@ -196,6 +196,7 @@
       const explizit = sek !== null;
       const dauer = explizit ? sek : standardSek;
       const mit = (x) => (explizit ? { ...x, sek: dauer } : { ...x, sek: dauer, standard: true });
+      if (wert.startsWith('~')) { eintraege.push(mit({ art: 'verschluesselt', text: wert })); continue; }   // 0.8.2: neue JW-Presets (ab 2026) sind verschlüsselt
       if (/^m/i.test(wert)) {
         const da = parseFloat(wert.slice(1));
         eintraege.push(mit(Number.isFinite(da) ? { art: 'mw', da } : { art: 'unbekannt', text: wert }));
@@ -254,6 +255,7 @@
       const mitMW = e.mwFaktor > 0 && prog.eintraege.some(x => x.art === 'mw');
       for (let x of prog.eintraege) {
         if (x.art === 'mw' && e.mwFaktor > 0) x = { ...x, art: 'hz', hz: x.da * e.mwFaktor, mw: x.da };   // Molekulargewicht (Da) -> Hz, dann wie jede Frequenz herunterteilen
+        if (x.art === 'verschluesselt') { ungenutzt.add('Preset-Datei ist verschlüsselt (Einträge mit ~): RADIX kann sie nicht abspielen'); continue; }   // 0.8.2
         if (x.art === 'mw' || x.art === 'unbekannt') { ungenutzt.add(x.art === 'mw' ? 'MW-Frequenzen (M…) mit diesem Preset nicht unterstützt – MW-Preset wählen (z. B. MW Emulate (R) - JW)' : `Unbekannter Eintrag «${x.text}»`); continue; }
         const sek = (x.standard && e.forceDwell > 0 ? e.forceDwell : x.sek) * e.dwellFaktor;
         for (let r = 0; r < e.wdhFrequenz; r++) liste.push({ ...x, sek });

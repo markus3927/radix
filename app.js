@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.8.1';
+const VERSION = '0.8.2';
 const $ = (s, el = document) => el.querySelector(s);
 const K = window.Kern;
 const SPEICHER = 'radix-generatoren-v2';   // { zuordnung: [Nummer je Anschluss], gen: { Nummer: Einstellungen } }
@@ -609,6 +609,7 @@ function bereiteListeVor(text, standardPreset) {
     it.wobble = p && p.wobbleProzent ? K.wobbleAus(p.wobbleProzent, ein.roh) : ein.e.wobble;
     const programme = it.r.art === 'preset' ? K.programmeAusPreset(ein.roh)
       : [{ name: it.code, eintraege: K.leseFrequenzzeile(p ? p.zeile : it.r.zeile, p ? p.dwell : K.STANDARD_DWELL) }];
+    if (programme.some(pr => pr.eintraege.some(x => x.art === 'verschluesselt'))) { it.fehler = `${it.code}: Preset-Datei ist verschlüsselt, RADIX kann sie nicht abspielen`; return; }   // 0.8.2: sonst liefen nur die Pausen
     const plan = K.erstellePlan(ein.e, programme, { wobble: it.wobble });
     if (it.r.art === 'preset' && !programme.length) it.fehler = `Preset «${it.r.name}» enthält keine Programme`;
     it.sek = plan.gesamtSek;
