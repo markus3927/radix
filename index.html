@@ -27,12 +27,16 @@
   .kopf-knoepfe{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:10px 12px}
   header .info{color:#D6E8F7;font-size:13px;background:rgba(255,255,255,.12);border-radius:12px;padding:3px 10px}
   .spacer{flex:1}
-  .quellen{display:flex;flex-wrap:wrap;gap:8px 10px;padding:10px 18px 0}
-  .quelle{display:flex;align-items:center;gap:8px;background:var(--page);border:1px solid var(--divider);border-radius:10px;padding:6px 8px 6px 12px;font-size:13px;flex:1 1 300px;min-width:0}
-  .quelle .titel{font-weight:700;color:var(--royal-dark);white-space:nowrap}
-  .quelle .stand{color:var(--text-light);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+  /* 0.8.4: vier gleich breite klickbare Zweizeiler (ganze Fläche ist der Knopf): oben Name + was der Klick macht, unten der Stand */
+  .quellen{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px 8px;padding:10px 18px 0}
+  @media (max-width:1000px){.quellen{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  @media (max-width:520px){.quellen{grid-template-columns:minmax(0,1fr)}}
+  button.quelle{display:flex;flex-direction:column;align-items:stretch;gap:1px;min-width:0;width:100%;padding:6px 10px 7px;border-radius:10px;font-size:13px;font-weight:400;line-height:1.35;text-align:left}
+  .quelle .q-kopf{display:flex;align-items:baseline;justify-content:space-between;gap:6px;min-width:0}
+  .quelle .titel{font-weight:700;color:var(--royal-dark);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+  .quelle .aktion{font-size:12px;font-weight:600;color:var(--royal);white-space:nowrap;flex:none}
+  .quelle .stand{display:block;color:var(--text-light);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
   .quelle .stand.ok{color:var(--ok)} .quelle .stand.fehler{color:var(--rot)}
-  .quelle button{padding:4px 10px;font-size:13px}
   /* Knöpfe mit 3D-Effekt: Kante unten, beim Drücken sinkt der Knopf ein */
   button{font:inherit;font-weight:600;padding:7px 16px;border-radius:9px;border:1px solid var(--royal);cursor:pointer;color:#fff;
     background:linear-gradient(180deg,#2A7BD6 0%,var(--royal) 55%,#115AAE 100%);
@@ -222,9 +226,10 @@
 </div>
 
 <div class="quellen">
-  <div class="quelle"><span class="titel">Spooky2</span><span class="stand" id="ordner-status">C:\Spooky2 noch nicht gewählt</span><button id="btn-ordner" class="ghost">Ordner wählen</button></div>
-  <div class="quelle"><span class="titel">Frequenz-Finder</span><span class="stand" id="finder-status">noch nicht gewählt</span><button id="btn-finder" class="ghost">Datei wählen</button></div>
-  <div class="quelle"><span class="titel">Kontrollblatt</span><span class="stand" id="kontrolle-status">noch nicht gewählt</span><button id="btn-kontrolle" class="ghost">Datei wählen</button></div>
+  <button type="button" id="btn-ordner" class="ghost quelle"><span class="q-kopf"><span class="titel">Spooky2</span><span class="aktion">Ordner wählen</span></span><span class="stand" id="ordner-status">C:\Spooky2 noch nicht gewählt</span></button>
+  <button type="button" id="btn-finder" class="ghost quelle"><span class="q-kopf"><span class="titel">Frequenz-Finder</span><span class="aktion">Datei wählen</span></span><span class="stand" id="finder-status">noch nicht gewählt</span></button>
+  <button type="button" id="btn-kontrolle" class="ghost quelle"><span class="q-kopf"><span class="titel">Kontrollblatt</span><span class="aktion">Datei wählen</span></span><span class="stand" id="kontrolle-status">noch nicht gewählt</span></button>
+  <button type="button" id="btn-laufbuch" class="ghost quelle" title="RADIX_Laufbuch.json – bei Endlosschleife (Durchläufe 0) kommt jeder Programmstart hierher, die Kontrollapp trägt ihn in die Tageszeile ein"><span class="q-kopf"><span class="titel">Laufbuch</span><span class="aktion">Datei wählen</span></span><span class="stand" id="laufbuch-status">nicht gewählt (nur für Endlosschleife)</span></button>
 </div>
 
 <div id="kein-chrome" hidden>Diese App braucht Google Chrome oder Microsoft Edge auf einem Computer.</div>

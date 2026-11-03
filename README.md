@@ -5,7 +5,7 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 
 ## Benutzung
 1. Spooky2 schliessen (sonst sind die Anschlüsse belegt).
-2. Oben drei Quellen wählen (werden gemerkt):
+2. Oben die Quellen wählen (vier gleiche Felder, Klick aufs ganze Feld, wird gemerkt):
    - **Spooky2** → Ordner `C:\Spooky2`
    - **Frequenz-Finder** → `Frequenz-Finder.html`
    - **Kontrollblatt** → die Datei, in die das Kontrollblatt automatisch speichert (`Frequenz_Kontrolle.json`)
@@ -55,6 +55,12 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
     «⏭ Nächstes Programm» während dem Warten startet sofort. Mehrere Marken pro Liste möglich.
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
+
+## Stand Version 0.8.4 (Brücke bleibt 1.2.1) – vier gleiche Quellen-Felder
+- Spooky2, Frequenz-Finder, Kontrollblatt und Laufbuch sind vier gleich breite klickbare Zweizeiler: oben Name und was der Klick macht («Datei wählen», «Zugriff erlauben»), unten der Stand. Das ganze Feld ist der Knopf.
+- Laufbuch hat ein eigenes Feld (vorher in das Kontrollblatt-Feld geklemmt, darum stand dessen Knopf halb draussen).
+- Fenster bis 1000 px breit: zwei Reihen à zwei Felder, bis 520 px untereinander. Zu langer Stand wird mit «…» gekürzt, ganzer Text beim Drüberfahren.
+- Nur Darstellung, am Ablauf ändert sich nichts.
 
 ## Stand Version 0.8.3 (Brücke bleibt 1.2.1) – Peptid-Liste nach dem Ordner Remote
 - `peptide.js` neu aus dem Ordner `JW_Peptides\Remote` des RADIX-PC: 2012 Programme, alle lesbar, dazu 20 ältere Nummern, die auf ihr Nachfolge-Programm zeigen (z. B. pp0004 → Acid Reflux (Gastroesophageal Reflux Disease)). 10 alte Nummern ohne Datei und die Nummern ab pp1514 ohne Datei sind entfernt.
