@@ -424,10 +424,28 @@
   }
 
   // ------------------------------------------------------------------ Zeitmarke
-  /** Zeitmarke «um 06:00» (auch «ab 6:00», «06:00», «um 6.00 Uhr») -> «06:00», sonst null. «6.00» allein ist eine Frequenz. */
+  /** 0.8.6: «um 21:00 am 04.11.26»: die Zeitmarke gilt erst an diesem Tag. */
+  const MARKEN_DATUM = /\s+am\s+(\d{2})\.(\d{2})\.(\d{2})\s*$/i;
+  /** Datum einer Zeitmarke als { j, m, t } (Jahr vierstellig, Monat ab 1), sonst null. */
+  function markenDatum(zeile) {
+    const m = sauber(zeile).trim().match(MARKEN_DATUM);
+    return m ? { j: 2000 + +m[3], m: +m[2], t: +m[1] } : null;
+  }
+  /**
+   * 0.8.6 (Markus 03.11.2026: Nachtprogramm in der Zeile von morgen lief heute): RADIX nimmt sonst die nächste Uhrzeit, also heute
+   * Abend. Die erste Zeitmarke der Zeile von morgen bekommt darum das Datum, wenn ihre Uhrzeit heute noch kommt.
+   */
+  function morgenDatumSetzen(zeilen, datum, jetzt) {
+    const i = zeilen.findIndex(z => zeitmarke(z));
+    if (i < 0) return zeilen;
+    const u = zeitmarke(zeilen[i]), min = +u.slice(0, 2) * 60 + +u.slice(3);
+    return min > jetzt ? zeilen.map((z, k) => (k === i ? `um ${u} am ${datum}` : z)) : zeilen;
+  }
+
+  /** Zeitmarke «um 06:00» (auch «ab 6:00», «06:00», «um 6.00 Uhr», mit «am 04.11.26» dahinter) -> «06:00», sonst null. «6.00» allein ist eine Frequenz. */
   function zeitmarke(zeile) {
     const t = sauber(zeile).trim();
-    const m = t.match(/^(?:(?:um|ab)\s*(\d{1,2})[:.](\d{2})|(\d{1,2}):(\d{2}))\s*(?:uhr)?$/i);
+    const m = t.replace(MARKEN_DATUM, '').match(/^(?:(?:um|ab)\s*(\d{1,2})[:.](\d{2})|(\d{1,2}):(\d{2}))\s*(?:uhr)?$/i);
     if (!m) return null;
     const h = +(m[1] ?? m[3]), min = +(m[2] ?? m[4]);
     return h < 24 && min < 60 ? `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}` : null;
@@ -496,6 +514,55 @@
     return { neu, gesehen: merk };
   }
   const kontrolleGesehen = (eintraege) => kontrolleNeu(eintraege, {}).gesehen;
+
+  /** 0.8.6: Letzte Zeitmarke der Programmliste («21:00»), bei vor (z. B. «um 06:00») die letzte davor. '' = keine. */
+  function kontrolleLetzteMarke(liste, vor = '') {
+    const zeilen = String(liste || '').split('\n');
+    let ende = zeilen.length;
+    if (vor) { const i = zeilen.map(z => zeitmarke(z) ? `um ${zeitmarke(z)}` : '').lastIndexOf(vor); if (i >= 0) ende = i; }
+    for (let i = ende - 1; i >= 0; i--) { const m = zeitmarke(zeilen[i]); if (m) return m; }
+    return '';
+  }
+
+  /**
+   * 0.8.6 (Markus 03.11.2026: «es kopiert irgendwie die zeit nicht immer», Gen. 10): Eine Zeitmarke gilt nach dem ersten Empfang
+   * als gesehen. Kam derselbe Block nochmals, kamen nur die Programme ohne «um 21.00» an und liefen beim Start sofort los.
+   * Neue Programme nehmen darum ihre Zeitmarke aus der Tageszeile mit. Sie kommt nicht dazu, wenn sie in der Programmliste schon
+   * die letzte ist (sonst legt das zweite «um» den Block auf den Tag danach) oder wenn die Zeit vorbei ist.
+   * alle = ganze Tageszeile, neu = Teilmenge daraus, listenMarke = kontrolleLetzteMarke(), jetzt = Minuten seit Mitternacht,
+   * für die Zeile von morgen -1. Eine kleinere Zeit nach einer grösseren zählt als Folgetag («um 21.00 … um 6.00 …»).
+   */
+  function kontrolleMitMarke(alle, neu, listenMarke, jetzt) {
+    const istNeu = new Set(neu), aus = [];
+    let marke = null, wann = -1, tag = 0, davor = -1, aktiv = listenMarke || '';
+    for (const e of alle) {
+      if (e.code === 'um') {
+        const min = +e.um.slice(0, 2) * 60 + +e.um.slice(3);
+        if (min < davor) tag += 1440;
+        davor = min; wann = min + tag; marke = e;
+        if (istNeu.has(e)) { aus.push(e); aktiv = e.um; }
+        continue;
+      }
+      if (!istNeu.has(e)) continue;
+      if (marke && aktiv !== marke.um && wann > jetzt) { aus.push(marke); aktiv = marke.um; }
+      aus.push(e);
+    }
+    return aus;
+  }
+
+  /**
+   * 0.8.6: Aus einer Tageszeile kopierter Text: lange Namen stehen dort auf zwei Zeilen (zweite beginnt mit Tabulator). In der Programmliste
+   * gäbe die zweite Zeile «Nicht erkannt» und NF/HF ginge verloren. Beim Einfügen wird sie an die Programmzeile davor gehängt.
+   */
+  function listeEingefuegt(text) {
+    const aus = [];
+    for (const roh of String(text || '').split('\n')) {
+      const z = sauber(roh);
+      if (/^[ \t]*\t/.test(z) && z.trim() && aus.length && /^\s*(pr\d{4}|pp\d{4}|pa\d{2}|sm\d{2})\b/i.test(sauber(aus[aus.length - 1]))) { aus[aus.length - 1] = `${aus[aus.length - 1].replace(/\s+$/, '')} ${z.trim()}`; continue; }
+      aus.push(roh);
+    }
+    return aus.join('\n');
+  }
 
   /** Mehrzeilige Programm-Einträge des Kontrollblatts zusammensetzen (Fortsetzungszeilen beginnen mit Tabulator). */
   function kontrolleEintraege(text) {
@@ -807,8 +874,8 @@
     STANDARD_DWELL, MW_LUECKE, lesePresets, baueKatalog, loeseBasis, einstellungen, leseFrequenzzeile, programmeAusPreset,
     inBereich, erstellePlan, frequenzenBei, taktBei, wobbleAus, wobbleFaktor, Befehl, welleZuWerten, leseWellenCsv, findeWelle, einrichtung,
     frequenzBefehle, ausgangBefehle, amplitudeBefehle, neuerZustand, GX, gxEinrichtung, gxFrequenzBefehle, gxAusgangBefehle, gxWarnungen, gxWerte,
-    lesePresetAngabe, finderDaten, finderKatalog, deuteListenZeile, sauber, zeitmarke, loopmarke,
-    kontrolleEintraege, kontrolleZeile, leseKontrolle, kontrolleHeute, kontrolleSendeStempel, datumText, kontrolleSchluessel, kontrolleNeu, kontrolleGesehen,
+    lesePresetAngabe, finderDaten, finderKatalog, deuteListenZeile, sauber, zeitmarke, loopmarke, markenDatum, morgenDatumSetzen,
+    kontrolleEintraege, kontrolleZeile, leseKontrolle, kontrolleHeute, kontrolleSendeStempel, datumText, kontrolleSchluessel, kontrolleNeu, kontrolleGesehen, kontrolleLetzteMarke, kontrolleMitMarke, listeEingefuegt,
     LAUF_MARKE, laufbuchEintrag, laufbuchMischen,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = Kern;

@@ -56,6 +56,13 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.8.6 (Brücke bleibt 1.2.1) – Zeitmarke geht nicht mehr verloren
+- **Zeit fehlte (Gen. 10, 13):** RADIX merkt sich pro Tag jede schon erhaltene Zeitmarke. Wurde ein Block mit gleicher Zeit nochmals gesendet oder nach «Leeren» wieder gebraucht, kamen nur die Programme an und liefen beim Start sofort los. Neue Programme nehmen jetzt ihre Zeitmarke aus der Tageszeile mit (`kontrolleMitMarke`), auch wenn sie schon gesehen wurde. Sie kommt nicht dazu, wenn sie in der Programmliste schon die letzte ist (sonst läge der Block auf dem Tag danach) oder wenn die Zeit vorbei ist.
+- **Zeile von morgen lief heute:** Eine Zeitmarke, deren Uhrzeit heute noch kommt, galt für heute. Die erste Zeitmarke der Zeile von morgen bekommt dann das Datum: `um 21:00 am 04.11.26` (`morgenDatumSetzen`). Ist das Datum vorbei, gilt wieder die nächste Uhrzeit (Endlosschleife).
+- Hinweis «Anhängen» (Haken aus): verschiedene Zeitmarken werden nicht mehr als dieselbe gezählt.
+- Aus einer Tageszeile kopierter Text lässt sich in die Programmliste einfügen: Zeilen langer Namen werden zusammengesetzt, kein «Nicht erkannt» mehr, NF/HF bleibt.
+- Passt zur Kontrollapp ab R397. R398 setzt die Zeit auch bei einer Ergänzung in die Zwischenablage.
+
 ## Stand Version 0.8.5 (Brücke bleibt 1.2.1) – nur noch «→ RADIX» schickt Programme her
 - Der Sendeautomat ist weg. Ein Doppelklick im Kontrollblatt schreibt nur noch in die Tageszeile, dort kann man in Ruhe korrigieren. Erst der Knopf **«→ RADIX»** der Zeile (Kontrollapp ab R397) schickt sie los.
 - Technik: Der Knopf setzt `days[n].rxT = Date.now()` und speichert sofort. RADIX merkt sich den Stempel (`uebernommen.rxT`, `uebernommenMorgen.rxT`) und nimmt nur bei geändertem Stempel das noch nicht Gesehene dieser Zeile. `K.kontrolleSendeStempel(blatt, datum)` liest ihn.

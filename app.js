@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.8.5';
+const VERSION = '0.8.6';
 const $ = (s, el = document) => el.querySelector(s);
 const K = window.Kern;
 const SPEICHER = 'radix-generatoren-v2';   // { zuordnung: [Nummer je Anschluss], gen: { Nummer: Einstellungen } }
@@ -36,6 +36,8 @@ const db = {
   async set(k, v) { try { const d = await this.offen(); return await new Promise(ok => { const t = d.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = ok; t.onerror = ok; }); } catch (e) { /* nicht speicherbar: beim nächsten Start neu wählen */ } },
 };
 
+/** 0.8.6: Minuten seit Mitternacht, für den Vergleich mit Zeitmarken. */
+const minutenJetzt = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
 const daten = { katalog: new Map(), presets: [], wellen: new Map(), geladen: false, finder: null, kontrolle: null };
 const alleKarten = (fn) => { for (const g of generatoren) fn(g); };
 
@@ -497,8 +499,9 @@ const NICHT_UNTERSTUETZT = /fehlt|Keine|nicht unterstützt|nicht gefunden|Unbeka
 function deuteZeitmarke(zeile) { return K.zeitmarke(zeile); }
 
 /** Nächster Zeitpunkt (ms) mit dieser Uhrzeit nach «ab». */
-function naechsteUhrzeit(hhmm, ab) {
+function naechsteUhrzeit(hhmm, ab, am = null) {
   const [h, m] = hhmm.split(':').map(Number);
+  if (am) { const f = new Date(am.j, am.m - 1, am.t, h, m, 0, 0).getTime(); if (f > ab) return f; }   // 0.8.6: «um 21:00 am 04.11.26»; vorbei = wie ohne Datum
   const d = new Date(ab); d.setHours(h, m, 0, 0);
   if (d.getTime() <= ab) d.setDate(d.getDate() + 1);
   return d.getTime();
@@ -548,7 +551,7 @@ function bereiteListeVor(text, standardPreset) {
     const lp = K.loopmarke(zeile);
     if (lp) { if (loop) loopOhne.push(loop); loop = lp; return; }
     const um = deuteZeitmarke(zeile);
-    if (um) { if (loop) { loopOhne.push(loop); loop = 0; } items.push({ zeile: zeile.trim(), zeilenNr, r: { art: 'zeit', um }, fehler: '' }); return; }
+    if (um) { if (loop) { loopOhne.push(loop); loop = 0; } items.push({ zeile: zeile.trim(), zeilenNr, r: { art: 'zeit', um, am: K.markenDatum(zeile) }, fehler: '' }); return; }
     const dual = DUAL_MARKE.test(zeile);                              // 0.6.9: «[Dual]» am Zeilenende = Dual-Variante des Presets
     const pn = presetMitProgrammen(zeile);                            // 0.7.0: Name eines Spooky2-Presets («Adenoiditis (R)») -> seine Programme
     if (pn) { nimm({ zeile: zeile.trim(), zeilenNr, r: { art: 'preset', name: pn }, dual: false, fehler: '' }); return; }
@@ -576,7 +579,7 @@ function bereiteListeVor(text, standardPreset) {
     if (it.r.art === 'zeit') {                                   // Zeitmarke: wartender Schritt ohne feste Dauer
       it.code = '⏰'; it.name = `Start um ${it.r.um}`; it.sek = 0; it.warnungen = [];
       it.start = schritte.length;
-      schritte.push({ sek: 0, pause: true, marke: true, um: it.r.um, ei: null, pi });
+      schritte.push({ sek: 0, pause: true, marke: true, um: it.r.um, am: it.r.am, ei: null, pi });
       it.ende = schritte.length;
       return;
     }
@@ -846,6 +849,7 @@ class Generator {
     let warte = null;
     li.oninput = () => { clearTimeout(warte); warte = setTimeout(() => this.setzeListe(li.value), 350); };
     li.onchange = () => { clearTimeout(warte); this.setzeListe(li.value); };
+    li.onpaste = () => setTimeout(() => { const n = K.listeEingefuegt(li.value); if (n !== li.value) { li.value = n; clearTimeout(warte); this.setzeListe(n); } }, 0);   // 0.8.6
     const pr = $('.preset', k);
     pr.onchange = () => { this.einst.standardPreset = pr.value.trim(); speichereAlle(); this.pruefe(); };
     const du = $('.durchlaeufe', k);
@@ -912,7 +916,10 @@ class Generator {
   /** Heutige Zeile ohne das, was beim letzten «Leeren» schon drin stand (erledigt). */
   heute() {
     const h = this.heuteAlle(), g = this.geleert;
-    if (g && g.blatt === parseInt(this.einst.nr, 10) && g.datum === K.datumText(new Date())) h.eintraege = g.gesehen ? K.kontrolleNeu(h.eintraege, g.gesehen).neu : h.eintraege.slice(Math.min(g.anzahl, h.eintraege.length));
+    if (g && g.blatt === parseInt(this.einst.nr, 10) && g.datum === K.datumText(new Date())) {
+      const neu = g.gesehen ? K.kontrolleNeu(h.eintraege, g.gesehen).neu : h.eintraege.slice(Math.min(g.anzahl, h.eintraege.length));
+      h.eintraege = K.kontrolleMitMarke(h.eintraege, neu, '', minutenJetzt());   // 0.8.6: Zeitmarke des Blocks kommt mit
+    }
     return h;
   }
   /** 0.8.0: Stand «alles von heute ist übernommen» – behält, was früher schon gesehen wurde, auch wenn es gerade nicht in der Datei steht. */
@@ -976,7 +983,7 @@ class Generator {
       const stempel = K.kontrolleSendeStempel(b);                                            // 0.8.5: nur nach «→ RADIX»
       if (stempel && stempel !== u.rxT) {
         const r = K.kontrolleNeu(h.eintraege, u.gesehen);                                    // 0.8.0: erkannt an Nummer + Uhrzeit, nicht gezählt
-        neuHeute = r.neu.map(zeile);
+        neuHeute = r.neu;
         u.gesehen = r.gesehen;
         u.anzahl = h.eintraege.length;
         u.rxT = stempel;
@@ -996,7 +1003,7 @@ class Generator {
         um.rxT = stempelM;
         const rm = K.kontrolleNeu(m.eintraege, um.gesehen);
         if (m.marke) {
-          neuMorgen = rm.neu.map(zeile);
+          neuMorgen = rm.neu;
           um.gesehen = rm.gesehen; um.anzahl = m.eintraege.length; um.marke = m.marke;
         } else if (rm.neu.length) {                                                          // Kontrollapp sperrt das schon; nur zur Sicherheit
           this.melde(`Kontrollblatt morgen (${m.datum}): zuoberst eine Startzeit eintragen, z. B. «um 6.00», dann nochmals «→ RADIX» drücken`, 'fehler');
@@ -1006,17 +1013,22 @@ class Generator {
     }
     speichereAlle();
     if (!neuHeute.length && !neuMorgen.length) return;
+    const gesendet = [];
     if (neuHeute.length) {
       // Heutiges gehört vor den Block von morgen (falls der schon in der Liste steht)
       const vor = um && um.marke && um.anzahl > neuMorgen.length ? um.marke : '';
-      this.log(`Vom Kontrollblatt ${nr} (heute): ${codes(neuHeute)}`);
-      this.fuegeZeilenAn(neuHeute, vor);
+      const zeilen = K.kontrolleMitMarke(h.eintraege, neuHeute, K.kontrolleLetzteMarke(this.einst.liste, vor), minutenJetzt()).map(zeile);   // 0.8.6
+      this.log(`Vom Kontrollblatt ${nr} (heute): ${codes(zeilen)}`);
+      this.fuegeZeilenAn(zeilen, vor);
+      gesendet.push(...zeilen);
     }
     if (neuMorgen.length) {
-      this.log(`Vom Kontrollblatt ${nr} (morgen ${m.datum}): ${codes(neuMorgen)}`);
-      this.fuegeZeilenAn(neuMorgen);
+      const zeilen = K.kontrolleMitMarke(m.eintraege, neuMorgen, K.kontrolleLetzteMarke(this.einst.liste), -1).map(zeile);   // 0.8.6
+      this.fuegeZeilenAn(K.morgenDatumSetzen(zeilen, m.datum, minutenJetzt()));
+      this.log(`Vom Kontrollblatt ${nr} (morgen ${m.datum}): ${codes(zeilen)}`);
+      gesendet.push(...zeilen);
     }
-    if (!this.lauf) this.melde(`Vom Kontrollblatt übernommen: ${codes([...neuHeute, ...neuMorgen])} – mit Start (oder Startzeit) starten`, 'ok');
+    if (!this.lauf) this.melde(`Vom Kontrollblatt übernommen: ${codes(gesendet)} – mit Start (oder Startzeit) starten`, 'ok');
     springeZu(nr);                                                  // 0.6.7: Doppelklick in der KA zeigt gleich diesen Generator
   }
 
@@ -1050,7 +1062,7 @@ class Generator {
   pruefeNeue() {
     const box = $('.neu', this.karte);
     const { eintraege } = this.heute();
-    const schluessel = (zeile) => { const r = K.deuteListenZeile(zeile, daten.finder, PEPTIDE); return r && (r.art === 'finder' || r.art === 'peptid') ? r.code : K.sauber(zeile).split(/\s+/)[0].toLowerCase(); };
+    const schluessel = (zeile) => { if (K.zeitmarke(zeile)) return `um ${K.zeitmarke(zeile)}`; const r = K.deuteListenZeile(zeile, daten.finder, PEPTIDE); return r && (r.art === 'finder' || r.art === 'peptid') ? r.code : K.sauber(zeile).split(/\s+/)[0].toLowerCase(); };
     const vorhanden = new Map();
     for (const z of this.einst.liste.split('\n')) { if (!z.trim()) continue; const s = schluessel(z); vorhanden.set(s, (vorhanden.get(s) || 0) + 1); }
     this.neue = [];
@@ -1071,7 +1083,7 @@ class Generator {
     const zeilen = eintraege.map(x => K.kontrolleZeile(x, b, daten.finder));
     const m = this.morgenZeile();                                     // 0.6.8: Zeile von morgen mit Startzeit zuoberst kommt mit
     if (!m.hinweis && m.marke) {
-      zeilen.push(...m.eintraege.map(x => K.kontrolleZeile(x, b, daten.finder)));
+      zeilen.push(...K.morgenDatumSetzen(m.eintraege.map(x => K.kontrolleZeile(x, b, daten.finder)), m.datum, minutenJetzt()));
       this.uebernommenMorgen = this.merkeMorgen(m, m.marke);
     }
     this.uebernommen = this.merkeHeute();
@@ -1092,7 +1104,7 @@ class Generator {
     const tag = K.datumText(morgen);
     const mz = this.morgenZeile();
     if (!mz.hinweis && mz.marke) {                                     // 0.6.8: Startzeit steht schon in der Zeile von morgen
-      const zeilen = mz.eintraege.map(x => K.kontrolleZeile(x, b, daten.finder));
+      const zeilen = K.morgenDatumSetzen(mz.eintraege.map(x => K.kontrolleZeile(x, b, daten.finder)), tag, minutenJetzt());
       this.fuegeZeilenAn(zeilen);
       this.uebernommenMorgen = this.merkeMorgen(mz, mz.marke);
       speichereAlle();
@@ -1104,7 +1116,7 @@ class Generator {
     if (!um) { this.melde('Zuerst unten bei «Start um» die Startzeit für morgen eintragen, dann «Morgen aus Kontrollblatt»', 'fehler'); $('.start-um', this.karte).focus(); return; }
     const { eintraege, hinweis } = K.kontrolleHeute(b, morgen);
     if (!eintraege.length) { this.melde(hinweis ? `Kontrollblatt morgen: ${hinweis}` : `Kontrollblatt: für morgen (${tag}) noch nichts eingetragen`, 'fehler'); return; }
-    const zeilen = [`um ${um}`, ...eintraege.map(x => K.kontrolleZeile(x, b, daten.finder))];
+    const zeilen = K.morgenDatumSetzen([`um ${um}`, ...eintraege.map(x => K.kontrolleZeile(x, b, daten.finder))], tag, minutenJetzt());
     this.fuegeZeilenAn(zeilen);
     this.einst.startUm = ''; $('.start-um', this.karte).value = ''; speichereAlle();   // Uhrzeit steckt jetzt in der Liste
     this.log(`Morgen ${tag} aus Kontrollblatt ${parseInt(this.einst.nr, 10)}: ${eintraege.length} Programme ab ${um}`);
@@ -1214,7 +1226,7 @@ class Generator {
     let t = ab, direkt = false;                                     // direkt: Zeitmarke gleich nach einer Zeitmarke (ohne Programm dazwischen)
     for (let k = l.schritt; k < s.length; k++) {
       if (!s[k].marke) { direkt = false; continue; }
-      s[k].zeitMs = k === l.schritt && s[k].zeitMs ? s[k].zeitMs : naechsteUhrzeit(s[k].um, direkt ? t - 1 : t);   // zweimal 06:00 hintereinander = gleicher Morgen
+      s[k].zeitMs = k === l.schritt && s[k].zeitMs ? s[k].zeitMs : naechsteUhrzeit(s[k].um, direkt ? t - 1 : t, s[k].am);   // zweimal 06:00 hintereinander = gleicher Morgen
       t = s[k].zeitMs; direkt = true;
     }
   }
@@ -1239,7 +1251,7 @@ class Generator {
     vs.innerHTML = anzeigen.items.map((it, i) => {
       if (it.r.art === 'zeit') {
         const st = this.lauf && this.lauf.plan.schritte[it.start], wann = st && st.zeitMs ? ` (${fmtUhr(st.zeitMs)})` : '';
-        return `<div class="p marke" data-pi="${i}"><code>⏰</code><span class="name">Start um ${it.r.um}${wann}</span><span class="zeit"></span>` +
+        return `<div class="p marke" data-pi="${i}"><code>⏰</code><span class="name">Start um ${it.r.um}${!wann && it.r.am ? ` am ${String(it.r.am.t).padStart(2, '0')}.${String(it.r.am.m).padStart(2, '0')}.` : ''}${wann}</span><span class="zeit"></span>` +
           `<span class="pinfo">Was darunter steht, startet erst um ${it.r.um}. Läuft dann noch ein Programm davor, wird es beendet.</span></div>`;
       }
       const nv = /^(pr\d{4}) (NF|HF)$/.exec(it.code || ''), andere = nv && (nv[2] === 'NF' ? 'HF' : 'NF');
