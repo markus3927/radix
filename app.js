@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.8.4';
+const VERSION = '0.8.3';
 const $ = (s, el = document) => el.querySelector(s);
 const K = window.Kern;
 const SPEICHER = 'radix-generatoren-v2';   // { zuordnung: [Nummer je Anschluss], gen: { Nummer: Einstellungen } }
@@ -20,8 +20,6 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<':
 function lade(key, std) { try { return JSON.parse(localStorage.getItem(key)) ?? std; } catch (e) { return std; } }
 function speichere(key, wert) { try { localStorage.setItem(key, JSON.stringify(wert)); } catch (e) { /* voll oder gesperrt */ } }
 function setzeQuelle(sel, text, art = '') { const s = $(sel); s.textContent = text; s.title = text; s.className = 'stand ' + art; }
-/** 0.8.4: Quellen sind klickbare Zweizeiler – nur die Beschriftung oben rechts wechselt, Titel und Stand bleiben. */
-const setzeAktion = (knopf, text) => { $('.aktion', knopf).textContent = text; };
 
 // ------------------------------------------------------------------ Gemerkte Ordner und Dateien (Handles in IndexedDB)
 const db = {
@@ -105,10 +103,10 @@ async function ordnerBeimStart() {
   const fehler = (e) => setzeQuelle('#ordner-status', e.message || String(e), 'fehler');
   if (await h.queryPermission({ mode: 'read' }) === 'granted') { await ladeSpooky2(h).catch(fehler); return; }
   const b = $('#btn-ordner');
-  setzeAktion(b, 'Zugriff erlauben');
+  b.textContent = 'Zugriff erlauben';
   setzeQuelle('#ordner-status', 'C:\\Spooky2 gemerkt – Zugriff bestätigen', 'fehler');
   b.onclick = async () => {
-    if (await h.requestPermission({ mode: 'read' }) === 'granted') { setzeAktion(b, 'Ordner wählen'); b.onclick = waehleOrdner; await ladeSpooky2(h).catch(fehler); }
+    if (await h.requestPermission({ mode: 'read' }) === 'granted') { b.textContent = 'Ordner wählen'; b.onclick = waehleOrdner; await ladeSpooky2(h).catch(fehler); }
   };
 }
 
@@ -172,10 +170,10 @@ async function quelleBeimStart(name) {
   if (await h.queryPermission({ mode: 'read' }) === 'granted') { await ladeQuelle(name).catch(e => setzeQuelle(q.status, e.message, 'fehler')); }
   else {
     const b = $(q.knopf);
-    setzeAktion(b, 'Zugriff erlauben');
+    b.textContent = 'Zugriff erlauben';
     setzeQuelle(q.status, `${h.name} gemerkt – Zugriff bestätigen`, 'fehler');
     b.onclick = async () => {
-      if (await h.requestPermission({ mode: 'read' }) === 'granted') { setzeAktion(b, 'Datei wählen'); b.onclick = () => waehleDatei(name); await ladeQuelle(name).catch(e => setzeQuelle(q.status, e.message, 'fehler')); }
+      if (await h.requestPermission({ mode: 'read' }) === 'granted') { b.textContent = 'Datei wählen'; b.onclick = () => waehleDatei(name); await ladeQuelle(name).catch(e => setzeQuelle(q.status, e.message, 'fehler')); }
     };
   }
 }
@@ -201,8 +199,18 @@ const laufbuch = { handle: null, offen: lade(LAUFBUCH_OFFEN, []), uhr: null, sch
 
 function laufbuchElemente() {
   if (laufbuch.knopf) return;
-  laufbuch.knopf = $('#btn-laufbuch');                                   // 0.8.4: vierter Zweizeiler in index.html
-  laufbuch.knopf.onclick = laufbuchWaehlen;
+  // Knopf + Stand gleich nach dem Kontrollblatt im Kopf (index.html bleibt unverändert)
+  const kb = $('#btn-kontrolle'), ks = $('#kontrolle-status');
+  const knopf = document.createElement('button'); knopf.type = 'button'; knopf.id = 'btn-laufbuch';
+  knopf.className = kb ? kb.className : ''; knopf.textContent = 'Laufbuch wählen';
+  knopf.title = 'RADIX_Laufbuch.json – bei Endlosschleife (Durchläufe 0) kommt jeder Programmstart hierher, die Kontrollapp trägt ihn in die Tageszeile ein';
+  const stand = document.createElement('span'); stand.id = 'laufbuch-status'; stand.className = 'stand';
+  const box = document.createElement('span'); box.className = 'laufbuch-quelle'; box.style.cssText = 'display:inline-flex;align-items:center;gap:6px;margin-left:10px;flex-wrap:wrap';
+  const titel = document.createElement('b'); titel.textContent = 'Laufbuch'; titel.style.fontSize = '0.9em';
+  box.append(titel, knopf, stand);
+  if (ks && ks.parentNode) ks.after(box); else if (kb && kb.parentNode) kb.after(box); else ($('#kopfbereich') || document.body).appendChild(box);
+  knopf.onclick = laufbuchWaehlen;
+  laufbuch.knopf = knopf;
 }
 function laufbuchStand() {
   laufbuchElemente();
@@ -216,7 +224,7 @@ async function laufbuchWaehlen() {
     const h = await window.showSaveFilePicker({ id: 'laufbuch', suggestedName: 'RADIX_Laufbuch.json', types: [{ description: 'RADIX-Laufbuch (JSON)', accept: { 'application/json': ['.json'] } }] });
     laufbuch.handle = h; laufbuch.frei = true;
     await db.set('laufbuch', h);
-    setzeAktion(laufbuch.knopf, 'Datei wählen'); laufbuch.knopf.onclick = laufbuchWaehlen;
+    laufbuch.knopf.textContent = 'Laufbuch wählen'; laufbuch.knopf.onclick = laufbuchWaehlen;
     await laufbuchSchreiben();
   } catch (e) { if (e.name !== 'AbortError') setzeQuelle('#laufbuch-status', e.message || String(e), 'fehler'); }
   alleKarten(g => g.pruefe());
@@ -228,10 +236,10 @@ async function laufbuchBeimStart() {
     laufbuch.handle = h;
     laufbuch.frei = await h.queryPermission({ mode: 'readwrite' }).catch(() => 'denied') === 'granted';
     if (!laufbuch.frei) {
-      setzeAktion(laufbuch.knopf, 'Zugriff erlauben');
+      laufbuch.knopf.textContent = 'Zugriff erlauben';
       laufbuch.knopf.onclick = async () => {
         if (await h.requestPermission({ mode: 'readwrite' }) === 'granted') {
-          laufbuch.frei = true; setzeAktion(laufbuch.knopf, 'Datei wählen'); laufbuch.knopf.onclick = laufbuchWaehlen;
+          laufbuch.frei = true; laufbuch.knopf.textContent = 'Laufbuch wählen'; laufbuch.knopf.onclick = laufbuchWaehlen;
           await laufbuchSchreiben(); alleKarten(g => g.pruefe());
         }
       };
