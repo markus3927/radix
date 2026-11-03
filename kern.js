@@ -197,6 +197,7 @@
       const dauer = explizit ? sek : standardSek;
       const mit = (x) => (explizit ? { ...x, sek: dauer } : { ...x, sek: dauer, standard: true });
       if (wert.startsWith('~')) { eintraege.push(mit({ art: 'verschluesselt', text: wert })); continue; }   // 0.8.2: neue JW-Presets (ab 2026) sind verschlüsselt
+      if (/^m$/i.test(wert)) continue;                                    // 0.8.3: leeres «M» in einer Preset-Datei überspringen
       if (/^m/i.test(wert)) {
         const da = parseFloat(wert.slice(1));
         eintraege.push(mit(Number.isFinite(da) ? { art: 'mw', da } : { art: 'unbekannt', text: wert }));

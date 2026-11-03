@@ -56,6 +56,11 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.8.3 (Brücke bleibt 1.2.1) – Peptid-Liste nach dem Ordner Remote
+- `peptide.js` neu aus dem Ordner `JW_Peptides\Remote` des RADIX-PC: 2012 Programme, alle lesbar, dazu 20 ältere Nummern, die auf ihr Nachfolge-Programm zeigen (z. B. pp0004 → Acid Reflux (Gastroesophageal Reflux Disease)). 10 alte Nummern ohne Datei und die Nummern ab pp1514 ohne Datei sind entfernt.
+- Preset-Namen genau wie in den Dateien (auch «–»).
+- `kern.js`: ein leeres «M» in einer Preset-Datei wird übersprungen (Cochlear Hair Cells, pp0299, lief sonst nicht).
+
 ## Stand Version 0.8.2 (Brücke bleibt 1.2.1) – Peptid-Nummern bis pp2294, verschlüsselte Presets
 - `peptide.js`: alle Nummern pp0001–pp2294 mit den deutschen Namen aus dem Peptide-Finder v10. Bei pp0001–pp1513 bleibt der Preset-Name wie in den Dateien auf dem Spooky-PC.
 - Die JW-Presets ab Version 20261028 sind verschlüsselt (Einträge wie `~4472M089.234`). RADIX spielt sie nicht ab: Sonst liefen nur die Pausen. Neu: Fehler «ppxxxx: Preset-Datei ist verschlüsselt, RADIX kann sie nicht abspielen», Start gesperrt.
