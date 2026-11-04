@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.8.8';
+const VERSION = '0.8.9';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -1491,7 +1491,7 @@ class Generator {
     try { if (b.length) await this.sende(b); } finally { this.leise = false; }
     if (neu) {
       if (s.pi !== l.aktivPi) {
-        l.aktivPi = s.pi; const it = l.items[s.pi]; this.log(s.marke ? `${it.code} ${it.name}` : `Programm ${progNr(l.items, s.pi)}/${progAnz(l.items)}: ${it.code} ${it.name}`);   // 0.8.7 this.markiereAktiv();
+        l.aktivPi = s.pi; const it = l.items[s.pi]; this.log(s.marke ? `${it.code} ${it.name}` : `Programm ${progNr(l.items, s.pi)}/${progAnz(l.items)}: ${it.code} ${it.name}`); this.markiereAktiv();   // 0.8.7 Zähler, 0.8.9 Balken wieder richtig
         const ein = l.einst[l.aktivEi]; if (ein && !s.marke) this.zeigePreset(ein.e.name, false, farbArt(it, ein.e, s));   // 0.7.6: Farbe folgt dem Programm
       }
       if (!s.mw) this.log(s.marke ? `Schritt ${l.schritt + 1}/${l.plan.schritte.length}: Ausgänge aus, warten bis ${fmtUhr(s.zeitMs)}` : `Schritt ${l.schritt + 1}/${l.plan.schritte.length}: ${s.pause ? 'Pause' : `${fmtHz(l.f1)} / ${fmtHz(l.f2)}`} für ${s.sek} s`);
@@ -1923,6 +1923,22 @@ async function init() {
   $('#btn-hinzu').onclick = async () => { try { await fuegeHinzu(await navigator.serial.requestPort()); } catch (e) { /* abgebrochen */ } };
   $('#btn-alle-testen').onclick = () => { for (const g of generatoren) if (!g.lauf && !g.imTest) g.teste(); };   // 0.6.5: GX auch (öffnet den Anschluss bis «Test beenden»)
   $('#btn-alle-stopp').onclick = () => { for (const g of generatoren) { if (g.lauf) g.stoppe('gestoppt'); else if (g.imTest) g.beendeTest(); } };
+  // 0.8.9: «Alle fortsetzen» – nach dem Neuladen (z. B. neue Version) alle unterbrochenen Generatoren mit einem Klick dort weiterlaufen
+  // lassen, wo sie standen (gleich wie der Knopf «Weiter» auf jeder Karte). Nur sichtbar, solange es Unterbrochene gibt.
+  { const stopp = $('#btn-alle-stopp'), vorlage = $('#btn-alle-testen') || stopp;
+    if (stopp && stopp.parentNode) {
+      const b = document.createElement('button'); b.type = 'button'; b.id = 'btn-alle-weiter'; b.className = vorlage.className;
+      b.textContent = 'Alle fortsetzen'; b.title = 'Alle unterbrochenen Generatoren dort weiterlaufen lassen, wo sie standen'; b.hidden = true;
+      stopp.parentNode.insertBefore(b, stopp);
+      const offen = () => generatoren.filter(g => !g.lauf && g.fortsetzen && g.vorbereitet);
+      const zeige = () => { const n = offen().length; b.hidden = !n; b.textContent = n > 1 ? `Alle fortsetzen (${n})` : 'Alle fortsetzen'; };
+      b.onclick = async () => {
+        b.disabled = true;
+        try { for (const g of offen()) { await g.starte(g.fortsetzen); await new Promise(r => setTimeout(r, 250)); } }
+        finally { b.disabled = false; zeige(); }
+      };
+      setInterval(zeige, 1500); setTimeout(zeige, 300);
+    } }
   $('#leiste').onclick = (ev) => { const b = ev.target.closest('button[data-nr]'); if (b) springeZu(b.dataset.nr); };
   $('#btn-ansicht').onclick = () => setzeAnsicht(!ansicht.einzel);
   $('#btn-zuordnen').onclick = oeffneZuordnen;

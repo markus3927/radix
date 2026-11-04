@@ -56,6 +56,10 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.8.9 (Brücke bleibt 1.2.1) – blauer Balken folgt wieder dem laufenden Programm
+- Fehler aus 0.8.7: Beim Umbau der Protokollzeile «Programm x/y» war `this.markiereAktiv()` in den Kommentar gerutscht. Der blaue Balken blieb darum beim ersten Programm stehen. Jetzt springt er wieder bei jedem Programmwechsel mit.
+- Neu: Knopf **«Alle fortsetzen»** oben neben «Alle stoppen». Er erscheint nach dem Neuladen (z. B. neue Version), solange Generatoren «Unterbrochen bei Schritt …» zeigen, und lässt alle mit einem Klick dort weiterlaufen, wo sie standen – gleich wie «Weiter» auf jeder Karte, nacheinander mit 0,25 s Abstand. Die Zeit während dem Neuladen wird nicht mitgezählt.
+
 ## Stand Version 0.8.8 (Brücke bleibt 1.2.1) – Fensterleiste grau
 - Der blaue Balken zuoberst (Fensterleiste der installierten App) ist jetzt hellgrau `#dee2f0` wie beim Kontrollblatt und beim Frequenz-Finder. app.js setzt dafür `<meta name="theme-color">`, das geht dem `theme_color` im Manifest vor. index.html und manifest.webmanifest bleiben unverändert.
 - Sonst nichts geändert.
