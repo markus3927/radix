@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.8.9';
+const VERSION = '0.9.0';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -857,7 +857,11 @@ class Generator {
     $('.nr-weiter', k).onclick = () => { const n = parseInt(this.einst.nr, 10) || 0; if (n < hoechsteNummer()) this.wechsleNummer(String(n + 1)); };
     const li = $('.liste', k);
     let warte = null;
-    li.oninput = () => { clearTimeout(warte); warte = setTimeout(() => this.setzeListe(li.value), 350); };
+    li.oninput = () => {
+      clearTimeout(warte);
+      if (this.lauf && this.lauf.plan.schritte[this.lauf.schritt]?.marke) return;   // 0.9.0: wartet er, startete halb Getipptes sofort – gilt erst beim Verlassen des Felds
+      warte = setTimeout(() => this.setzeListe(li.value), 350);
+    };
     li.onchange = () => { clearTimeout(warte); this.setzeListe(li.value); };
     li.onpaste = () => setTimeout(() => { const n = K.listeEingefuegt(li.value); if (n !== li.value) { li.value = n; clearTimeout(warte); this.setzeListe(n); } }, 0);   // 0.8.6
     const pr = $('.preset', k);
@@ -1027,10 +1031,12 @@ class Generator {
     if (neuHeute.length) {
       // Heutiges gehört vor den Block von morgen (falls der schon in der Liste steht)
       const vor = um && um.marke && um.anzahl > neuMorgen.length ? um.marke : '';
-      const zeilen = K.kontrolleMitMarke(h.eintraege, neuHeute, K.kontrolleLetzteMarke(this.einst.liste, vor), minutenJetzt()).map(zeile);   // 0.8.6
-      this.log(`Vom Kontrollblatt ${nr} (heute): ${codes(zeilen)}`);
-      this.fuegeZeilenAn(zeilen, vor);
-      gesendet.push(...zeilen);
+      for (const g of K.kontrolleGruppen(h.eintraege, neuHeute)) {   // 0.9.0: die Stelle in der Tageszeile gilt auch in der Liste
+        const zeilen = K.kontrolleMitMarke(h.eintraege, g.neu, K.kontrolleLetzteMarke(this.einst.liste, g.vor ? `um ${g.vor}` : vor), minutenJetzt()).map(zeile);   // 0.8.6
+        this.log(`Vom Kontrollblatt ${nr} (heute): ${codes(zeilen)}`);
+        this.fuegeZeilenAn(zeilen, vor, g.vor);
+        gesendet.push(...zeilen);
+      }
     }
     if (neuMorgen.length) {
       const zeilen = K.kontrolleMitMarke(m.eintraege, neuMorgen, K.kontrolleLetzteMarke(this.einst.liste), -1).map(zeile);   // 0.8.6
@@ -1176,12 +1182,15 @@ class Generator {
    * Zeilen anhängen; während dem Lauf wird der Ablauf hinten verlängert, ohne den laufenden Teil zu verändern.
    * vor = Zeitmarke («um 06:00»): die Zeilen kommen vor deren letztes Vorkommen (Heutiges vor den Block von morgen).
    * Steht am Ende der Liste eine Zeitmarke ohne Programm danach und beginnen die neuen Zeilen mit einer Zeitmarke, gilt nur die neue.
+   * 0.9.0: naechste = Uhrzeit («21:00»): die Zeilen kommen vor die nächste solche Zeitmarke ab der laufenden Stelle (Stelle in der Tageszeile).
    */
-  fuegeZeilenAn(zeilen, vor = '') {
+  fuegeZeilenAn(zeilen, vor = '', naechste = '') {
     let alt = this.einst.liste.replace(/\s+$/, '').split('\n');
     if (alt.length === 1 && !alt[0]) alt = [];
     let pos = alt.length;
-    if (vor) { const i = alt.map(z => K.zeitmarke(z) ? `um ${K.zeitmarke(z)}` : '').lastIndexOf(vor); if (i >= 0) pos = i; }
+    const nm = naechste ? this.markeZeile(alt, naechste) : -1;
+    if (nm >= 0) pos = nm;
+    else if (vor) { const i = alt.map(z => K.zeitmarke(z) ? `um ${K.zeitmarke(z)}` : '').lastIndexOf(vor); if (i >= 0) pos = i; }
     const ohneMarke = [...alt];
     if (pos === alt.length && zeilen.length && K.zeitmarke(zeilen[0])) {
       while (alt.length && (!alt[alt.length - 1].trim() || K.zeitmarke(alt[alt.length - 1]))) alt.pop();
@@ -1193,38 +1202,71 @@ class Generator {
       if (f && alt.length < ohneMarke.length) { text = [...ohneMarke, ...zeilen].join('\n'); f = this.uebernimmImLauf(text); }   // wartet gerade an der alten Marke: stehen lassen
       if (f) { this.melde('Nicht angehängt: ' + f, 'fehler'); return; }
       const codes = zeilen.map(z => z.split(/\s{2,}|\t/)[0]).join(', ');
-      this.log(`Angehängt: ${codes}`);
-      this.melde(`Angehängt: ${codes}`, 'ok');
+      const um = pos < alt.length ? K.zeitmarke(alt[pos]) : null;            // 0.9.0
+      const lang = um ? this.zuLang() : null, startet = um && this.lauf.status === 'einrichten';
+      const was = um ? `Vor «um ${um}» eingefügt: ${codes}${startet ? ' – startet jetzt' : ''}` : `Angehängt: ${codes}`;
+      this.log(was);
+      if (lang) { const w = `${was}. Achtung: um ${lang.um} wird es abgebrochen, es fehlen ${fmtZeit(lang.sek)}`; this.log(w); this.melde(w, 'fehler'); }
+      else this.melde(was, 'ok');
     }
     $('.liste', this.karte).value = text;
     this.einst.liste = text;
     speichereAlle(); this.pruefe(); this.pruefeNeue();
   }
 
+  /** 0.9.0: Zeile der nächsten Zeitmarke um («21:00») ab der laufenden Stelle der Liste, -1 = keine. */
+  markeZeile(zeilen, um) {
+    const l = this.lauf, s = l && l.plan.schritte[l.schritt];
+    for (let i = s ? l.items[s.pi].zeilenNr : 0; i < zeilen.length; i++) if (K.zeitmarke(zeilen[i]) === um) return i;
+    return -1;
+  }
+  /** 0.9.0: Läuft das, was bis zur nächsten Zeitmarke noch ansteht, über diese hinaus? Rückgabe { um, sek } oder null. */
+  zuLang() {
+    const l = this.lauf, s = l.plan.schritte;
+    let k = l.schritt, sek = -l.tImSchritt;
+    for (; k < s.length && !s[k].marke; k++) sek += s[k].sek;
+    if (k >= s.length || k === l.schritt) return null;
+    const rest = (s[k].zeitMs - Date.now()) / 1000;
+    return sek > rest ? { um: s[k].um, sek: Math.ceil(sek - rest) } : null;
+  }
+
   /**
    * Neue Programmliste in den laufenden Ablauf übernehmen. Das laufende und die schon gelaufenen Programme müssen gleich
    * bleiben; alles danach darf neu sein, sich ändern oder wegfallen. Programme mit offenem Punkt (z. B. NF/HF fehlt) werden
    * übersprungen, bis er geklärt ist. Rückgabe: Fehlertext oder null.
+   * 0.9.0 (Markus 04.11.2026: «programme sind gelaufen bis mittag, programmiert ist die nacht bereits. wenn ich am nachmittag noch ein
+   * programm machen möchte, hängt das am nachtprogramm an»): Wartet der Generator an einer Zeitmarke, dürfen Programme vor diese Marke.
+   * Sie starten sofort, die Ausgänge gehen wieder an, danach wartet er bis zur Zeitmarke weiter.
    */
   uebernimmImLauf(text) {
     const l = this.lauf;
     const v = bereiteListeVor(text, this.einst.standardPreset);
-    const s = l.plan.schritte[l.schritt], pi = s ? s.pi : -1;
-    for (let i = 0; i <= pi; i++) {
+    const s = l.plan.schritte[l.schritt], pi = s ? s.pi : -1, wartet = !!(s && s.marke);
+    for (let i = 0; i < (wartet ? pi : pi + 1); i++) {
       const alt = l.items[i], neu = v.items[i];
       if (alt.fehler) continue;                                    // war übersprungen: darf nachträglich geklärt werden
       if (!neu || neu.zeile !== alt.zeile) return i === pi ? `${alt.code} läuft gerade – das laufende Programm lässt sich nicht ändern` : `${alt.code} ist schon gelaufen – nur Programme nach dem laufenden ändern`;
     }
-    if (s) {
+    let los = false;
+    if (wartet) {
+      const marke = v.items.findIndex((it, i) => i >= pi && it.r.art === 'zeit' && it.zeile === l.items[pi].zeile);
+      if (marke < 0) return `Der Generator wartet gerade auf diese Zeitmarke – «um ${s.um}» lässt sich jetzt nicht ändern`;
+      let von = pi;                                                  // bisher übersprungen (NF/HF offen), direkt vor der Marke: kommt jetzt dran
+      while (von > 0 && l.items[von - 1].fehler) von--;
+      while (von < marke && v.items[von].fehler) von++;
+      los = von < marke;
+      l.schritt = v.items[los ? von : marke].start;
+    } else if (s) {
       const alt = l.items[pi], neu = v.items[pi];
       if (neu.fehler || neu.ende - neu.start !== alt.ende - alt.start) return `${alt.code} läuft gerade – das laufende Programm lässt sich nicht ändern`;
       l.schritt = neu.start + (l.schritt - alt.start);
     }
     const aktiv = l.aktivEi != null && l.einst[l.aktivEi] ? l.einst[l.aktivEi].key : null;
-    if (s && s.marke && v.plan.schritte[l.schritt]) v.plan.schritte[l.schritt].zeitMs = s.zeitMs;
+    if (s && s.marke && !los && v.plan.schritte[l.schritt]) v.plan.schritte[l.schritt].zeitMs = s.zeitMs;
     l.plan = v.plan; l.items = v.items; l.einst = v.einst; l.listeText = text;
     l.warnungen = v.warnungen.filter(w => !/^Keine (Programme|abspielbaren)/.test(w));
     if (aktiv) l.aktivEi = v.einst.findIndex(x => x.key === aktiv);
+    if (los) { l.tImSchritt = 0; l.aktivEi = null; l.aktivPi = null; l.status = 'einrichten'; }   // 0.9.0: wie ein Start: Preset einrichten, Ausgänge an
     this.rechneMarken();
     speichereAlle();
     return null;

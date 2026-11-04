@@ -551,6 +551,21 @@
   }
 
   /**
+   * 0.9.0: Neue Einträge nach ihrer Stelle in der Tageszeile gruppieren. vor = Uhrzeit der nächsten Zeitmarke darunter, die schon gesendet
+   * ist («21:00»), '' = keine, dann gehören sie ans Ende. Rückgabe: [{ vor, neu: [Einträge] }] in der Reihenfolge der Zeile.
+   */
+  function kontrolleGruppen(alle, neu) {
+    const istNeu = new Set(neu), gruppen = [];
+    alle.forEach((e, i) => {
+      if (!istNeu.has(e)) return;
+      const m = alle.slice(i + 1).find(x => x.code === 'um' && !istNeu.has(x)), vor = m ? m.um : '';
+      const g = gruppen[gruppen.length - 1];
+      if (g && g.vor === vor) g.neu.push(e); else gruppen.push({ vor, neu: [e] });
+    });
+    return gruppen;
+  }
+
+  /**
    * 0.8.6: Aus einer Tageszeile kopierter Text: lange Namen stehen dort auf zwei Zeilen (zweite beginnt mit Tabulator). In der Programmliste
    * gäbe die zweite Zeile «Nicht erkannt» und NF/HF ginge verloren. Beim Einfügen wird sie an die Programmzeile davor gehängt.
    */
@@ -875,7 +890,7 @@
     inBereich, erstellePlan, frequenzenBei, taktBei, wobbleAus, wobbleFaktor, Befehl, welleZuWerten, leseWellenCsv, findeWelle, einrichtung,
     frequenzBefehle, ausgangBefehle, amplitudeBefehle, neuerZustand, GX, gxEinrichtung, gxFrequenzBefehle, gxAusgangBefehle, gxWarnungen, gxWerte,
     lesePresetAngabe, finderDaten, finderKatalog, deuteListenZeile, sauber, zeitmarke, loopmarke, markenDatum, morgenDatumSetzen,
-    kontrolleEintraege, kontrolleZeile, leseKontrolle, kontrolleHeute, kontrolleSendeStempel, datumText, kontrolleSchluessel, kontrolleNeu, kontrolleGesehen, kontrolleLetzteMarke, kontrolleMitMarke, listeEingefuegt,
+    kontrolleEintraege, kontrolleZeile, leseKontrolle, kontrolleHeute, kontrolleSendeStempel, datumText, kontrolleSchluessel, kontrolleNeu, kontrolleGesehen, kontrolleLetzteMarke, kontrolleMitMarke, kontrolleGruppen, listeEingefuegt,
     LAUF_MARKE, laufbuchEintrag, laufbuchMischen,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = Kern;

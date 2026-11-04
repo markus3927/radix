@@ -56,6 +56,14 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.0 (Brücke bleibt 1.2.1) – Programm am Nachmittag vor das Nachtprogramm
+- Markus: «programme sind gelaufen bis mittag, programmiert ist die nacht bereits. wenn ich am nachmittag noch ein programm machen möchte, hängt das am nachtprogramm an.»
+- Die Stelle in der Tageszeile gilt jetzt auch in der Programmliste: Steht ein neues Programm über einer schon gesendeten Zeitmarke, kommt es in RADIX vor die nächste solche Marke (`kontrolleGruppen`, `markeZeile`). Steht es darunter, wie bisher ans Ende.
+- Wartet der Generator an dieser Zeitmarke, startet das Programm ohne Stop sofort; danach wartet er weiter bis zur Zeitmarke (`uebernimmImLauf`). Läuft gerade ein Programm, kommt das Neue direkt danach.
+- Reicht die Zeit bis zur Zeitmarke nicht, kommt eine rote Meldung: um diese Uhrzeit wird das Programm abgebrochen (`zuLang`).
+- Bei Endlosschleife bleibt das Programm wie bisher in der Liste und läuft jeden Durchgang mit.
+- Zur Kontrollapp ab R404 (sie setzt Einzelprogramme über die nächste kommende Zeitmarke).
+
 ## Stand Version 0.8.9 (Brücke bleibt 1.2.1) – blauer Balken folgt wieder dem laufenden Programm
 - Fehler aus 0.8.7: Beim Umbau der Protokollzeile «Programm x/y» war `this.markiereAktiv()` in den Kommentar gerutscht. Der blaue Balken blieb darum beim ersten Programm stehen. Jetzt springt er wieder bei jedem Programmwechsel mit.
 - Neu: Knopf **«Alle fortsetzen»** oben neben «Alle stoppen». Er erscheint nach dem Neuladen (z. B. neue Version), solange Generatoren «Unterbrochen bei Schritt …» zeigen, und lässt alle mit einem Klick dort weiterlaufen, wo sie standen – gleich wie «Weiter» auf jeder Karte, nacheinander mit 0,25 s Abstand. Die Zeit während dem Neuladen wird nicht mitgezählt.
