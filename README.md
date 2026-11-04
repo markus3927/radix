@@ -56,6 +56,11 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.8.7 (Brücke bleibt 1.2.1) – Programm-Zähler ohne Zeitmarke
+- Status und Protokoll zählten die Zeitmarke («um 6.00») als Programm mit: Kopf «5 Programme», unten «Programm 6/6». Jetzt zählen beide nur Programme (`progNr`, `progAnz`), also «Programm 5/5». «loop-3» zählt weiter als 3 Programme, wie in der Liste.
+- Nur Anzeige – Laufzeiten, «pro Durchlauf», Restzeit und Ablauf bleiben gleich (die waren richtig).
+- kern.js unverändert.
+
 ## Stand Version 0.8.6 (Brücke bleibt 1.2.1) – Zeitmarke geht nicht mehr verloren
 - **Zeit fehlte (Gen. 10, 13):** RADIX merkt sich pro Tag jede schon erhaltene Zeitmarke. Wurde ein Block mit gleicher Zeit nochmals gesendet oder nach «Leeren» wieder gebraucht, kamen nur die Programme an und liefen beim Start sofort los. Neue Programme nehmen jetzt ihre Zeitmarke aus der Tageszeile mit (`kontrolleMitMarke`), auch wenn sie schon gesehen wurde. Sie kommt nicht dazu, wenn sie in der Programmliste schon die letzte ist (sonst läge der Block auf dem Tag danach) oder wenn die Zeit vorbei ist.
 - **Zeile von morgen lief heute:** Eine Zeitmarke, deren Uhrzeit heute noch kommt, galt für heute. Die erste Zeitmarke der Zeile von morgen bekommt dann das Datum: `um 21:00 am 04.11.26` (`morgenDatumSetzen`). Ist das Datum vorbei, gilt wieder die nächste Uhrzeit (Endlosschleife).

@@ -2,13 +2,16 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.8.6';
+const VERSION = '0.8.7';
 const $ = (s, el = document) => el.querySelector(s);
 const K = window.Kern;
 const SPEICHER = 'radix-generatoren-v2';   // { zuordnung: [Nummer je Anschluss], gen: { Nummer: Einstellungen } }
 const STD_PRESET = 'Healing (R) - JW';
 
 // ------------------------------------------------------------------ Hilfen
+/** 0.8.7: Programm-Zähler ohne Zeitmarken – gleich wie «5 Programme» in der Zusammenfassung. */
+const progNr = (items, pi) => { let n = 0; for (let i = 0; i <= pi && i < items.length; i++) if (items[i].r.art !== 'zeit') n++; return n; };
+const progAnz = (items) => items.filter(it => it.r.art !== 'zeit').length;
 const fmtZeit = (sek) => {
   sek = Math.max(0, Math.round(sek));
   const h = Math.floor(sek / 3600), m = Math.floor(sek % 3600 / 60), s = sek % 60;
@@ -1481,7 +1484,7 @@ class Generator {
     try { if (b.length) await this.sende(b); } finally { this.leise = false; }
     if (neu) {
       if (s.pi !== l.aktivPi) {
-        l.aktivPi = s.pi; const it = l.items[s.pi]; this.log(`Programm ${s.pi + 1}/${l.items.length}: ${it.code} ${it.name}`); this.markiereAktiv();
+        l.aktivPi = s.pi; const it = l.items[s.pi]; this.log(s.marke ? `${it.code} ${it.name}` : `Programm ${progNr(l.items, s.pi)}/${progAnz(l.items)}: ${it.code} ${it.name}`);   // 0.8.7 this.markiereAktiv();
         const ein = l.einst[l.aktivEi]; if (ein && !s.marke) this.zeigePreset(ein.e.name, false, farbArt(it, ein.e, s));   // 0.7.6: Farbe folgt dem Programm
       }
       if (!s.mw) this.log(s.marke ? `Schritt ${l.schritt + 1}/${l.plan.schritte.length}: Ausgänge aus, warten bis ${fmtUhr(s.zeitMs)}` : `Schritt ${l.schritt + 1}/${l.plan.schritte.length}: ${s.pause ? 'Pause' : `${fmtHz(l.f1)} / ${fmtHz(l.f2)}`} für ${s.sek} s`);
@@ -1611,7 +1614,7 @@ class Generator {
     const rest = l.plan.gesamtSek - vorher + (l.durchlaeufe ? (l.durchlaeufe - l.durchlauf) * l.plan.gesamtSek : 0);
     const was = s.luecke && l.f1 != null ? `Out1 ${fmtHz(l.f1)} · Out2 ${fmtHz(l.f2)}` : s.pause ? 'Pause (0 V, Ausgänge an)' : `Out1 ${fmtHz(l.f1)} · Out2 ${fmtHz(l.f2)}`;   // MW-Lücke: Anzeige bleibt ruhig
     const ein = l.einst[s.ei ?? l.aktivEi];
-    this.setzeStatus(`${it.code} · ${was} · Programm ${s.pi + 1}/${l.items.length} · Durchlauf ${l.durchlauf}${l.durchlaeufe ? '/' + l.durchlaeufe : ''} · ${l.durchlaeufe ? 'noch ' + fmtZeit(rest) : 'endlos'}`, 'ok lauf-' + farbArt(it, ein && ein.e, s));   // 0.7.6: Laufschrift rot/blau/grün
+    this.setzeStatus(`${it.code} · ${was} · Programm ${progNr(l.items, s.pi)}/${progAnz(l.items)} · Durchlauf ${l.durchlauf}${l.durchlaeufe ? '/' + l.durchlaeufe : ''} · ${l.durchlaeufe ? 'noch ' + fmtZeit(rest) : 'endlos'}`, 'ok lauf-' + farbArt(it, ein && ein.e, s));   // 0.7.6: Laufschrift rot/blau/grün
     $('.balken > div', this.karte).style.width = `${Math.min(100, vorher / l.plan.gesamtSek * 100)}%`;
   }
 
