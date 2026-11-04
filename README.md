@@ -56,6 +56,10 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.8.8 (Brücke bleibt 1.2.1) – Fensterleiste grau
+- Der blaue Balken zuoberst (Fensterleiste der installierten App) ist jetzt hellgrau `#dee2f0` wie beim Kontrollblatt und beim Frequenz-Finder. app.js setzt dafür `<meta name="theme-color">`, das geht dem `theme_color` im Manifest vor. index.html und manifest.webmanifest bleiben unverändert.
+- Sonst nichts geändert.
+
 ## Stand Version 0.8.7 (Brücke bleibt 1.2.1) – Programm-Zähler ohne Zeitmarke
 - Status und Protokoll zählten die Zeitmarke («um 6.00») als Programm mit: Kopf «5 Programme», unten «Programm 6/6». Jetzt zählen beide nur Programme (`progNr`, `progAnz`), also «Programm 5/5». «loop-3» zählt weiter als 3 Programme, wie in der Liste.
 - Nur Anzeige – Laufzeiten, «pro Durchlauf», Restzeit und Ablauf bleiben gleich (die waren richtig).

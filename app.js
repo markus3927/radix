@@ -2,7 +2,14 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.8.7';
+const VERSION = '0.8.8';
+// 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
+// Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
+(() => { try {
+  let m = document.querySelector('meta[name="theme-color"]');
+  if (!m) { m = document.createElement('meta'); m.name = 'theme-color'; document.head.appendChild(m); }
+  m.content = '#dee2f0';
+} catch (e) { /* egal */ } })();
 const $ = (s, el = document) => el.querySelector(s);
 const K = window.Kern;
 const SPEICHER = 'radix-generatoren-v2';   // { zuordnung: [Nummer je Anschluss], gen: { Nummer: Einstellungen } }
