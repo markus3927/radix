@@ -56,6 +56,11 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.1 (Brücke bleibt 1.2.1) – Durchläufe gehen nach dem Lauf zurück auf 1
+- Markus: «wenn ich die durchläufe auf mehr als 1 stelle, ich vergesse das immer zurück zu stellen.»
+- Sind alle Durchläufe gemacht («fertig»), steht das Feld «Durchläufe» wieder auf 1 (`leereNachLauf`), zusammen mit der geleerten Liste und dem leeren «Start um». Im Protokoll steht es.
+- Unverändert: 0 = endlos bleibt 0, weil dieser Lauf nie fertig wird. Stopp von Hand lässt Zahl und Liste stehen, der Lauf ist ja nicht fertig; «Start» beginnt ihn neu.
+
 ## Stand Version 0.9.0 (Brücke bleibt 1.2.1) – Programm am Nachmittag vor das Nachtprogramm
 - Markus: «programme sind gelaufen bis mittag, programmiert ist die nacht bereits. wenn ich am nachmittag noch ein programm machen möchte, hängt das am nachtprogramm an.»
 - Die Stelle in der Tageszeile gilt jetzt auch in der Programmliste: Steht ein neues Programm über einer schon gesendeten Zeitmarke, kommt es in RADIX vor die nächste solche Marke (`kontrolleGruppen`, `markeZeile`). Steht es darunter, wie bisher ans Ende.

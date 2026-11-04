@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.0';
+const VERSION = '0.9.1';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -1173,6 +1173,10 @@ class Generator {
     this.einst.liste = '';
     this.einst.startUm = ''; $('.start-um', this.karte).value = '';   // «Start um» wieder leer
     this.log(`Gelaufen, Liste geleert (${war} Zeile${war === 1 ? '' : 'n'})`);
+    if (this.einst.durchlaeufe > 1) {                                 // 0.9.1: Durchläufe gemacht = zurück auf 1 (0 = endlos wird nie fertig, bleibt also 0)
+      this.log(`Durchläufe von ${this.einst.durchlaeufe} zurück auf 1`);
+      this.einst.durchlaeufe = 1; $('.durchlaeufe', this.karte).value = 1;
+    }
     speichereAlle();
   }
 
