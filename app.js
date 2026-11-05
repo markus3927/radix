@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.4';
+const VERSION = '0.9.5';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -543,9 +543,9 @@ function markenZeiten(s, von, ab) {
 }
 /** 0.9.2 (Markus 05.11.2026): Zeitmarke ausgeschrieben – «06:00 Uhr am Freitag 06.11.26». */
 const WOCHENTAGE = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
-/** 0.9.4: Uhrzeit wie in der Kontrollapp «05.08», an einem anderen Tag mit Wochentag davor («Fr 05.08»). */
-const fmtUhr = (ms) => { const d = new Date(ms), h = new Date(); const tag = d.toDateString() === h.toDateString() ? '' : WOCHENTAGE[d.getDay()].slice(0, 2) + ' ';
-  return `${tag}${zwei(d.getHours())}.${zwei(d.getMinutes())}`; };
+/** 0.9.4: Uhrzeit wie in der Kontrollapp «05.08», an einem anderen Tag mit Wochentag davor («Fr 05.08»). 0.9.5: «05.08 Uhr». */
+const fmtUhr = (ms) => { const d = new Date(ms), h = new Date(); const tag = d.toDateString() === h.toDateString() ? '' : WOCHENTAGE[d.getDay()].slice(0, 2) + '\u00a0';
+  return `${tag}${zwei(d.getHours())}.${zwei(d.getMinutes())}\u00a0Uhr`; };   // 0.9.5 (Markus: «sieht aus wie ein datum») mit «Uhr»
 /**
  * 0.9.4 (Markus 05.11.2026: «ich möchte auch wissen wie lange das laufende programm noch dauert»): Restzeit und Ende des laufenden
  * Programms. Kommt vorher eine Zeitmarke, endet es dort (wie im Ablauf: die fällige Zeitmarke beendet das Programm).
@@ -1723,8 +1723,9 @@ class Generator {
     const was = s.luecke && l.f1 != null ? `Out1 ${fmtHz(l.f1)} · Out2 ${fmtHz(l.f2)}` : s.pause ? 'Pause (0 V, Ausgänge an)' : `Out1 ${fmtHz(l.f1)} · Out2 ${fmtHz(l.f2)}`;   // MW-Lücke: Anzeige bleibt ruhig
     const ein = l.einst[s.ei ?? l.aktivEi];
     const z = laufZeiten(l);
-    const vorne = `${it.code} · Programm ${progNr(l.items, s.pi)}/${progAnz(l.items)} · noch ${fmtZeit(z.progSek)} · fertig ${fmtUhr(z.progEnde)}${z.abbruch ? ' (Zeitmarke)' : ''}`;
-    const hinten = `${was} · Durchlauf ${l.durchlauf}${l.durchlaeufe ? '/' + l.durchlaeufe : ''} · ${!l.durchlaeufe ? 'endlos' : z.listeEnde ? 'alles fertig ' + fmtUhr(z.listeEnde) : 'noch ' + fmtZeit(z.restSek)}`;
+    // 0.9.5: kurz halten, damit nichts umbricht – oben Programm, darunter Programm-/Durchlauf-Zähler mit Ende, zuunterst die Frequenzen
+    const vorne = `${it.code} · noch ${fmtZeit(z.progSek)} · fertig ${fmtUhr(z.progEnde)}${z.abbruch ? ' (Zeitmarke)' : ''}`;
+    const hinten = `Programm ${progNr(l.items, s.pi)}/${progAnz(l.items)} · Durchlauf ${l.durchlauf}${l.durchlaeufe ? '/' + l.durchlaeufe : ''} · ${!l.durchlaeufe ? 'endlos' : z.listeEnde ? 'alles fertig ' + fmtUhr(z.listeEnde) : 'noch ' + fmtZeit(z.restSek)}\n${was}`;
     this.setzeStatus(vorne, 'ok lauf-' + farbArt(it, ein && ein.e, s), hinten);   // 0.7.6: Laufschrift rot/blau/grün
     $('.balken > div', this.karte).style.width = `${Math.min(100, vorher / l.plan.gesamtSek * 100)}%`;
   }

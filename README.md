@@ -56,6 +56,12 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.5 (Brücke bleibt 1.2.1) – «Uhr» hinter der Zeit
+- Markus: «hinter zeit bitte Uhr schreiben. sieht auch aus wie ein datum.»
+- Status in drei kurzen Zeilen, damit nichts umbricht:
+  `pr0076 HF · noch 25 min 00 s · fertig 18.30 Uhr` / `Programm 1/5 · Durchlauf 1/1 · alles fertig Fr 08.29 Uhr` / `Out1 … · Out2 …`
+- «Uhr» und Wochentag mit festem Leerschlag (`fmtUhr`). Ablauf unverändert.
+
 ## Stand Version 0.9.4 (Brücke bleibt 1.2.1) – Restzeit des laufenden Programms
 - Markus: «die anzeige so macht mich nicht ganz glücklich. ich möchte auch wissen wie lange das laufende programm noch dauert.»
 - Status im Lauf, oben gross: `pr0076 HF · Programm 1/5 · noch 25 min 00 s · fertig 18.30`. Kommt vorher eine Zeitmarke, endet es dort: «fertig 05.00 (Zeitmarke)».
