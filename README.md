@@ -56,6 +56,14 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.3 (Brücke bleibt 1.2.1) – Datum bei jeder Zeitmarke, egal woher sie kommt
+- Markus: Fixprogramm für morgen, «da fehlt das ganze datum» · «es sollte bei allen gleich gehen»
+- Die Vorschau rechnet das Datum neu mit derselben Regel wie der Start (`markenZeiten`), auch `rechneMarken` nutzt sie. Darum gleich für Fixprogramm, Zeile von morgen, «Morgen aus Kontrollblatt», von Hand getippt, mit und ohne Datum in der Zeile, und auf allen Generatoren.
+- «Start um» wird mitgerechnet. Ein altes Datum in der Zeile zeigt nicht mehr den vergangenen Tag.
+- Schon vorbeigegangene Zeitmarken behalten ihr Datum, auch wenn während dem Lauf etwas dazukommt oder nach dem Neuladen.
+- Ist die Uhrzeit vorbei und der Generator nicht gestartet, geht die Vorschau von selbst einen Tag weiter.
+- Ablauf und Startzeiten bleiben gleich, geändert hat nur die Anzeige.
+
 ## Stand Version 0.9.2 (Brücke bleibt 1.2.1) – Zeitmarke mit ausgeschriebenem Datum
 - Markus: «was noch perfekter wäre ist, wenn stehen würde: Start um 6.00 Uhr am Freitag 06.11.26»
 - Die Zeitmarke in der Vorschau zeigt jetzt «Start um 06:00 Uhr am Freitag 06.11.26» statt «Start um 06:00 (Fr., 06:00)» (`fmtStart`).

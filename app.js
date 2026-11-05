@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.2';
+const VERSION = '0.9.3';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -515,6 +515,31 @@ function naechsteUhrzeit(hhmm, ab, am = null) {
   const d = new Date(ab); d.setHours(h, m, 0, 0);
   if (d.getTime() <= ab) d.setDate(d.getDate() + 1);
   return d.getTime();
+}
+/** Letzter Zeitpunkt (ms) mit dieser Uhrzeit bis «ab» (Gegenstück zu naechsteUhrzeit, für schon vorbeigegangene Zeitmarken). */
+function vorigeUhrzeit(hhmm, ab, am = null) {
+  const [h, m] = hhmm.split(':').map(Number);
+  if (am) { const f = new Date(am.j, am.m - 1, am.t, h, m, 0, 0).getTime(); if (f <= ab) return f; }
+  const d = new Date(ab); d.setHours(h, m, 0, 0);
+  if (d.getTime() > ab) d.setDate(d.getDate() - 1);
+  return d.getTime();
+}
+/**
+ * 0.9.3 (Markus 05.11.2026: Fixprogramm für morgen, «da fehlt das ganze datum» · «es sollte bei allen gleich gehen»): die eine Regel für alle
+ * Zeitmarken, ob aus Kontrollblatt, Fixprogramm, «Morgen» oder von Hand, ob mit oder ohne Datum in der Zeile.
+ * Rückgabe { Schritt: ms }. Ab «von» jede die nächste nach der vorherigen (06:00 nach 22:00 = morgen), davor die zuletzt vorbeigegangene.
+ */
+function markenZeiten(s, von, ab) {
+  const z = {};
+  let t = ab, direkt = false;                                       // direkt: Zeitmarke gleich nach einer Zeitmarke (ohne Programm dazwischen)
+  for (let k = von; k < s.length; k++) {
+    if (!s[k].marke) { direkt = false; continue; }
+    z[k] = k === von && s[k].zeitMs ? s[k].zeitMs : naechsteUhrzeit(s[k].um, direkt ? t - 1 : t, s[k].am);   // zweimal 06:00 hintereinander = gleicher Morgen
+    t = z[k]; direkt = true;
+  }
+  t = Date.now();
+  for (let k = Math.min(von, s.length) - 1; k >= 0; k--) if (s[k].marke) t = z[k] = s[k].zeitMs || vorigeUhrzeit(s[k].um, t, s[k].am);
+  return z;
 }
 /** 0.9.2 (Markus 05.11.2026): Zeitmarke ausgeschrieben – «06:00 Uhr am Freitag 06.11.26». */
 const WOCHENTAGE = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
@@ -1281,13 +1306,8 @@ class Generator {
 
   /** Uhrzeit jeder Zeitmarke ab der aktuellen Stelle festlegen: jede die nächste nach der vorherigen (06:00 nach 22:00 = morgen). */
   rechneMarken(ab = Date.now()) {
-    const l = this.lauf, s = l.plan.schritte;
-    let t = ab, direkt = false;                                     // direkt: Zeitmarke gleich nach einer Zeitmarke (ohne Programm dazwischen)
-    for (let k = l.schritt; k < s.length; k++) {
-      if (!s[k].marke) { direkt = false; continue; }
-      s[k].zeitMs = k === l.schritt && s[k].zeitMs ? s[k].zeitMs : naechsteUhrzeit(s[k].um, direkt ? t - 1 : t, s[k].am);   // zweimal 06:00 hintereinander = gleicher Morgen
-      t = s[k].zeitMs; direkt = true;
-    }
+    const s = this.lauf.plan.schritte, z = markenZeiten(s, this.lauf.schritt, ab);
+    for (const k of Object.keys(z)) s[k].zeitMs = z[k];
   }
 
   /** Meldung über der Vorschau, die der laufende Fortschritt nicht überschreibt (verschwindet nach 20 s). */
@@ -1307,11 +1327,16 @@ class Generator {
       if (gw.length) anzeigen = { ...anzeigen, warnungen: [...anzeigen.warnungen, ...gw], blockiert: true };
     }
     const aktPi = this.lauf && this.lauf.plan.schritte[this.lauf.schritt] ? this.lauf.plan.schritte[this.lauf.schritt].pi : -1;
+    // 0.9.3: nicht gestartet = dieselbe Rechnung wie beim Start, ab «Start um» bzw. jetzt; nach Neuladen ab der Stelle, wo es weitergeht
+    const jetzt = Date.now(), su = this.einst.startUm, fs = this.fortsetzen;
+    const von = fs && fs.schritt < anzeigen.plan.schritte.length ? fs.schritt : 0;
+    const ab = !von && su ? naechsteUhrzeit(su, jetzt) : jetzt;
+    const zeiten = this.lauf ? {} : markenZeiten(anzeigen.plan.schritte, von, ab);
+    this.vorschauBis = this.lauf ? Infinity : Math.min(...Object.values(zeiten).filter(x => x > jetzt), ab > jetzt ? ab : Infinity);   // ab dann gilt ein anderes Datum
     vs.innerHTML = anzeigen.items.map((it, i) => {
       if (it.r.art === 'zeit') {
-        const st = this.lauf && this.lauf.plan.schritte[it.start], am = it.r.am;
-        const wann = st && st.zeitMs ? fmtStart(st.zeitMs)
-          : am ? fmtStart(new Date(am.j, am.m - 1, am.t, ...it.r.um.split(':').map(Number)).getTime()) : `${it.r.um} Uhr`;
+        const ms = this.lauf ? (this.lauf.plan.schritte[it.start] || {}).zeitMs : zeiten[it.start];
+        const wann = ms ? fmtStart(ms) : `${it.r.um} Uhr`;
         return `<div class="p marke" data-pi="${i}"><code>⏰</code><span class="name">Start um ${wann}</span><span class="zeit"></span>` +
           `<span class="pinfo">Was darunter steht, startet erst um ${it.r.um} Uhr. Läuft dann noch ein Programm davor, wird es beendet.</span></div>`;
       }
@@ -2026,6 +2051,7 @@ async function init() {
   }
   await Promise.all([ordnerBeimStart(), quelleBeimStart('finder'), quelleBeimStart('kontrolle'), laufbuchBeimStart().catch(() => {})]);
   beobachteQuellen();
+  setInterval(() => alleKarten(g => { if (!g.lauf && Date.now() >= g.vorschauBis) g.pruefe(); }), 30000);   // 0.9.3: Uhrzeit vorbei = Vorschau zeigt den nächsten Tag
   starteTakt();
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 }
