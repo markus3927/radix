@@ -56,6 +56,14 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.4 (Brücke bleibt 1.2.1) – Restzeit des laufenden Programms
+- Markus: «die anzeige so macht mich nicht ganz glücklich. ich möchte auch wissen wie lange das laufende programm noch dauert.»
+- Status im Lauf, oben gross: `pr0076 HF · Programm 1/5 · noch 25 min 00 s · fertig 18.30`. Kommt vorher eine Zeitmarke, endet es dort: «fertig 05.00 (Zeitmarke)».
+- Darunter klein: Frequenzen · Durchlauf · «alles fertig Fr 08.29» (im letzten Durchlauf, mit Wartezeit der Zeitmarken). Bei mehreren Durchläufen davor «noch …» wie bisher, bei 0 «endlos».
+- Uhrzeit wie in der Kontrollapp («05.08»), an einem anderen Tag mit Wochentag davor.
+- Beim Warten an einer Zeitmarke steht darunter «Start in 11 h 07 min».
+- Neu `laufZeiten(l)`, `fmtUhr`; `setzeStatus` mit zweiter Zeile. Ablauf selbst unverändert.
+
 ## Stand Version 0.9.3 (Brücke bleibt 1.2.1) – Datum bei jeder Zeitmarke, egal woher sie kommt
 - Markus: Fixprogramm für morgen, «da fehlt das ganze datum» · «es sollte bei allen gleich gehen»
 - Die Vorschau rechnet das Datum neu mit derselben Regel wie der Start (`markenZeiten`), auch `rechneMarken` nutzt sie. Darum gleich für Fixprogramm, Zeile von morgen, «Morgen aus Kontrollblatt», von Hand getippt, mit und ohne Datum in der Zeile, und auf allen Generatoren.

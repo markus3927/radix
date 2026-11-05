@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.3';
+const VERSION = '0.9.4';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -543,6 +543,29 @@ function markenZeiten(s, von, ab) {
 }
 /** 0.9.2 (Markus 05.11.2026): Zeitmarke ausgeschrieben – «06:00 Uhr am Freitag 06.11.26». */
 const WOCHENTAGE = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
+/** 0.9.4: Uhrzeit wie in der Kontrollapp «05.08», an einem anderen Tag mit Wochentag davor («Fr 05.08»). */
+const fmtUhr = (ms) => { const d = new Date(ms), h = new Date(); const tag = d.toDateString() === h.toDateString() ? '' : WOCHENTAGE[d.getDay()].slice(0, 2) + ' ';
+  return `${tag}${zwei(d.getHours())}.${zwei(d.getMinutes())}`; };
+/**
+ * 0.9.4 (Markus 05.11.2026: «ich möchte auch wissen wie lange das laufende programm noch dauert»): Restzeit und Ende des laufenden
+ * Programms. Kommt vorher eine Zeitmarke, endet es dort (wie im Ablauf: die fällige Zeitmarke beendet das Programm).
+ * Ende der ganzen Liste nur im letzten Durchlauf: jede Zeitmarke setzt die Uhr auf ihre Zeit (warten oder abbrechen), dann weiter mit den Dauern.
+ */
+function laufZeiten(l) {
+  const alle = l.plan.schritte, jetzt = Date.now(), s = alle[l.schritt];
+  let j = l.schritt; while (j + 1 < alle.length && alle[j + 1].pi === s.pi && !alle[j + 1].marke) j++;
+  let progSek = Math.max(0, alle.slice(l.schritt, j + 1).reduce((a, x) => a + x.sek, 0) - l.tImSchritt), progEnde = jetzt + progSek * 1000, abbruch = false;
+  for (let k = j + 1; k < alle.length; k++) if (alle[k].marke) { if (alle[k].zeitMs && alle[k].zeitMs < progEnde) { progEnde = alle[k].zeitMs; progSek = (progEnde - jetzt) / 1000; abbruch = true; } break; }
+  const vorher = alle.slice(0, l.schritt).reduce((a, x) => a + x.sek, 0) + l.tImSchritt;
+  const restSek = l.plan.gesamtSek - vorher + (l.durchlaeufe ? (l.durchlaeufe - l.durchlauf) * l.plan.gesamtSek : 0);
+  let listeEnde = null;
+  if (l.durchlaeufe && l.durchlauf >= l.durchlaeufe) {
+    let t = progEnde;
+    for (let k = j + 1; k < alle.length; k++) { if (alle[k].marke) { if (alle[k].zeitMs) t = alle[k].zeitMs; } else t += alle[k].sek * 1000; }
+    listeEnde = t;
+  }
+  return { progSek, progEnde, abbruch, restSek, listeEnde };
+}
 const zwei = (n) => String(n).padStart(2, '0');
 const fmtStart = (ms) => { const d = new Date(ms); return `${zwei(d.getHours())}:${zwei(d.getMinutes())} Uhr am ${WOCHENTAGE[d.getDay()]} ${zwei(d.getDate())}.${zwei(d.getMonth() + 1)}.${zwei(d.getFullYear() % 100)}`; };
 
@@ -928,7 +951,10 @@ class Generator {
     el.className = 'preset-aktiv' + (name ? ' ' + (art || (/killing/i.test(name) ? 'k' : 'h')) : '') + (wechsel ? ' wechsel' : '');
     el.title = name ? (wechsel ? 'Generator wird umgestellt auf ' : 'Laufendes Preset: ') + name : '';
   }
-  setzeStatus(text, art = '') { const s = $('.status', this.karte); s.textContent = text; s.className = 'status ' + art; }
+  setzeStatus(text, art = '', zeile2 = '') {   // 0.9.4: zweite Zeile klein darunter (Frequenzen, Durchlauf, alles fertig)
+    const s = $('.status', this.karte); s.textContent = text; s.className = 'status ' + art;
+    if (zeile2) { const z = document.createElement('span'); z.className = 'status-2'; z.textContent = zeile2; s.appendChild(z); }
+  }
   setzeListe(text) {
     if (text === this.einst.liste) return;
     if (this.lauf) {                                   // während dem Lauf: nur ab dem nächsten Programm änderbar
@@ -1692,12 +1718,14 @@ class Generator {
   zeigeFortschritt() {
     const l = this.lauf; if (!l) return;
     const s = l.plan.schritte[l.schritt], it = l.items[s.pi];
-    if (s.marke) { this.setzeStatus(`Wartet bis ${fmtStart(s.zeitMs)} (Zeitmarke ${s.um}), Ausgänge aus`, 'warnung'); return; }
+    if (s.marke) { this.setzeStatus(`Wartet bis ${fmtStart(s.zeitMs)}, Ausgänge aus`, 'warnung', `Start in ${fmtZeit((s.zeitMs - Date.now()) / 1000)}`); return; }
     const vorher = l.plan.schritte.slice(0, l.schritt).reduce((a, x) => a + x.sek, 0) + l.tImSchritt;
-    const rest = l.plan.gesamtSek - vorher + (l.durchlaeufe ? (l.durchlaeufe - l.durchlauf) * l.plan.gesamtSek : 0);
     const was = s.luecke && l.f1 != null ? `Out1 ${fmtHz(l.f1)} · Out2 ${fmtHz(l.f2)}` : s.pause ? 'Pause (0 V, Ausgänge an)' : `Out1 ${fmtHz(l.f1)} · Out2 ${fmtHz(l.f2)}`;   // MW-Lücke: Anzeige bleibt ruhig
     const ein = l.einst[s.ei ?? l.aktivEi];
-    this.setzeStatus(`${it.code} · ${was} · Programm ${progNr(l.items, s.pi)}/${progAnz(l.items)} · Durchlauf ${l.durchlauf}${l.durchlaeufe ? '/' + l.durchlaeufe : ''} · ${l.durchlaeufe ? 'noch ' + fmtZeit(rest) : 'endlos'}`, 'ok lauf-' + farbArt(it, ein && ein.e, s));   // 0.7.6: Laufschrift rot/blau/grün
+    const z = laufZeiten(l);
+    const vorne = `${it.code} · Programm ${progNr(l.items, s.pi)}/${progAnz(l.items)} · noch ${fmtZeit(z.progSek)} · fertig ${fmtUhr(z.progEnde)}${z.abbruch ? ' (Zeitmarke)' : ''}`;
+    const hinten = `${was} · Durchlauf ${l.durchlauf}${l.durchlaeufe ? '/' + l.durchlaeufe : ''} · ${!l.durchlaeufe ? 'endlos' : z.listeEnde ? 'alles fertig ' + fmtUhr(z.listeEnde) : 'noch ' + fmtZeit(z.restSek)}`;
+    this.setzeStatus(vorne, 'ok lauf-' + farbArt(it, ein && ein.e, s), hinten);   // 0.7.6: Laufschrift rot/blau/grün
     $('.balken > div', this.karte).style.width = `${Math.min(100, vorher / l.plan.gesamtSek * 100)}%`;
   }
 
