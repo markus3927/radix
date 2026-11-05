@@ -56,6 +56,13 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.2 (Brücke bleibt 1.2.1) – Zeitmarke mit ausgeschriebenem Datum
+- Markus: «was noch perfekter wäre ist, wenn stehen würde: Start um 6.00 Uhr am Freitag 06.11.26»
+- Die Zeitmarke in der Vorschau zeigt jetzt «Start um 06:00 Uhr am Freitag 06.11.26» statt «Start um 06:00 (Fr., 06:00)» (`fmtStart`).
+- Gleich auch im gelben Status und im Protokoll: «Wartet bis 06:00 Uhr am Freitag 06.11.26».
+- Während dem Lauf kommt das Datum aus dem Zeitplan, sonst aus «um 06:00 am 06.11.26» in der Zeile; ohne beides nur «Start um 06:00 Uhr».
+- Sonst nichts geändert.
+
 ## Stand Version 0.9.1 (Brücke bleibt 1.2.1) – Durchläufe gehen nach dem Lauf zurück auf 1
 - Markus: «wenn ich die durchläufe auf mehr als 1 stelle, ich vergesse das immer zurück zu stellen.»
 - Sind alle Durchläufe gemacht («fertig»), steht das Feld «Durchläufe» wieder auf 1 (`leereNachLauf`), zusammen mit der geleerten Liste und dem leeren «Start um». Im Protokoll steht es.

@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.1';
+const VERSION = '0.9.2';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -516,7 +516,10 @@ function naechsteUhrzeit(hhmm, ab, am = null) {
   if (d.getTime() <= ab) d.setDate(d.getDate() + 1);
   return d.getTime();
 }
-const fmtUhr = (ms) => new Date(ms).toLocaleString('de-CH', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+/** 0.9.2 (Markus 05.11.2026): Zeitmarke ausgeschrieben – «06:00 Uhr am Freitag 06.11.26». */
+const WOCHENTAGE = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
+const zwei = (n) => String(n).padStart(2, '0');
+const fmtStart = (ms) => { const d = new Date(ms); return `${zwei(d.getHours())}:${zwei(d.getMinutes())} Uhr am ${WOCHENTAGE[d.getDay()]} ${zwei(d.getDate())}.${zwei(d.getMonth() + 1)}.${zwei(d.getFullYear() % 100)}`; };
 
 /** Peptid-Liste (peptide.js): pp-Nummer -> [Spooky2-Name, Deutsch]. */
 const PEPTIDE = self.RADIX_PEPTIDE || null;
@@ -1306,9 +1309,11 @@ class Generator {
     const aktPi = this.lauf && this.lauf.plan.schritte[this.lauf.schritt] ? this.lauf.plan.schritte[this.lauf.schritt].pi : -1;
     vs.innerHTML = anzeigen.items.map((it, i) => {
       if (it.r.art === 'zeit') {
-        const st = this.lauf && this.lauf.plan.schritte[it.start], wann = st && st.zeitMs ? ` (${fmtUhr(st.zeitMs)})` : '';
-        return `<div class="p marke" data-pi="${i}"><code>⏰</code><span class="name">Start um ${it.r.um}${!wann && it.r.am ? ` am ${String(it.r.am.t).padStart(2, '0')}.${String(it.r.am.m).padStart(2, '0')}.` : ''}${wann}</span><span class="zeit"></span>` +
-          `<span class="pinfo">Was darunter steht, startet erst um ${it.r.um}. Läuft dann noch ein Programm davor, wird es beendet.</span></div>`;
+        const st = this.lauf && this.lauf.plan.schritte[it.start], am = it.r.am;
+        const wann = st && st.zeitMs ? fmtStart(st.zeitMs)
+          : am ? fmtStart(new Date(am.j, am.m - 1, am.t, ...it.r.um.split(':').map(Number)).getTime()) : `${it.r.um} Uhr`;
+        return `<div class="p marke" data-pi="${i}"><code>⏰</code><span class="name">Start um ${wann}</span><span class="zeit"></span>` +
+          `<span class="pinfo">Was darunter steht, startet erst um ${it.r.um} Uhr. Läuft dann noch ein Programm davor, wird es beendet.</span></div>`;
       }
       const nv = /^(pr\d{4}) (NF|HF)$/.exec(it.code || ''), andere = nv && (nv[2] === 'NF' ? 'HF' : 'NF');
       const wechsel = nv && !it.fehler && i > aktPi && daten.finder && daten.finder.programme.has(`${nv[1]} ${andere}`)
@@ -1479,7 +1484,7 @@ class Generator {
     this.sperre(true);
     this.pruefe();
     speichereAlle();
-    if (startUmMs) this.setzeStatus(`Wartet bis ${fmtUhr(startUmMs)}`, 'warnung');
+    if (startUmMs) this.setzeStatus(`Wartet bis ${fmtStart(startUmMs)}`, 'warnung');
   }
 
   /** Generator auf das Preset des aktuellen (bzw. nächsten klingenden) Schritts einrichten. */
@@ -1540,7 +1545,7 @@ class Generator {
         l.aktivPi = s.pi; const it = l.items[s.pi]; this.log(s.marke ? `${it.code} ${it.name}` : `Programm ${progNr(l.items, s.pi)}/${progAnz(l.items)}: ${it.code} ${it.name}`); this.markiereAktiv();   // 0.8.7 Zähler, 0.8.9 Balken wieder richtig
         const ein = l.einst[l.aktivEi]; if (ein && !s.marke) this.zeigePreset(ein.e.name, false, farbArt(it, ein.e, s));   // 0.7.6: Farbe folgt dem Programm
       }
-      if (!s.mw) this.log(s.marke ? `Schritt ${l.schritt + 1}/${l.plan.schritte.length}: Ausgänge aus, warten bis ${fmtUhr(s.zeitMs)}` : `Schritt ${l.schritt + 1}/${l.plan.schritte.length}: ${s.pause ? 'Pause' : `${fmtHz(l.f1)} / ${fmtHz(l.f2)}`} für ${s.sek} s`);
+      if (!s.mw) this.log(s.marke ? `Schritt ${l.schritt + 1}/${l.plan.schritte.length}: Ausgänge aus, warten bis ${fmtStart(s.zeitMs)}` : `Schritt ${l.schritt + 1}/${l.plan.schritte.length}: ${s.pause ? 'Pause' : `${fmtHz(l.f1)} / ${fmtHz(l.f2)}`} für ${s.sek} s`);
       this.laufbuchPruefen(s);
     }
   }
@@ -1662,7 +1667,7 @@ class Generator {
   zeigeFortschritt() {
     const l = this.lauf; if (!l) return;
     const s = l.plan.schritte[l.schritt], it = l.items[s.pi];
-    if (s.marke) { this.setzeStatus(`Wartet bis ${fmtUhr(s.zeitMs)} (Zeitmarke ${s.um}), Ausgänge aus`, 'warnung'); return; }
+    if (s.marke) { this.setzeStatus(`Wartet bis ${fmtStart(s.zeitMs)} (Zeitmarke ${s.um}), Ausgänge aus`, 'warnung'); return; }
     const vorher = l.plan.schritte.slice(0, l.schritt).reduce((a, x) => a + x.sek, 0) + l.tImSchritt;
     const rest = l.plan.gesamtSek - vorher + (l.durchlaeufe ? (l.durchlaeufe - l.durchlauf) * l.plan.gesamtSek : 0);
     const was = s.luecke && l.f1 != null ? `Out1 ${fmtHz(l.f1)} · Out2 ${fmtHz(l.f2)}` : s.pause ? 'Pause (0 V, Ausgänge an)' : `Out1 ${fmtHz(l.f1)} · Out2 ${fmtHz(l.f2)}`;   // MW-Lücke: Anzeige bleibt ruhig
