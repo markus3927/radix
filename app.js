@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.5';
+const VERSION = '0.9.6';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -685,10 +685,11 @@ function bereiteListeVor(text, standardPreset) {
 }
 
 // ------------------------------------------------------------------ Farbe je Programm (0.7.6)
-/** k = Killing (rot), h = Healing/übrige (blau), m = Preset-Programm oder MW (grün). Gilt für Leiste, Preset-Anzeige,
+/** k = Killing (rot), h = Healing/übrige (blau), m = Preset-Programm, z. B. Peptid (grün), v = MW-Programm aus dem Finder (violett, 0.9.6). Gilt für Leiste, Preset-Anzeige,
  *  Laufschrift und Vorschau. it = Eintrag der Programmliste, e = Einstellungen des Presets, s = laufender Schritt. */
 function farbArt(it, e, s) {
-  if ((it && it.r && it.r.art === 'preset') || (s && s.mw) || (e && e.mwFaktor > 0)) return 'm';
+  if (it && it.r && it.r.art === 'preset') return 'm';                       // Peptide und andere Preset-Programme grün
+  if ((s && s.mw) || (e && e.mwFaktor > 0)) return 'v';                      // 0.9.6 (Markus 06.11.2026): MW violett wie in Finder und Kontrollapp
   return /killing/i.test((e && e.name) || (it && it.preset) || '') ? 'k' : 'h';
 }
 
@@ -944,7 +945,7 @@ class Generator {
     $('#generatoren').appendChild(k);
     this.zeigeEinst();
   }
-  /** Laufendes Preset gross im Kartenkopf (rot = Killing, blau = Healing, grün = Preset/MW); leer = Generator steht. */
+  /** Laufendes Preset gross im Kartenkopf (rot = Killing, blau = Healing, grün = Preset/Peptid, violett = MW); leer = Generator steht. */
   zeigePreset(name, wechsel = false, art = null) {
     const el = $('.preset-aktiv', this.karte);
     el.textContent = name ? (wechsel ? '→ ' : '') + name : '';
@@ -1759,7 +1760,7 @@ class Generator {
 // ------------------------------------------------------------------ Übersicht: ein Knopf pro Generator im Kopf
 const zahl = (g) => parseInt(g.einst.nr, 10) || 0;
 
-/** Zustand für die Leiste: k = Killing läuft, h = Healing läuft, m = Preset-Programm/MW läuft, w = wartet/stellt um, f = Fehler, '' = steht. */
+/** Zustand für die Leiste: k = Killing läuft, h = Healing läuft, m = Preset-Programm/Peptid läuft, v = MW läuft, w = wartet/stellt um, f = Fehler, '' = steht. */
 function zustand(g) {
   const l = g.lauf, st = $('.status', g.karte);
   if (l) {
@@ -1797,7 +1798,7 @@ function aktualisiereLeiste() {
   leistenStand = stand;
   nav.hidden = liste.length < 1;
   nav.innerHTML = '<div class="nummern">' + liste.map(x => `<button class="lg ${x.art}${x.nr === aktiv ? ' aktiv' : ''}${x.nr === gz ? ' gezeigt' : ''}" data-nr="${x.nr}" title="${esc(x.titel)}"${x.art === 'fehlt' ? ' disabled' : ''}>${x.nr}</button>`).join('') + '</div>' +
-    `<span class="legende">rot Killing · blau Healing · grün Preset/MW · gelb stellt um oder wartet · weiss steht · blass aus · orange umrandet Störung · grau gestrichelt GX Pro bereit (Anschluss frei)</span>`;
+    `<span class="legende">rot Killing · blau Healing · grün Peptid/Preset · violett MW · gelb stellt um oder wartet · weiss steht · blass aus · orange umrandet Störung · grau gestrichelt GX Pro bereit (Anschluss frei)</span>`;
   setzeKopfHoehe();
 }
 

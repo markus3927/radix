@@ -56,6 +56,10 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.6 (Brücke bleibt 1.2.1) – MW violett
+- Markus 06.11.2026: «wäre schön wenn das im radix auch violet wäre». MW-Programme aus dem Frequenz-Finder (Apotheke (MW), pr2278–pr3073, Preset MW Emulate (R) - JW) sind jetzt violett wie in Finder und Kontrollapp: Knopf in der Leiste, Preset im Kartenkopf, Laufschrift und Vorschau. Peptide (pp-Nummern) und andere Preset-Programme bleiben grün.
+- `farbArt`: neue Art `v` für MW (Schritt mit MW oder Preset mit MW-Faktor, ausser Preset-Programme). Legende «grün Peptid/Preset · violett MW».
+
 ## Stand Version 0.9.5 (Brücke bleibt 1.2.1) – «Uhr» hinter der Zeit
 - Markus: «hinter zeit bitte Uhr schreiben. sieht auch aus wie ein datum.»
 - Status in drei kurzen Zeilen, damit nichts umbricht:
