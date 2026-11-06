@@ -238,6 +238,9 @@
     const genMax = optionen.generatorMaxHz || 5e6;
     const warnungen = [...e.warnungen];
     const wobble = optionen.wobble !== undefined ? optionen.wobble : e.wobble;
+    // 0.9.7: Pause/Schumann (pa/sm) laufen genau so lange, wie sie heissen – ohne Dwell-Multiplikator, Force Dwell und Wiederholungen des Presets
+    //        (sonst wurde pa60 nach einem Peptid-Preset mit Dwell-Multiplikator 10 zu 10 h)
+    if (optionen.zeitfest) e = { ...e, dwellFaktor: 1, forceDwell: 0, wdhFrequenz: 1, wdhProgramm: 1 };
     const max1 = e.out1.maxHz || genMax, max2 = e.out2.maxHz || genMax;
     const ziel = (hz) => hz * e.freqMultiplikator + e.freqKonstante;
     const f1Von = (hz) => inBereich(ziel(hz), max1, e.out1.teilung);

@@ -56,6 +56,10 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.7 (Brücke bleibt 1.2.1) – Pausen-Dauer korrigiert
+- Markus 06.11.2026: pa60 nach dem Peptid pp0916 zeigte 10 h statt 1 h, Gesamtdauer entsprechend falsch. Ursache: Pause und Schumann übernehmen das Preset des Programms davor; das Peptid-Preset «Mitochondrial Biogenesis (R)» hat Dwell-Multiplikator 10 → 3600 s × 10 = 10 h.
+- `erstellePlan(…, { zeitfest: true })`: pa- und sm-Programme laufen genau so lange, wie sie heissen – ohne Dwell-Multiplikator, Force Dwell und Wiederholungen des Presets. Übrige Programme unverändert.
+
 ## Stand Version 0.9.6 (Brücke bleibt 1.2.1) – MW violett
 - Markus 06.11.2026: «wäre schön wenn das im radix auch violet wäre». MW-Programme aus dem Frequenz-Finder (Apotheke (MW), pr2278–pr3073, Preset MW Emulate (R) - JW) sind jetzt violett wie in Finder und Kontrollapp: Knopf in der Leiste, Preset im Kartenkopf, Laufschrift und Vorschau. Peptide (pp-Nummern) und andere Preset-Programme bleiben grün.
 - `farbArt`: neue Art `v` für MW (Schritt mit MW oder Preset mit MW-Faktor, ausser Preset-Programme). Legende «grün Peptid/Preset · violett MW».

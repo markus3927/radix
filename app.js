@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.6';
+const VERSION = '0.9.7';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -666,7 +666,7 @@ function bereiteListeVor(text, standardPreset) {
     const programme = it.r.art === 'preset' ? K.programmeAusPreset(ein.roh)
       : [{ name: it.code, eintraege: K.leseFrequenzzeile(p ? p.zeile : it.r.zeile, p ? p.dwell : K.STANDARD_DWELL) }];
     if (programme.some(pr => pr.eintraege.some(x => x.art === 'verschluesselt'))) { it.fehler = `${it.code}: Preset-Datei ist verschlüsselt, RADIX kann sie nicht abspielen`; return; }   // 0.8.2: sonst liefen nur die Pausen
-    const plan = K.erstellePlan(ein.e, programme, { wobble: it.wobble });
+    const plan = K.erstellePlan(ein.e, programme, { wobble: it.wobble, zeitfest: !!(p && /^(pa|sm)\d/i.test(p.code)) });   // 0.9.7
     if (it.r.art === 'preset' && !programme.length) it.fehler = `Preset «${it.r.name}» enthält keine Programme`;
     it.sek = plan.gesamtSek;
     it.warnungen = [...new Set([...ein.warnungen, ...plan.warnungen])];
