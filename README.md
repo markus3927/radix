@@ -56,6 +56,15 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.8 (Brücke bleibt 1.2.1) – Zeitmarken gelten in jedem Durchlauf
+- Markus 07.11.2026, Generator 11, 3 Durchläufe mit «um 21:00 … um 06:00»: «das läuft weiter, als ob keine anfangszeit programmiert wäre».
+- Ursache: Ab Durchlauf 2 behielt die erste Zeitmarke die Zeit vom Vortag (Fr 21:00, vorbei). Der Durchlauf lief sofort los, die 06:00 war auch
+  vorbei, also sprang RADIX gleich ins Morgenprogramm – Nachtprogramme übersprungen, keine Wartezeit. Durchlauf 1 war richtig.
+- Neu bekommt jeder Durchlauf frische Zeiten (`durchlaufAb`): erste Zeitmarke = nächste Uhrzeit nach der vom Durchlauf davor (Fr 21:00 → Sa 21:00),
+  die übrigen wie immer der Reihe nach (06:00 → So). Ist der Durchlauf davor zu spät fertig, geht es sofort weiter und der Rhythmus bleibt.
+- Anzeige: mit Zeitmarken steht schon ab Durchlauf 1 «alles fertig Mo 16.14 Uhr» (Wartezeit eingerechnet) statt «noch 33 h …» ohne Wartezeit.
+- Simuliert: Start Fr 18:00, 3 Durchläufe → Fr 21:00, Sa 06:00, Sa 21:00, So 06:00, So 21:00, Mo 06:00, fertig Mo 16:14.
+
 ## Stand Version 0.9.7 (Brücke bleibt 1.2.1) – Pausen-Dauer korrigiert
 - Markus 06.11.2026: pa60 nach dem Peptid pp0916 zeigte 10 h statt 1 h, Gesamtdauer entsprechend falsch. Ursache: Pause und Schumann übernehmen das Preset des Programms davor; das Peptid-Preset «Mitochondrial Biogenesis (R)» hat Dwell-Multiplikator 10 → 3600 s × 10 = 10 h.
 - `erstellePlan(…, { zeitfest: true })`: pa- und sm-Programme laufen genau so lange, wie sie heissen – ohne Dwell-Multiplikator, Force Dwell und Wiederholungen des Presets. Übrige Programme unverändert.

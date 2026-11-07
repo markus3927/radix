@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.7';
+const VERSION = '0.9.8';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -541,6 +541,28 @@ function markenZeiten(s, von, ab) {
   for (let k = Math.min(von, s.length) - 1; k >= 0; k--) if (s[k].marke) t = z[k] = s[k].zeitMs || vorigeUhrzeit(s[k].um, t, s[k].am);
   return z;
 }
+/**
+ * 0.9.8 (Markus 07.11.2026, 3 Durchläufe mit «um 21:00 … um 06:00»: «das läuft weiter, als ob keine anfangszeit programmiert wäre»):
+ * Ab dem 2. Durchlauf behielt die erste Zeitmarke ihre alte Zeit (Fr 21:00, vorbei) – der Durchlauf lief sofort los und sprang gleich
+ * zur ebenfalls vorbeigegangenen 06:00. Neu bekommt jeder Durchlauf frische Zeiten: die erste Zeitmarke die nächste Uhrzeit nach der
+ * des Durchlaufs davor (Fr 21:00 -> Sa 21:00), die übrigen wie immer der Reihe nach. Gleicher Tagesrhythmus in jedem Durchlauf.
+ * Rückgabe: Zeitpunkt (ms), ab dem markenZeiten rechnet. ende = Ende des Durchlaufs davor. Höchstens einen Tag zurück.
+ */
+function durchlaufAb(s, ende) {
+  const e = s.find(x => x.marke);
+  return e && e.zeitMs ? Math.max(e.zeitMs, ende - 864e5) : ende;
+}
+/** 0.9.8: Zeiten der Zeitmarken eines kommenden Durchlaufs (nur rechnen, nichts setzen) – für «alles fertig». Rückgabe { ende, erste }. */
+function durchlaufVoraus(s, start, ab) {
+  let t = start, kette = ab, direkt = false, erste = null;
+  for (const x of s) {
+    if (!x.marke) { t += x.sek * 1000; direkt = false; continue; }
+    kette = naechsteUhrzeit(x.um, direkt ? kette - 1 : kette, x.am); direkt = true;
+    if (erste == null) erste = kette;
+    t = kette;                                                      // warten bis dahin bzw. davor Laufendes endet dort
+  }
+  return { ende: t, erste };
+}
 /** 0.9.2 (Markus 05.11.2026): Zeitmarke ausgeschrieben – «06:00 Uhr am Freitag 06.11.26». */
 const WOCHENTAGE = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 /** 0.9.4: Uhrzeit wie in der Kontrollapp «05.08», an einem anderen Tag mit Wochentag davor («Fr 05.08»). 0.9.5: «05.08 Uhr». */
@@ -559,9 +581,15 @@ function laufZeiten(l) {
   const vorher = alle.slice(0, l.schritt).reduce((a, x) => a + x.sek, 0) + l.tImSchritt;
   const restSek = l.plan.gesamtSek - vorher + (l.durchlaeufe ? (l.durchlaeufe - l.durchlauf) * l.plan.gesamtSek : 0);
   let listeEnde = null;
-  if (l.durchlaeufe && l.durchlauf >= l.durchlaeufe) {
+  const marken = alle.some(x => x.marke);
+  if (l.durchlaeufe && (l.durchlauf >= l.durchlaeufe || marken)) {   // 0.9.8: mit Zeitmarken auch vor dem letzten Durchlauf, Wartezeit eingerechnet
     let t = progEnde;
     for (let k = j + 1; k < alle.length; k++) { if (alle[k].marke) { if (alle[k].zeitMs) t = alle[k].zeitMs; } else t += alle[k].sek * 1000; }
+    let erste = (alle.find(x => x.marke) || {}).zeitMs || null;
+    for (let d = l.durchlauf + 1; d <= l.durchlaeufe; d++) {
+      const ab = erste ? Math.max(erste, t - 864e5) : t, v = durchlaufVoraus(alle, t, ab);
+      t = v.ende; erste = v.erste;
+    }
     listeEnde = t;
   }
   return { progSek, progEnde, abbruch, restSek, listeEnde };
@@ -1697,7 +1725,9 @@ class Generator {
           if (l.durchlaeufe && l.durchlauf >= l.durchlaeufe) { await this.stoppe('fertig'); return; }
           l.durchlauf++;
           this.log(`Durchlauf ${l.durchlauf} beginnt`);
-          this.rechneMarken();
+          const ab = durchlaufAb(l.plan.schritte, Date.now());          // 0.9.8: frische Zeiten, nicht die von gestern
+          for (const x of l.plan.schritte) if (x.marke) x.zeitMs = null;
+          this.rechneMarken(ab);
         }
       }
       const s = l.plan.schritte[l.schritt];
