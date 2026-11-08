@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.11';
+const VERSION = '0.9.12';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -324,6 +324,8 @@ function auftragQuittung(a, status, text, extra = {}) {
   const alt = auftrag.quittungen.find(q => q.id === a.id);
   if (alt && alt.status === status && alt.text === text) return;
   const q = { id: a.id, t: Date.now(), gen: a.gen, kunde: a.kunde || '', status, text, ...extra };
+  // 0.9.12: Programme fürs Feld «Programme» der Kontrollapp (ab R410) – nur wenn der Auftrag ausgeführt ist
+  if (a.kontrolle && a.kontrolle.length && ['gestartet', 'angehaengt', 'laeuft', 'fertig'].includes(status)) q.programme = a.kontrolle;
   auftrag.quittungen = K.quittungenMischen(auftrag.quittungen, [q], Date.now());
   speichere(AUFTRAG_QUITTUNGEN, auftrag.quittungen);
   laufbuchBald();
@@ -1039,7 +1041,7 @@ class Generator {
     const st = $('.start-um', k);
     st.onchange = () => { this.einst.startUm = st.value; speichereAlle(); };
     $('.btn-start', k).onclick = () => this.starte();
-    $('.btn-stop', k).onclick = () => { if (this.lauf) this.stoppe('gestoppt'); else if (this.imTest) this.beendeTest(); };
+    $('.btn-stop', k).onclick = async () => { if (this.lauf) { await this.stoppe('gestoppt'); this.durchlaeufeZurueck(false); } else if (this.imTest) this.beendeTest(); };
     $('.btn-testen', k).onclick = () => this.imTest ? this.beendeTest() : this.teste();
     $('.btn-weiter', k).onclick = () => this.starte(this.fortsetzen);
     $('.btn-naechste-f', k).onclick = () => this.springe('frequenz');
@@ -1328,7 +1330,20 @@ class Generator {
     $('.liste', this.karte).value = '';
     this.setzeListe('');
     this.log(`Liste geleert${anzahl ? ` – ${anzahl} Einträge von heute im Kontrollblatt gelten als erledigt` : ''}`);
+    this.durchlaeufeZurueck(true);
     speichereAlle();
+  }
+  /**
+   * 0.9.12 (Markus 08.11.2026, Olga: 2 Durchläufe waren vom letzten Mal stehen geblieben): «Durchläufe» zurück auf 1 –
+   * nach «Leeren» immer (auch Endlosschleife 0, die Liste ist ja leer), nach «Stopp» nur mehr als 1 (0 = endlos bleibt beim Stopp,
+   * damit ein kurz angehaltener Dauerlauf mit Start wieder endlos weiterläuft).
+   */
+  durchlaeufeZurueck(auchEndlos) {
+    const d = this.einst.durchlaeufe;
+    if (d === 1 || (!auchEndlos && d === 0)) return;
+    this.log(`Durchläufe von ${d === 0 ? '0 (endlos)' : d} zurück auf 1`);
+    this.einst.durchlaeufe = 1; $('.durchlaeufe', this.karte).value = 1;
+    speichereAlle(); this.pruefe();
   }
 
   /**

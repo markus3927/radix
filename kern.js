@@ -916,7 +916,25 @@
       else if (!AUFTRAG_ARTEN.includes(art)) fehler = `unbekannte Art «${a.art}»`;
       else if (art !== 'stoppen' && !zeilen.length) fehler = 'keine Programmzeilen';
       else if (!Number.isFinite(d) || d < 0 || d > 99) fehler = 'Durchläufe ungültig';
-      aus.push({ id, gen, erstellt, art, zeilen, durchlaeufe: Number.isFinite(d) ? d : 1, kunde: String(a.kunde || '').trim(), text: String(a.text || '').trim(), fehler });
+      aus.push({ id, gen, erstellt, art, zeilen, durchlaeufe: Number.isFinite(d) ? d : 1, kunde: String(a.kunde || '').trim(), text: String(a.text || '').trim(), kontrolle: kontrolleProgramme(a.kontrolle), fehler });
+    }
+    return aus;
+  }
+  /**
+   * 0.9.12: Feld «kontrolle» eines Auftrags = Programme, die die Kontrollapp (ab R410) beim Kunden ins Feld «Programme» setzt, falls sie
+   * dort fehlen: [{ tok: 'pr0532', zeile: 'pr0532 Happy … - NF (Hz)', thema?: 'Gemüt / Happy' }] oder kurz ['pr0532 Happy …'].
+   * Nur pr/pp-Nummern, höchstens 20, Text gekürzt. RADIX gibt sie nur in der Quittung weiter.
+   */
+  function kontrolleProgramme(liste) {
+    if (!Array.isArray(liste)) return [];
+    const aus = [];
+    for (const p of liste.slice(0, 20)) {
+      const o = typeof p === 'string' ? { zeile: p } : p && typeof p === 'object' ? p : null;
+      if (!o) continue;
+      const zeile = String(o.zeile || '').replace(/[\t\r\n]+/g, ' ').trim().slice(0, 300);
+      const m = /^\s*((?:pr|pp)\d{4})(?![0-9A-Za-z])/i.exec(String(o.tok || '') || zeile);
+      if (!m) continue;
+      aus.push({ tok: m[1].toLowerCase(), zeile, ...(o.thema ? { thema: String(o.thema).trim().slice(0, 60) } : {}) });
     }
     return aus;
   }
@@ -948,7 +966,7 @@
     frequenzBefehle, ausgangBefehle, amplitudeBefehle, neuerZustand, GX, gxEinrichtung, gxFrequenzBefehle, gxAusgangBefehle, gxWarnungen, gxWerte,
     lesePresetAngabe, finderDaten, finderKatalog, deuteListenZeile, sauber, zeitmarke, loopmarke, markenDatum, morgenDatumSetzen,
     kontrolleEintraege, kontrolleZeile, leseKontrolle, kontrolleHeute, kontrolleSendeStempel, datumText, kontrolleSchluessel, kontrolleNeu, kontrolleGesehen, kontrolleLetzteMarke, kontrolleMitMarke, kontrolleGruppen, listeEingefuegt,
-    LAUF_MARKE, laufbuchEintrag, laufbuchMischen, leseAuftraege, handyZeile, kundePasst, quittungenMischen,
+    LAUF_MARKE, laufbuchEintrag, laufbuchMischen, leseAuftraege, kontrolleProgramme, handyZeile, kundePasst, quittungenMischen,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = Kern;
   else root.Kern = Kern;

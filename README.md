@@ -56,6 +56,19 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.12 (Brücke bleibt 1.2.1) – Durchläufe zurück auf 1, Programme für die Kontrollapp
+- Markus 08.11.2026 (Olga: 2 Durchläufe vom letzten Mal stehen geblieben): «wenn ich mehrere durchläufe habe, diese fertig sind,
+  sollten die durchläufe wieder auf 1 zurück gehen». Nach «fertig» war das seit 0.9.1 so. Neu auch nach **«Leeren»** (immer, auch
+  0 = endlos) und nach **«Stopp»** (mehr als 1 → 1; 0 = endlos bleibt, damit ein angehaltener Dauerlauf mit Start endlos weiterläuft).
+  Im Protokoll: «Durchläufe von 3 zurück auf 1» (`durchlaeufeZurueck`).
+- Markus 08.11.2026: «wenn ich für einen kunden ein passendes programm möchte, das aber noch nicht in der kontrollapp bei dem kunden ist,
+  … schreibe es gleich in die kontrollapp zum passenden kunden, danach starte das programm». Handy-Auftrag neu mit Feld
+  `kontrolle: [{ tok, zeile, thema? }]` (oder kurz `["pr0532 Name …"]`, nur pr/pp, höchstens 20). RADIX gibt es in der Quittung als
+  `programme` weiter – nur wenn ausgeführt (gestartet / angehaengt / laeuft / fertig). Die Kontrollapp (ab R410) liest das Laufbuch
+  ohnehin und setzt fehlende Programme beim Kunden unter ihren Balken (wie ein Klick im Finder). RADIX selbst ändert nichts am Kontrollblatt.
+- Getestet (19 Fälle, simulierter XM): Leeren 3 → 1 und 0 → 1, Stopp 3 → 1 und 0 bleibt 0, Quittung mit `programme` (auch nach der
+  Nachkontrolle), abgelehnter Auftrag ohne `programme`; alle Fälle von 0.9.10/0.9.11 weiter grün.
+
 ## Stand Version 0.9.11 (Brücke bleibt 1.2.1) – wartende Liste mit mehreren Durchläufen
 - Markus 08.11.2026, Olga (Generator 5): vorbereitete Liste «um 21:00 …» mit **2 Durchläufen** – 0.9.10 lehnte den Handy-Auftrag ab
   («das Programm käme jedes Mal wieder»).
