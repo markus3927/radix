@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.10';
+const VERSION = '0.9.11';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -306,6 +306,7 @@ async function laufbuchSchreiben() {
 // jeden Auftrag genau einmal aus. Regeln: anhängen überschreibt nie etwas; ersetzen und stoppen nur, wenn Markus es so sagt.
 // Quittung: Feld «auftraege» im Laufbuch (RADIX schreibt, Claude liest). Programmzeilen tragen «[Handy]»: ihr Start kommt ins Laufbuch
 // und damit von selbst in die Tageszeile der Kontrollapp – mit jedem Loop-Durchgang, wie bei der Endlosschleife.
+const HANDY_MAX_DURCHLAEUFE = 14;                                    // 0.9.11: so oft wird ein Vorbereitetes höchstens ausgeschrieben
 const AUFTRAG_ERLEDIGT = 'radix-auftraege-erledigt', AUFTRAG_QUITTUNGEN = 'radix-auftraege-quittungen', AUFTRAG_MAX_ALTER = 3 * 3600e3;
 const auftrag = { liste: [], datei: '', erledigt: lade(AUFTRAG_ERLEDIGT, {}), quittungen: lade(AUFTRAG_QUITTUNGEN, []), laeuft: false };
 
@@ -1759,7 +1760,7 @@ class Generator {
       return this.handyNeu(a, zeilen, codes);
     }
     if (this.lauf && this.lauf.status === 'wartet') {                // 0.9.10: gestartet mit «Start um», wartet noch: Neues davor, jetzt starten
-      if (this.lauf.durchlaeufe !== 1) return { status: 'abgelehnt', text: `wartet mit ${this.lauf.durchlaeufe ? this.lauf.durchlaeufe + ' Durchläufen' : 'Endlosschleife'} – das Programm käme jedes Mal wieder. Nichts geändert` };
+      if (!this.lauf.durchlaeufe) return { status: 'abgelehnt', text: 'wartet in Endlosschleife – das Programm käme jeden Tag wieder. Nichts geändert' };
       return this.handyVorWartend(a, zeilen, codes);
     }
     if (this.lauf) {
@@ -1782,7 +1783,8 @@ class Generator {
       // Wenn das jetzt gestartete zu lange dauern sollte, stellt es ab und das vorprogrammierte kommt zum zug»)
       const erste = this.einst.liste.split('\n').find(z => z.trim()) || '';
       if (!K.zeitmarke(erste) && !this.einst.startUm) return { status: 'abgelehnt', text: 'in der Liste steht schon etwas ohne Startzeit, das nicht läuft – nichts geändert' };
-      if (this.einst.durchlaeufe !== 1) return { status: 'abgelehnt', text: `vorbereitete Liste mit ${this.einst.durchlaeufe ? this.einst.durchlaeufe + ' Durchläufen' : 'Endlosschleife'} – das Programm käme jedes Mal wieder. Nichts geändert` };
+      if (!this.einst.durchlaeufe) return { status: 'abgelehnt', text: 'vorbereitete Liste in Endlosschleife – das Programm käme jeden Tag wieder. Nichts geändert' };
+      if (this.einst.durchlaeufe > HANDY_MAX_DURCHLAEUFE) return { status: 'abgelehnt', text: `vorbereitete Liste mit ${this.einst.durchlaeufe} Durchläufen (mehr als ${HANDY_MAX_DURCHLAEUFE}) – nichts geändert` };
       return this.handyVorWartend(a, zeilen, codes);
     }
     return this.handyNeu(a, zeilen, codes);
@@ -1812,24 +1814,31 @@ class Generator {
    * 0.9.10: Liste wartet (beginnt mit «um 21:00» oder «Start um» ist gesetzt, nicht gestartet bzw. wartet noch auf die Startzeit):
    * Handy-Zeilen oben drauf, die Startzeit wird zur Zeitmarke darunter, sofort starten. Dauert das Neue zu lange, bricht es an der
    * Zeitmarke ab und das Vorbereitete läuft pünktlich (wie jede Zeitmarke). Fehler = alles wie vorher.
+   * 0.9.11 (Olga, Liste «um 21:00 …» mit 2 Durchläufen): Das Neue soll nur einmal laufen. Die Durchläufe des Vorbereiteten werden darum
+   * ausgeschrieben (Liste n-mal hintereinander, Durchläufe 1) – gleich wie die Durchläufe selbst: jede Zeitmarke die nächste Uhrzeit
+   * nach der vorherigen (Sa 21:00 -> So 21:00), ohne Zeitmarke geht es sofort weiter. «Start um» gilt nur für den ersten Durchlauf.
    */
   async handyVorWartend(a, zeilen, codes) {
     const alt = this.einst.liste, altStartUm = this.einst.startUm, wartete = this.lauf && this.lauf.status === 'wartet' ? this.lauf.startUmMs : null;
+    const altDurch = this.einst.durchlaeufe, n = Math.max(1, (wartete ? this.lauf.durchlaeufe : altDurch) || 1);
     let marke = '';
     if (wartete) { const d = new Date(wartete); marke = `um ${zwei(d.getHours())}:${zwei(d.getMinutes())} am ${K.datumText(d)}`; }
     else if (altStartUm) marke = `um ${altStartUm}`;
     const altZeilen = alt.replace(/\s+$/, '').split('\n');
-    const text = [...zeilen, ...(marke ? [marke] : []), ...altZeilen].join('\n');
+    const wdh = []; for (let d = 2; d <= n; d++) wdh.push(...altZeilen);     // 0.9.11: Durchläufe ausgeschrieben
+    const text = [...zeilen, ...(marke ? [marke] : []), ...altZeilen, ...wdh].join('\n');
     const vor = bereiteListeVor(text, this.einst.standardPreset);
     if (vor.blockiert) return { status: 'fehler', text: vor.warnungen.join(' · ') || 'Liste leer' };
     if (wartete) await this.stoppe('Wartete auf Startzeit – Handy-Auftrag kommt davor, Startzeit bleibt als Zeitmarke');
     this.einst.startUm = ''; $('.start-um', this.karte).value = '';
+    this.einst.durchlaeufe = 1; $('.durchlaeufe', this.karte).value = 1;
     $('.liste', this.karte).value = text;
     this.setzeListe(text);
     await this.starte(null, true);
     if (!this.lauf) {
       const grund = $('.status', this.karte).textContent.trim();
       this.einst.startUm = altStartUm; $('.start-um', this.karte).value = altStartUm;
+      this.einst.durchlaeufe = altDurch; $('.durchlaeufe', this.karte).value = altDurch;
       $('.liste', this.karte).value = alt; this.setzeListe(alt);          // nicht gestartet: Vorbereitetes wieder wie vorher
       if (wartete) { this.einst.startUm = altStartUm; await this.starte(); }
       return { status: 'fehler', text: `nicht gestartet${grund ? ': ' + grund : ''} – vorbereitete Liste wieder wie vorher` };
@@ -1837,9 +1846,9 @@ class Generator {
     const teil = this.bisMarke(), um = teil ? teil.um : (K.zeitmarke(marke || altZeilen.find(z => z.trim()) || '') || '');
     let ende = null; try { ende = laufZeiten(this.lauf).listeEnde; } catch (e) { /* egal */ }
     const warn = teil && teil.abbruch ? ` – Achtung: um ${teil.um} wird es abgebrochen, das Vorbereitete läuft pünktlich` : '';
-    this.log(`📱 Vor die wartende Liste gesetzt (ab ${um}): ${codes}${warn}`);
+    this.log(`📱 Vor die wartende Liste gesetzt (ab ${um}): ${codes}${warn}${n > 1 ? ` · ${n} Durchläufe des Vorbereiteten ausgeschrieben, Durchläufe jetzt 1` : ''}`);
     springeZu(zahl(this));
-    return { status: 'gestartet', text: `vor «um ${um}» gesetzt, startet jetzt: ${codes}${warn}`,
+    return { status: 'gestartet', text: `vor «um ${um}» gesetzt, startet jetzt: ${codes}${n > 1 ? ` (läuft 1-mal, das Vorbereitete ${n}-mal)` : ''}${warn}`,
       extra: { ...(ende ? { ende } : {}), ...(teil ? { teilEnde: teil.endeMs, marke: teil.um, abbruch: teil.abbruch } : {}) } };
   }
   /** Liste setzen und sofort starten (Zeitmarken in der Liste lassen ihn warten). Vorher prüfen: Fehler = nichts anrühren. */

@@ -56,6 +56,17 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.11 (Brücke bleibt 1.2.1) – wartende Liste mit mehreren Durchläufen
+- Markus 08.11.2026, Olga (Generator 5): vorbereitete Liste «um 21:00 …» mit **2 Durchläufen** – 0.9.10 lehnte den Handy-Auftrag ab
+  («das Programm käme jedes Mal wieder»).
+- Neu: Das Neue läuft einmal, das Vorbereitete so oft wie eingestellt. RADIX schreibt dazu die Durchläufe aus (vorbereitete Liste n-mal
+  hintereinander, Feld Durchläufe danach 1). Jede Zeitmarke gilt wie bei den Durchläufen selbst als nächste Uhrzeit nach der vorherigen
+  (heute 21:00, morgen 21:00); «Start um» gilt nur vor dem ersten Durchlauf, ohne Zeitmarke geht es sofort weiter. Höchstens 14 Durchläufe.
+- Quittung: «… (läuft 1-mal, das Vorbereitete 2-mal)». Im Protokoll: «2 Durchläufe des Vorbereiteten ausgeschrieben, Durchläufe jetzt 1».
+- Endlosschleife bleibt abgelehnt (das Neue käme jeden Tag wieder).
+- Getestet (16 Fälle, simulierter XM): zusätzlich 2 Durchläufe mit Zeitmarke durchgespielt (Happy jetzt, 19:40 Vorbereitetes, warten,
+  morgen 19:40 nochmals, Happy nie mehr), «Start um» mit 2 Durchläufen (nicht gestartet und gestartet/wartend). Alle Fälle von 0.9.10 weiter grün.
+
 ## Stand Version 0.9.10 (Brücke bleibt 1.2.1) – Handy-Auftrag vor die wartende Liste
 Markus 08.11.2026 (Olga, Generator 5, Liste wartet auf «um 21:00»): «wenn wartende Programme sind, das ich trotzdem noch eines oben drauf
 packen kann und jetzt starten. Wenn das jetzt gestartete zu lange dauern sollte, stellt es ab und das vorprogrammierte kommt zum zug.»
