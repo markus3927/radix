@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.15';
+const VERSION = '0.9.16';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -281,8 +281,10 @@ async function laufbuchSchreiben() {
     try { const f = await laufbuch.handle.getFile(); const t = await f.text(); if (t.trim()) { const j = JSON.parse(t); if (Array.isArray(j.eintraege)) alt = j.eintraege; if (Array.isArray(j.auftraege)) altQ = j.auftraege; } } catch (e) { /* neu oder unlesbar: neu anlegen */ }
     const eintraege = K.laufbuchMischen(alt, mit, Date.now());
     const auftraege = K.quittungenMischen(altQ, auftrag.quittungen, Date.now());   // 0.9.9: Quittungen der Handy-Aufträge
+    const vorschau = vorschauAlle();                                                // 0.9.16
     const w = await laufbuch.handle.createWritable();
-    await w.write(JSON.stringify({ radix: VERSION, stand: new Date().toISOString(), hinweis: 'Schreibt nur RADIX (Endlosschleife und Handy-Aufträge). Die Kontrollapp liest diese Datei.', eintraege, auftraege }, null, 1));
+    await w.write(JSON.stringify({ radix: VERSION, stand: new Date().toISOString(), hinweis: 'Schreibt nur RADIX (Endlosschleife und Handy-Aufträge). Die Kontrollapp liest diese Datei.', eintraege, auftraege, vorschau, vorschauStand: Date.now() }, null, 1));
+    laufbuch.vorschau = vorschau; laufbuch.vorschauT = Date.now();
     await w.close();
     const ids = new Set(mit.map(e => e.id));
     laufbuch.offen = laufbuch.offen.filter(e => !ids.has(e.id));
@@ -674,19 +676,32 @@ function markenZeiten(s, von, ab) {
  * Rückgabe: Zeitpunkt (ms), ab dem markenZeiten rechnet. ende = Ende des Durchlaufs davor. Höchstens einen Tag zurück.
  */
 function durchlaufAb(s, ende) {
-  const e = s.find(x => x.marke);
-  return e && e.zeitMs ? Math.max(e.zeitMs, ende - 864e5) : ende;
+  const e = s.find(x => x.marke), m = s.filter(x => x.marke && x.zeitMs);
+  return naechsterAb(e && e.zeitMs, m.length ? m[m.length - 1].zeitMs : null, ende);
+}
+/**
+ * 0.9.16 (Wochenzyklus 08.11.2026: Liste über 2 Tage «um 21:00 … um 06:00 … um 21:00 … um 06:00»): Bisher «erste Zeitmarke + 1 Tag»
+ * – bei einer 2-Tage-Liste lag die erste Zeitmarke des nächsten Durchlaufs dann schon 10 h zurück, der Durchlauf sprang sofort zur
+ * fälligen 06:00 und die Nacht fiel aus. Neu so viele ganze Tage weiter, wie die Zeitmarken des Durchlaufs davor überspannen
+ * (1-Tages-Listen wie bisher). erste/letzte = erste und letzte Zeitmarke des Durchlaufs davor, ende = sein Ende.
+ */
+function naechsterAb(erste, letzte, ende) {
+  if (!erste) return ende;
+  const tage = letzte && letzte > erste ? Math.floor((letzte - erste) / 864e5) : 0;
+  const d = new Date(erste); d.setDate(d.getDate() + tage);           // Kalendertage (Zeitumstellung)
+  return Math.max(d.getTime(), ende - 864e5);
 }
 /** 0.9.8: Zeiten der Zeitmarken eines kommenden Durchlaufs (nur rechnen, nichts setzen) – für «alles fertig». Rückgabe { ende, erste }. */
 function durchlaufVoraus(s, start, ab) {
-  let t = start, kette = ab, direkt = false, erste = null;
+  let t = start, kette = ab, direkt = false, erste = null, letzte = null;
   for (const x of s) {
     if (!x.marke) { t += x.sek * 1000; direkt = false; continue; }
     kette = naechsteUhrzeit(x.um, direkt ? kette - 1 : kette, x.am); direkt = true;
     if (erste == null) erste = kette;
+    letzte = kette;
     t = kette;                                                      // warten bis dahin bzw. davor Laufendes endet dort
   }
-  return { ende: t, erste };
+  return { ende: t, erste, letzte };
 }
 /** 0.9.2 (Markus 05.11.2026): Zeitmarke ausgeschrieben – «06:00 Uhr am Freitag 06.11.26». */
 const WOCHENTAGE = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
@@ -712,15 +727,86 @@ function laufZeiten(l) {
   if (l.durchlaeufe && (l.durchlauf >= l.durchlaeufe || marken)) {   // 0.9.8: mit Zeitmarken auch vor dem letzten Durchlauf, Wartezeit eingerechnet
     let t = progEnde;
     for (let k = j + 1; k < alle.length; k++) { if (alle[k].marke) { if (alle[k].zeitMs) t = alle[k].zeitMs; } else t += alle[k].sek * 1000; }
-    let erste = (alle.find(x => x.marke) || {}).zeitMs || null;
+    let erste = (alle.find(x => x.marke) || {}).zeitMs || null, letzte = (alle.filter(x => x.marke && x.zeitMs).pop() || {}).zeitMs || null;
     for (let d = l.durchlauf + 1; d <= l.durchlaeufe; d++) {
-      const ab = erste ? Math.max(erste, t - 864e5) : t, v = durchlaufVoraus(alle, t, ab);
-      t = v.ende; erste = v.erste;
+      const ab = naechsterAb(erste, letzte, t), v = durchlaufVoraus(alle, t, ab);   // 0.9.16
+      t = v.ende; erste = v.erste; letzte = v.letzte;
     }
     listeEnde = t;
   }
   return { progSek, progEnde, abbruch, restSek, listeEnde };
 }
+/**
+ * 0.9.16 (Markus 08.11.2026: «2x schumann um 23 uhr … die ich noch nicht sehe. wäre es eine möglichkeit diese mit 50 transparenz zu
+ * plazieren»): Vorschau der kommenden Programme eines Laufs fürs Kontrollblatt – nur was später ins Laufbuch kommt (Handy-Aufträge,
+ * Endlosschleife). Zeiten wie laufZeiten / durchlaufVoraus: Zeitmarke setzt die Uhr (warten bzw. Abbruch des Programms davor).
+ * Rückgabe [{ code, name, von, bis }] – nur Programme, die nach «jetzt» beginnen und vor «bisMs».
+ */
+function laufVorschau(l, jetzt, bisMs, max = 80) {
+  if (!l || !l.plan || !l.plan.schritte || !l.plan.schritte.length || !l.items) return [];
+  const alle = l.plan.schritte, out = [];
+  const nimm = (it) => it && it.r && it.r.art !== 'zeit' && !it.fehler && /^(pr\d{4}|pp\d{4}|pa\d{2}|sm\d{2})/i.test(it.code || '') && (it.handy || !l.durchlaeufe);
+  let rec = null, lastPi = -1;
+  const schliesse = () => { if (rec && rec.von > jetzt && rec.von < bisMs && out.length < max) out.push(rec); rec = null; lastPi = -1; };
+  const marke = (t) => { if (rec && t < rec.bis) rec.bis = t; schliesse(); };
+  const schritt = (s, t, sek) => {
+    if (s.pi !== lastPi) { schliesse(); const it = l.items[s.pi]; lastPi = s.pi; rec = nimm(it) ? { code: it.code, name: String(it.name || '').replace(/ · Lauf \d+\/\d+$/, ''), von: t, bis: t } : null; }
+    const e = t + sek * 1000; if (rec) rec.bis = e; return e;
+  };
+  // laufender Durchlauf
+  let t = l.status === 'wartet' && l.startUmMs ? Math.max(jetzt, l.startUmMs) : jetzt;
+  for (let k = l.status === 'wartet' ? 0 : l.schritt; k < alle.length; k++) {
+    const s = alle[k];
+    if (s.marke) { if (s.zeitMs) { const z = (k === l.schritt && l.status !== 'wartet') ? Math.max(s.zeitMs, jetzt) : s.zeitMs; marke(z); t = z; } continue; }
+    const sek = (k === l.schritt && l.status !== 'wartet') ? Math.max(0, s.sek - (l.tImSchritt || 0)) : s.sek;
+    if (k === l.schritt && l.status !== 'wartet') { lastPi = s.pi; rec = null; t += sek * 1000; continue; }   // läuft schon: steht im Laufbuch
+    t = schritt(s, t, sek);
+    if (t > bisMs) break;
+  }
+  schliesse();
+  // weitere Durchläufe (endlos: bis bisMs)
+  let erste = (alle.find(x => x.marke) || {}).zeitMs || null, letzte = (alle.filter(x => x.marke && x.zeitMs).pop() || {}).zeitMs || null;
+  for (let d = l.durchlauf + 1; (!l.durchlaeufe || d <= l.durchlaeufe) && t < bisMs && out.length < max; d++) {
+    const ab = naechsterAb(erste, letzte, t);
+    let kette = ab, direkt = false, neuErste = null, neuLetzte = null;
+    for (const s of alle) {
+      if (s.marke) { kette = naechsteUhrzeit(s.um, direkt ? kette - 1 : kette, s.am); direkt = true; if (neuErste == null) neuErste = kette; neuLetzte = kette; marke(kette); t = kette; continue; }
+      direkt = false; t = schritt(s, t, s.sek);
+      if (t > bisMs) break;
+    }
+    schliesse();
+    erste = neuErste; letzte = neuLetzte;
+    if (!alle.some(x => x.marke) && !l.durchlaeufe && d > l.durchlauf + 400) break;   // Sicherung
+  }
+  return out;
+}
+/** 0.9.16: Vorschau aller Generatoren fürs Laufbuch: { "1": [ … ], … }, 36 Stunden voraus. */
+function vorschauAlle(jetzt = Date.now()) {
+  const v = {};
+  for (const g of generatoren) {
+    if (!g.lauf) continue;
+    let liste = []; try { liste = laufVorschau(g.lauf, jetzt, jetzt + 36 * 3600e3); } catch (e) { liste = []; }
+    if (liste.length) v[parseInt(g.einst.nr, 10)] = liste;
+  }
+  return v;
+}
+/** 0.9.16: gleich = gleiche Programme, Zeiten höchstens 90 s verschoben (sonst schriebe ein Lauf jede Minute neu). */
+function vorschauGleich(a, b) {
+  const ka = Object.keys(a || {}), kb = Object.keys(b || {});
+  if (ka.length !== kb.length) return false;
+  for (const k of ka) {
+    const x = a[k], y = b && b[k];
+    if (!y || x.length !== y.length) return false;
+    for (let i = 0; i < x.length; i++) if (x[i].code !== y[i].code || Math.abs(x[i].von - y[i].von) > 90e3 || Math.abs(x[i].bis - y[i].bis) > 90e3) return false;
+  }
+  return true;
+}
+/** 0.9.16: jede Minute: Vorschau anders als geschrieben (Liste geändert, gestoppt, gestartet) oder 20 Min alt -> Laufbuch neu schreiben. */
+setInterval(() => {
+  if (!laufbuch.handle) return;
+  const v = vorschauAlle();
+  if (!vorschauGleich(v, laufbuch.vorschau) || (Object.keys(v).length && Date.now() - (laufbuch.vorschauT || 0) > 20 * 60e3)) laufbuchBald();
+}, 60e3);
 const zwei = (n) => String(n).padStart(2, '0');
 const fmtStart = (ms) => { const d = new Date(ms); return `${zwei(d.getHours())}:${zwei(d.getMinutes())} Uhr am ${WOCHENTAGE[d.getDay()]} ${zwei(d.getDate())}.${zwei(d.getMonth() + 1)}.${zwei(d.getFullYear() % 100)}`; };
 

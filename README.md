@@ -56,6 +56,16 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.16 (Brücke bleibt 1.2.1) – Vorschau fürs Kontrollblatt, Mehrtages-Listen
+
+- Laufbuch neu mit `vorschau` ({ Generator: [{ code, name, von, bis }] }, 36 h voraus) und `vorschauStand`: kommende Programme,
+  die später ins Laufbuch kommen (Handy-Aufträge, Endlosschleife). Die Kontrollapp (ab R413) zeigt sie halb transparent unter der
+  Tageszeile, bis sie starten. Neu geschrieben, sobald sich die Vorschau ändert (Prüfung jede Minute), sonst alle 20 Min.
+- Fehler behoben: Listen über mehrere Tage (Wochenzyklus «um 21:00 … um 06:00 … um 21:00 … um 06:00») – ab dem 2. Durchlauf lag die
+  erste Zeitmarke einen Tag zu früh, der Durchlauf sprang sofort zur fälligen 06:00 und die Nacht fiel aus. Neu rückt der nächste
+  Durchlauf so viele ganze Tage weiter, wie die Zeitmarken überspannen (naechsterAb). 1-Tages-Listen unverändert (getestet alt/neu).
+- Sonst wie 0.9.15.
+
 ## Stand Version 0.9.15 (Brücke bleibt 1.2.1) – «fertig um» bei wartender Liste, Handy-Pläne nicht doppelt
 
 - Wartet eine Liste auf ihre Zeitmarke («um 23:00» zuoberst) oder auf «Start um», rechnet RADIX das «fertig um»
