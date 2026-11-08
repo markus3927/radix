@@ -327,11 +327,48 @@ function auftragQuittung(a, status, text, extra = {}) {
   // 0.9.12: Programme fürs Feld «Programme» der Kontrollapp (ab R410) – nur wenn der Auftrag ausgeführt ist
   if (a.kontrolle && a.kontrolle.length && ['gestartet', 'angehaengt', 'laeuft', 'fertig'].includes(status)) q.programme = a.kontrolle;
   // 0.9.14: Plan fürs Kontrollblatt (ab R411: Fixprogramm-Kachel und Tageszeile) – ebenso nur, wenn ausgeführt
-  if (a.plan && ['gestartet', 'angehaengt', 'laeuft', 'fertig'].includes(status)) q.plan = a.plan;
+  if (a.plan && ['gestartet', 'angehaengt', 'laeuft', 'fertig'].includes(status)) { q.plan = a.plan; q.planTag = (alt && alt.planTag) || planTag(a.plan, Date.now()); }   // 0.9.15
   auftrag.quittungen = K.quittungenMischen(auftrag.quittungen, [q], Date.now());
   speichere(AUFTRAG_QUITTUNGEN, auftrag.quittungen);
   laufbuchBald();
   auftragStand();
+}
+/**
+ * 0.9.15 (Markus 08.11.2026, «→ 4 RADIX» blau in der Nacht-Zeile: «das programm sitzt ja bereits»). Ein Handy-Plan trägt den Ablauf
+ * in die Tageszeile ein (Kontrollapp R411) – hier läuft er schon. Diese Einträge zählen darum als schon gesehen: drückt Markus später
+ * «→ RADIX» in derselben Zeile, kommt nur, was er von Hand dazu getippt hat. Starttag wie in der Kontrollapp: heute, wenn die erste
+ * Zeitmarke noch kommt (60 Min Toleranz), sonst morgen.
+ */
+function planTag(plan, ms) {
+  let erst = null;
+  for (const z of (plan && plan.z) || []) { const m = K.zeitmarke(String(z).split('\t')[0]); if (m) { erst = m; break; } }
+  const d = new Date(ms);
+  if (erst) { const [h, mi] = erst.split(':').map(Number); if (h * 60 + mi < d.getHours() * 60 + d.getMinutes() - 60) d.setDate(d.getDate() + 1); }
+  return K.datumText(d);
+}
+/** Quittung von vor 0.9.15 ohne planTag: Zeit aus der Auftrags-ID («2026-11-08-182232-…», UTC), sonst Quittungszeit. */
+function planTagVon(q) {
+  if (q.planTag) return q.planTag;
+  const m = /^(\d{4})-(\d{2})-(\d{2})-(\d{2})(\d{2})(\d{2})/.exec(String(q.id || ''));
+  return planTag(q.plan, m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) : q.t);
+}
+/** st = Stand einer Tageszeile (uebernommen / uebernommenMorgen). nurMerken: Einträge sind schon gezählt (erster Blick). */
+function planGesehen(st, nr, nurMerken = false) {
+  if (!st || !st.gesehen) return;
+  if (!st.planIds) st.planIds = {};
+  const schon = new Set(Object.values(st.planIds));
+  for (const q of auftrag.quittungen) {
+    if (!q || !q.plan || q.plan.tag === false || +q.gen !== nr || st.planIds[q.id] || planTagVon(q) !== st.datum) continue;
+    const sig = JSON.stringify(q.plan.z || []);
+    st.planIds[q.id] = sig;
+    if (nurMerken || schon.has(sig)) continue;                       // gleicher Plan nochmals (z. B. «ersetzen»): steht nur einmal in der Zeile
+    schon.add(sig);
+    for (const e of K.kontrolleEintraege((q.plan.z || []).join('\n'))) {
+      if (e.code === 'loop') continue;
+      const k = e.code === 'um' ? `um ${e.um}|` : `${e.code}|`;
+      st.gesehen[k] = (st.gesehen[k] || 0) + 1;
+    }
+  }
 }
 function auftragErledigt(a) {
   auftrag.erledigt[a.id] = Date.now();
@@ -1185,9 +1222,11 @@ class Generator {
     if (!h.hinweis) {
       let u = this.uebernommen;
       const gestern = this.uebernommenMorgen && this.uebernommenMorgen.blatt === nr && this.uebernommenMorgen.datum === heute ? this.uebernommenMorgen : null;
-      if (!u || u.blatt !== nr) u = { blatt: nr, datum: heute, anzahl: h.eintraege.length, gesehen: K.kontrolleGesehen(h.eintraege), rxT: K.kontrolleSendeStempel(b) };   // erster Blick: Bestehendes nicht übernehmen
-      else if (u.datum !== heute) u = { blatt: nr, datum: heute, anzahl: gestern ? gestern.anzahl : 0, gesehen: gestern ? gestern.gesehen || K.kontrolleGesehen(h.eintraege.slice(0, gestern.anzahl)) : {}, rxT: gestern ? gestern.rxT || 0 : 0 };   // neuer Tag: neu ist, was nicht schon gestern als «morgen» kam
+      let erster = false;
+      if (!u || u.blatt !== nr) { u = { blatt: nr, datum: heute, anzahl: h.eintraege.length, gesehen: K.kontrolleGesehen(h.eintraege), rxT: K.kontrolleSendeStempel(b) }; erster = true; }   // erster Blick: Bestehendes nicht übernehmen
+      else if (u.datum !== heute) u = { blatt: nr, datum: heute, anzahl: gestern ? gestern.anzahl : 0, gesehen: gestern ? gestern.gesehen || K.kontrolleGesehen(h.eintraege.slice(0, gestern.anzahl)) : {}, rxT: gestern ? gestern.rxT || 0 : 0, planIds: gestern && gestern.planIds ? { ...gestern.planIds } : {} };   // neuer Tag: neu ist, was nicht schon gestern als «morgen» kam
       else if (!u.gesehen) u.gesehen = K.kontrolleGesehen(h.eintraege.slice(0, u.anzahl));   // Stand von vor 0.8.0
+      planGesehen(u, nr, erster);                                                            // 0.9.15
       const stempel = K.kontrolleSendeStempel(b);                                            // 0.8.5: nur nach «→ RADIX»
       if (stempel && stempel !== u.rxT) {
         const r = K.kontrolleNeu(h.eintraege, u.gesehen);                                    // 0.8.0: erkannt an Nummer + Uhrzeit, nicht gezählt
@@ -1202,8 +1241,10 @@ class Generator {
     const m = this.morgenZeile();
     let um = this.uebernommenMorgen;
     if (!m.hinweis) {
-      if (!um || um.blatt !== nr || um.datum !== m.datum) um = { blatt: nr, datum: m.datum, anzahl: this.morgenErsterBlick ? m.eintraege.length : 0, gesehen: this.morgenErsterBlick ? K.kontrolleGesehen(m.eintraege) : {}, marke: '', rxT: this.morgenErsterBlick ? this.morgenStempel() : 0 };
+      let ersterM = false;
+      if (!um || um.blatt !== nr || um.datum !== m.datum) { ersterM = this.morgenErsterBlick; um = { blatt: nr, datum: m.datum, anzahl: this.morgenErsterBlick ? m.eintraege.length : 0, gesehen: this.morgenErsterBlick ? K.kontrolleGesehen(m.eintraege) : {}, marke: '', rxT: this.morgenErsterBlick ? this.morgenStempel() : 0 }; }
       else if (!um.gesehen) um.gesehen = K.kontrolleGesehen(m.eintraege.slice(0, um.anzahl));   // Stand von vor 0.8.0
+      planGesehen(um, nr, ersterM);                                                          // 0.9.15
       this.morgenErsterBlick = false;
       if (m.eintraege.length < um.anzahl) um.anzahl = m.eintraege.length;
       const stempelM = this.morgenStempel();                                                 // 0.8.5: nur nach «→ RADIX»
