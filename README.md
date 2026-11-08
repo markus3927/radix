@@ -56,6 +56,24 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.10 (Brücke bleibt 1.2.1) – Handy-Auftrag vor die wartende Liste
+Markus 08.11.2026 (Olga, Generator 5, Liste wartet auf «um 21:00»): «wenn wartende Programme sind, das ich trotzdem noch eines oben drauf
+packen kann und jetzt starten. Wenn das jetzt gestartete zu lange dauern sollte, stellt es ab und das vorprogrammierte kommt zum zug.»
+0.9.9 lehnte das ab («in der Liste steht schon etwas, das nicht läuft») bzw. hängte es hinter das Nachtprogramm.
+- **Vorbereitet, nicht gestartet**, Liste beginnt mit einer Zeitmarke (`um 21:00`) oder «Start um» ist gesetzt: die Handy-Zeilen kommen
+  oben drauf, «Start um» wird zur Zeitmarke darunter, RADIX startet sofort (`handyVorWartend`). Quittung «gestartet».
+- **Gestartet mit «Start um», wartet noch:** gleich, die Startzeit wird zur Zeitmarke mit Datum (`um 21:00 am 08.11.26`).
+- **Läuft oder wartet an einer Zeitmarke:** das Neue kommt vor die nächste Zeitmarke ab der laufenden Stelle (wie «→ RADIX» seit 0.9.0,
+  `naechsteMarke`). Wartet er dort, startet es sofort («gestartet»), sonst nach dem laufenden Teil («angehaengt»). Ohne Zeitmarke voraus wie bisher hinten dran.
+- Dauert das Neue länger als bis zur Zeitmarke, wird es dort abgebrochen und das Vorbereitete läuft pünktlich (gewohnte Zeitmarke).
+  Die Quittung sagt es: `abbruch: true`, Text «Achtung: um 21:00 wird es abgebrochen».
+- Quittung neu mit `teilEnde` (fertig bzw. Abbruch des Neuen) und `marke` (Uhrzeit der Zeitmarke danach) – `ende` ist weiter das Ende der ganzen Liste.
+- Weiterhin abgelehnt, nichts geändert: vorbereitete Liste ohne Startzeit, vorbereitet oder wartend mit mehr als 1 Durchlauf oder Endlosschleife
+  (das Neue käme jedes Mal wieder), Lauf in Endlosschleife, Lauf wartet auf «Weiter». Fehler in den neuen Zeilen = Vorbereitetes bleibt wie es war.
+- Getestet im Browser mit simuliertem XM (13 Fälle): oben drauf und Start, Abbruch an der Zeitmarke nach 61 min mit Weiterlauf des
+  Vorbereiteten, «Start um» (gestartet und nicht gestartet), vor die Marke im Lauf und beim Warten, ganzer Weg über die Auftragsdatei mit
+  Nachkontrolle, dazu leere Liste, ohne Zeitmarke, Endlosschleife, falsche Nummer, falscher Kunde (wie 0.9.9). 0.9.9 scheitert an 8 der Fälle.
+
 ## Stand Version 0.9.9 (Brücke bleibt 1.2.1) – Handy-Aufträge
 Markus 07.11.2026: «Ich bin hier in der pampa am handy. Ich sage dir: opus mach für johanna ein mens Programm … und es läuft.»
 - Neues fünftes Feld **Handy-Aufträge**: einmal `RADIX_Auftraege.json` im Ordner «Frequenz Kontrolle» wählen. Nur Claude schreibt
