@@ -938,11 +938,11 @@
     }
     return aus;
   }
-  /** Programmzeile eines Auftrags markieren: pr/pp/pa/sm bekommen «[Handy]» (ihr Start kommt ins Laufbuch). Zeitmarken, loop und eigene Zeilen nicht. */
+  /** Programmzeile eines Auftrags markieren: pr/pp/pa/sm bekommen «↻» (bis 0.9.12 «[Handy]») (ihr Start kommt ins Laufbuch). Zeitmarken, loop und eigene Zeilen nicht. */
   function handyZeile(z) {
     const t = String(z || '').trim();
-    if (!/^(pr|pp)\s?\d{1,4}\b|^(pa|sm)\s?\d{2}\b/i.test(t) || /\[handy\]/i.test(t)) return t;
-    return `${t}  [Handy]`;
+    if (!/^(pr|pp)\s?\d{1,4}\b|^(pa|sm)\s?\d{2}\b/i.test(t) || /\[handy\]|\u21bb/i.test(t)) return t;
+    return `${t}  \u21bb`;                                            // 0.9.13: ↻ wie in der Kontrollapp (vorher «[Handy]»)
   }
   /** Passt der Kunde des Auftrags zum Namen im Kontrollblatt? Jedes Wort des Auftrags muss im Namen vorkommen (gross/klein egal). */
   function kundePasst(name, kunde) {

@@ -56,6 +56,16 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.13 (Brücke bleibt 1.2.1) – Handy-Zeilen mit Namen und ↻
+- Markus 08.11.2026: «was mir im radix bei den handy programmen fehlt ist, es steht nur die nummer und handy. da sehe ich nicht gleich was
+  es ist» · «z.b mit gleichem symbölchen wie in der kontroll app?»
+- Steht in einer Zeile eines Handy-Auftrags nur die Nummer (`pr0532 NF`, `pp0555`, `pa15`), setzt RADIX den Namen dazu – aus der
+  Finder-Kachel bzw. der Peptid-Liste (`handyMitName`). Zeilen mit eigenem Text, Zeitmarken und loop bleiben, wie sie sind.
+- Markierung neu «↻» wie in der Kontrollapp statt «[Handy]»: `pr0532 NF  Happy / Fit & Vital / Gute Stimmung - Nerven & Sinne - NF (Hz)  ↻`.
+  «[Handy]» in älteren Listen gilt weiter (Laufbuch wie bisher). Der NF/HF-Knopf behält ↻.
+- Getestet (21 Fälle, simulierter XM): Namen für pr NF/HF, pp und pa, eigener Text bleibt, alle Zeilen weiter markiert (Laufbuch),
+  alte «[Handy]»-Zeilen, NF/HF-Wechsel; alle bisherigen Fälle weiter grün.
+
 ## Stand Version 0.9.12 (Brücke bleibt 1.2.1) – Durchläufe zurück auf 1, Programme für die Kontrollapp
 - Markus 08.11.2026 (Olga: 2 Durchläufe vom letzten Mal stehen geblieben): «wenn ich mehrere durchläufe habe, diese fertig sind,
   sollten die durchläufe wieder auf 1 zurück gehen». Nach «fertig» war das seit 0.9.1 so. Neu auch nach **«Leeren»** (immer, auch

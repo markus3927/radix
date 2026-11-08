@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.12';
+const VERSION = '0.9.13';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -707,8 +707,25 @@ function presetMitProgrammen(zeile) {
 
 /** Dual-Markierung in der Programmliste und Dual-Variante eines Presets («Killing (R) - JW» -> «Killing (Dual) (R) - JW»). */
 const DUAL_MARKE = /\[dual\]/i, DUAL_WEG = /\s*\[dual\]\s*/ig;
-/** 0.9.9: «[Handy]» am Zeilenende = kam per Handy-Auftrag von Claude; der Programmstart kommt ins Laufbuch (auch ohne Endlosschleife). */
-const HANDY_MARKE = /\[handy\]/i, HANDY_WEG = /\s*\[handy\]\s*/ig;
+/** 0.9.9: «[Handy]» am Zeilenende = kam per Handy-Auftrag von Claude; der Programmstart kommt ins Laufbuch (auch ohne Endlosschleife).
+ *  0.9.13: neu «↻» wie in der Kontrollapp (Markus: «es steht nur die nummer und handy»); «[Handy]» gilt weiter (ältere Listen). */
+const HANDY_MARKE = /\[handy\]|\u21bb/i, HANDY_WEG = /\s*(?:\[handy\]|\u21bb)\s*/ig, HANDY_ZEICHEN = '  \u21bb';
+/**
+ * 0.9.13 (Markus 08.11.2026: «da sehe ich nicht gleich was es ist und muss in der kontroll app nachschauen»): Steht in einer Zeile
+ * eines Handy-Auftrags nur die Nummer (pr0532 NF, pp0555, pa15), kommt der Name dazu – aus der Finder-Kachel bzw. der Peptid-Liste,
+ * wie bei den Zeilen aus dem Kontrollblatt. Zeilen mit Text, Zeitmarken und loop bleiben, wie sie sind.
+ */
+function handyMitName(z) {
+  const t = String(z || '').trim();
+  const m = /^((?:pr|pp)\s?\d{1,4}|(?:pa|sm)\s?\d{2})(?:\s+(NF|HF))?$/i.exec(t);
+  if (!m) return t;
+  const d = K.deuteListenZeile(t, daten.finder, PEPTIDE);
+  if (!d || d.art === 'fehler') return t;
+  let name = '';
+  if (d.art === 'peptid') name = `${d.deutsch || d.spooky2} – Peptid`;
+  else if (d.art === 'finder' && d.programm) name = String(d.programm.name || '').replace(/^(pa|sm)\d{2}\s+/i, '');
+  return name ? `${d.code}  ${name}` : t;
+}
 function dualPreset(name) {
   if (/\(dual\)/i.test(name)) return name;
   const d = String(name).replace(/\s*\(R\)/i, ' (Dual) (R)');
@@ -1241,7 +1258,7 @@ class Generator {
     const m = z.match(/^\s*pr\s?(\d{1,4})\b/i);
     const code = m ? `pr${m[1].padStart(4, '0')} ${v}` : '';
     const p = code && daten.finder ? daten.finder.programme.get(code) : null;
-    zeilen[zeilenNr] = (p ? `${code}  ${p.name.replace(/^(pa|sm)\d{2}\s+/i, '')}` : z.replace(/^(\s*pr\s?\d{1,4})\b/i, `$1 ${v}`).replace(DUAL_WEG, ' ').replace(HANDY_WEG, ' ').trimEnd()) + (DUAL_MARKE.test(z) ? '  [Dual]' : '') + (HANDY_MARKE.test(z) ? '  [Handy]' : '');
+    zeilen[zeilenNr] = (p ? `${code}  ${p.name.replace(/^(pa|sm)\d{2}\s+/i, '')}` : z.replace(/^(\s*pr\s?\d{1,4})\b/i, `$1 ${v}`).replace(DUAL_WEG, ' ').replace(HANDY_WEG, ' ').trimEnd()) + (DUAL_MARKE.test(z) ? '  [Dual]' : '') + (HANDY_MARKE.test(z) ? HANDY_ZEICHEN : '');
     const text = zeilen.join('\n');
     $('.liste', this.karte).value = text;
     this.setzeListe(text);
@@ -1762,7 +1779,7 @@ class Generator {
     const nr = zahl(this), b = this.blatt(), kunde = b && b.name ? b.name.trim() : '';
     if (a.kunde && !K.kundePasst(kunde, a.kunde)) return { status: 'abgelehnt', text: `Generator ${nr} gehört ${kunde ? `«${kunde}»` : 'niemandem (Kontrollblatt)'}, nicht «${a.kunde}»` };
     if (this.imTest) return { status: 'abgelehnt', text: 'Generator wird gerade getestet' };
-    const zeilen = a.zeilen.map(K.handyZeile), codes = a.zeilen.filter(z => !K.zeitmarke(z) && !K.loopmarke(z)).map(z => z.split(/\s{2,}|\t/)[0]).join(', ');
+    const zeilen = a.zeilen.map(z => K.handyZeile(handyMitName(z))), codes = a.zeilen.filter(z => !K.zeitmarke(z) && !K.loopmarke(z)).map(z => z.split(/\s{2,}|\t/)[0]).join(', ');
     this.log(`📱 Handy-Auftrag (${a.art})${a.text ? ': ' + a.text : ''}`);
     if (a.art === 'stoppen') {
       if (!this.lauf) return { status: 'gestoppt', text: 'lief nicht' };
