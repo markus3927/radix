@@ -56,6 +56,15 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.14 (Brücke bleibt 1.2.1) – Plan fürs Kontrollblatt (Fixprogramm und Tageszeile)
+- Markus 08.11.2026: neue Nachtprogramme für die Kunden per Handy – «du trägst das gleich ein inkl. startzeit und allem» · «die grossen
+  fix kacheln entsprechend geändert».
+- Handy-Auftrag neu mit Feld `plan: { fix: 1–8 (8 = Nacht), name?, det?, z: ['um 21.00', 'pr0036\tName', …], tag?: false }`.
+  RADIX führt die `zeilen` aus wie immer und gibt den Plan in der Quittung weiter – nur wenn ausgeführt. Die Kontrollapp (ab R411)
+  setzt damit die grosse Fixprogramm-Kachel dieses Kunden neu und trägt den Ablauf in die Tageszeile seines Starttags ein.
+- Getestet (22 Fälle, simulierter XM): Plan in der Quittung, abgelehnter Auftrag ohne Plan; ein Auftrag, der mit «um 21:00» beginnt,
+  startet auf einem freien Generator und wartet an der Zeitmarke. Alle bisherigen Fälle weiter grün.
+
 ## Stand Version 0.9.13 (Brücke bleibt 1.2.1) – Handy-Zeilen mit Namen und ↻
 - Markus 08.11.2026: «was mir im radix bei den handy programmen fehlt ist, es steht nur die nummer und handy. da sehe ich nicht gleich was
   es ist» · «z.b mit gleichem symbölchen wie in der kontroll app?»

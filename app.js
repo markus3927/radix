@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.13';
+const VERSION = '0.9.14';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -326,6 +326,8 @@ function auftragQuittung(a, status, text, extra = {}) {
   const q = { id: a.id, t: Date.now(), gen: a.gen, kunde: a.kunde || '', status, text, ...extra };
   // 0.9.12: Programme fürs Feld «Programme» der Kontrollapp (ab R410) – nur wenn der Auftrag ausgeführt ist
   if (a.kontrolle && a.kontrolle.length && ['gestartet', 'angehaengt', 'laeuft', 'fertig'].includes(status)) q.programme = a.kontrolle;
+  // 0.9.14: Plan fürs Kontrollblatt (ab R411: Fixprogramm-Kachel und Tageszeile) – ebenso nur, wenn ausgeführt
+  if (a.plan && ['gestartet', 'angehaengt', 'laeuft', 'fertig'].includes(status)) q.plan = a.plan;
   auftrag.quittungen = K.quittungenMischen(auftrag.quittungen, [q], Date.now());
   speichere(AUFTRAG_QUITTUNGEN, auftrag.quittungen);
   laufbuchBald();

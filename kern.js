@@ -916,7 +916,7 @@
       else if (!AUFTRAG_ARTEN.includes(art)) fehler = `unbekannte Art «${a.art}»`;
       else if (art !== 'stoppen' && !zeilen.length) fehler = 'keine Programmzeilen';
       else if (!Number.isFinite(d) || d < 0 || d > 99) fehler = 'Durchläufe ungültig';
-      aus.push({ id, gen, erstellt, art, zeilen, durchlaeufe: Number.isFinite(d) ? d : 1, kunde: String(a.kunde || '').trim(), text: String(a.text || '').trim(), kontrolle: kontrolleProgramme(a.kontrolle), fehler });
+      aus.push({ id, gen, erstellt, art, zeilen, durchlaeufe: Number.isFinite(d) ? d : 1, kunde: String(a.kunde || '').trim(), text: String(a.text || '').trim(), kontrolle: kontrolleProgramme(a.kontrolle), plan: kontrollePlan(a.plan), fehler });
     }
     return aus;
   }
@@ -937,6 +937,18 @@
       aus.push({ tok: m[1].toLowerCase(), zeile, ...(o.thema ? { thema: String(o.thema).trim().slice(0, 60) } : {}) });
     }
     return aus;
+  }
+  /**
+   * 0.9.14: Feld «plan» eines Auftrags = Ablauf fürs Kontrollblatt (ab R411): { fix: 1–8 (8 = Nacht), name?, det?, z: ['um 21.00',
+   * 'pr0036\tName', …], tag?: false }. Die Kontrollapp setzt damit die grosse Fixprogramm-Kachel des Kunden neu und trägt den Ablauf
+   * in die Tageszeile ein. RADIX gibt ihn nur in der Quittung weiter. Ungültig oder leer = null.
+   */
+  function kontrollePlan(p) {
+    if (!p || typeof p !== 'object' || !Array.isArray(p.z)) return null;
+    const z = p.z.slice(0, 60).map(x => String(x == null ? '' : x).replace(/[\r\n]+/g, ' ').trim().slice(0, 300)).filter(Boolean);
+    if (!z.some(x => /^\s*(?:pr|pp)\d{4}|^\s*(?:pa|sm)\d{2}/i.test(x))) return null;
+    const fix = parseInt(p.fix, 10);
+    return { fix: fix >= 1 && fix <= 8 ? fix : 8, name: String(p.name || '').trim().slice(0, 30), det: String(p.det || '').trim().slice(0, 40), z, ...(p.tag === false ? { tag: false } : {}) };
   }
   /** Programmzeile eines Auftrags markieren: pr/pp/pa/sm bekommen «↻» (bis 0.9.12 «[Handy]») (ihr Start kommt ins Laufbuch). Zeitmarken, loop und eigene Zeilen nicht. */
   function handyZeile(z) {
@@ -966,7 +978,7 @@
     frequenzBefehle, ausgangBefehle, amplitudeBefehle, neuerZustand, GX, gxEinrichtung, gxFrequenzBefehle, gxAusgangBefehle, gxWarnungen, gxWerte,
     lesePresetAngabe, finderDaten, finderKatalog, deuteListenZeile, sauber, zeitmarke, loopmarke, markenDatum, morgenDatumSetzen,
     kontrolleEintraege, kontrolleZeile, leseKontrolle, kontrolleHeute, kontrolleSendeStempel, datumText, kontrolleSchluessel, kontrolleNeu, kontrolleGesehen, kontrolleLetzteMarke, kontrolleMitMarke, kontrolleGruppen, listeEingefuegt,
-    LAUF_MARKE, laufbuchEintrag, laufbuchMischen, leseAuftraege, kontrolleProgramme, handyZeile, kundePasst, quittungenMischen,
+    LAUF_MARKE, laufbuchEintrag, laufbuchMischen, leseAuftraege, kontrolleProgramme, kontrollePlan, handyZeile, kundePasst, quittungenMischen,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = Kern;
   else root.Kern = Kern;
