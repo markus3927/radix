@@ -888,13 +888,67 @@
     return b;
   }
 
+  // ------------------------------------------------------------------ Handy-Aufträge (0.9.9)
+  /**
+   * Markus 07.11.2026: «Ich sage dir: opus mach für johanna ein mens Programm. Du greifst auf meine programme und machst das und es läuft.»
+   * Claude schreibt RADIX_Auftraege.json, RADIX liest sie nur. Ein Auftrag:
+   * { id, erstellt (ISO oder ms), gen, kunde?, art: 'anhaengen' | 'ersetzen' | 'stoppen', zeilen: ['um 18:00', 'loop-2', 'pr0245 NF', …], durchlaeufe?, text? }
+   * Ungültige Aufträge kommen mit fehler zurück (RADIX quittiert sie als «fehler», statt sie still wegzulassen).
+   */
+  const AUFTRAG_ARTEN = ['anhaengen', 'ersetzen', 'stoppen'];
+  function leseAuftraege(text) {
+    const j = JSON.parse(text);
+    const roh = Array.isArray(j) ? j : j && Array.isArray(j.auftraege) ? j.auftraege : null;
+    if (!roh) throw new Error('kein Feld «auftraege»');
+    const aus = [];
+    for (const a of roh) {
+      if (!a || typeof a !== 'object') continue;
+      const id = String(a.id || '').trim();
+      if (!id) continue;
+      const gen = parseInt(a.gen, 10);
+      const erstellt = typeof a.erstellt === 'number' ? a.erstellt : Date.parse(a.erstellt || '');
+      const art = String(a.art || 'anhaengen').toLowerCase().replace('ä', 'ae');
+      const zeilen = Array.isArray(a.zeilen) ? a.zeilen.map(z => String(z == null ? '' : z).replace(/[\r\n]+/g, ' ').trim()).filter(Boolean) : [];
+      const d = a.durchlaeufe == null || a.durchlaeufe === '' ? 1 : parseInt(a.durchlaeufe, 10);
+      let fehler = '';
+      if (!Number.isFinite(gen) || gen < 1 || gen > 99) fehler = 'Generator-Nummer fehlt';
+      else if (!Number.isFinite(erstellt)) fehler = 'Zeitpunkt «erstellt» fehlt';
+      else if (!AUFTRAG_ARTEN.includes(art)) fehler = `unbekannte Art «${a.art}»`;
+      else if (art !== 'stoppen' && !zeilen.length) fehler = 'keine Programmzeilen';
+      else if (!Number.isFinite(d) || d < 0 || d > 99) fehler = 'Durchläufe ungültig';
+      aus.push({ id, gen, erstellt, art, zeilen, durchlaeufe: Number.isFinite(d) ? d : 1, kunde: String(a.kunde || '').trim(), text: String(a.text || '').trim(), fehler });
+    }
+    return aus;
+  }
+  /** Programmzeile eines Auftrags markieren: pr/pp/pa/sm bekommen «[Handy]» (ihr Start kommt ins Laufbuch). Zeitmarken, loop und eigene Zeilen nicht. */
+  function handyZeile(z) {
+    const t = String(z || '').trim();
+    if (!/^(pr|pp)\s?\d{1,4}\b|^(pa|sm)\s?\d{2}\b/i.test(t) || /\[handy\]/i.test(t)) return t;
+    return `${t}  [Handy]`;
+  }
+  /** Passt der Kunde des Auftrags zum Namen im Kontrollblatt? Jedes Wort des Auftrags muss im Namen vorkommen (gross/klein egal). */
+  function kundePasst(name, kunde) {
+    const n = sauber(name).toLowerCase(), w = sauber(kunde).toLowerCase().split(/\s+/).filter(Boolean);
+    return !!n.trim() && w.length > 0 && w.every(x => n.includes(x));
+  }
+  /** Quittungen zusammenführen: gleiche id nur einmal (die neueste zählt), älter als «tage» fällt weg, nach Zeit sortiert. */
+  function quittungenMischen(alt, neu, jetztMs, tage = 4) {
+    const grenze = jetztMs - tage * 86400000, m = new Map();
+    for (const q of [...(Array.isArray(alt) ? alt : []), ...(Array.isArray(neu) ? neu : [])]) {
+      if (!q || !q.id || !(q.t > grenze)) continue;
+      const v = m.get(q.id);
+      if (!v || q.t >= v.t) m.set(q.id, q);
+    }
+    return [...m.values()].sort((a, b) => a.t - b.t || (a.id < b.id ? -1 : 1));
+  }
+
   const Kern = {
     STANDARD_DWELL, MW_LUECKE, lesePresets, baueKatalog, loeseBasis, einstellungen, leseFrequenzzeile, programmeAusPreset,
     inBereich, erstellePlan, frequenzenBei, taktBei, wobbleAus, wobbleFaktor, Befehl, welleZuWerten, leseWellenCsv, findeWelle, einrichtung,
     frequenzBefehle, ausgangBefehle, amplitudeBefehle, neuerZustand, GX, gxEinrichtung, gxFrequenzBefehle, gxAusgangBefehle, gxWarnungen, gxWerte,
     lesePresetAngabe, finderDaten, finderKatalog, deuteListenZeile, sauber, zeitmarke, loopmarke, markenDatum, morgenDatumSetzen,
     kontrolleEintraege, kontrolleZeile, leseKontrolle, kontrolleHeute, kontrolleSendeStempel, datumText, kontrolleSchluessel, kontrolleNeu, kontrolleGesehen, kontrolleLetzteMarke, kontrolleMitMarke, kontrolleGruppen, listeEingefuegt,
-    LAUF_MARKE, laufbuchEintrag, laufbuchMischen,
+    LAUF_MARKE, laufbuchEintrag, laufbuchMischen, leseAuftraege, handyZeile, kundePasst, quittungenMischen,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = Kern;
   else root.Kern = Kern;

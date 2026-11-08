@@ -56,6 +56,22 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.9 (Brücke bleibt 1.2.1) – Handy-Aufträge
+Markus 07.11.2026: «Ich bin hier in der pampa am handy. Ich sage dir: opus mach für johanna ein mens Programm … und es läuft.»
+- Neues fünftes Feld **Handy-Aufträge**: einmal `RADIX_Auftraege.json` im Ordner «Frequenz Kontrolle» wählen. Nur Claude schreibt
+  dort (Desktop-App auf dem Spooky-PC), RADIX liest alle 5 s und führt jeden Auftrag genau einmal aus.
+- Auftrag: `{ id, erstellt, gen, kunde?, art: anhaengen|ersetzen|stoppen, zeilen: [...], durchlaeufe?, text? }`.
+  - **anhaengen** (Standard): läuft der Generator, kommt es hinten dran; steht er mit leerer Liste, wird gesetzt und gestartet.
+    Nie in eine Endlosschleife, nie in eine Liste, die von Hand vorbereitet ist oder auf «Weiter» wartet – dann «abgelehnt», nichts geändert.
+  - **ersetzen**: stoppen, Liste ersetzen, starten (nur wenn Markus es so sagt). **stoppen**: nur stoppen, Liste bleibt.
+  - `kunde` muss zum Namen im Kontrollblatt passen, sonst «abgelehnt». Älter als 3 Stunden: «verfallen». Generator fehlt: «wartet».
+  - Vor dem Start wird die Liste geprüft; Fehler (z. B. Nummer nicht im Finder) = nichts angerührt.
+- Programmzeilen eines Auftrags tragen `[Handy]`: ihr Start kommt ins Laufbuch (auch ohne Endlosschleife), die Kontrollapp trägt
+  ihn in die Tageszeile ein – mit jedem Loop-Durchgang. `[Handy]` bleibt beim NF/HF-Wechsel erhalten.
+- Quittung im Laufbuch, Feld `auftraege`: gestartet / angehaengt / abgelehnt / fehler / verfallen / wartet / gestoppt, nach 30 s
+  nochmals: laeuft (mit `ende`) / fertig / gestoppt / fehler. Im Protokoll der Karte steht «📱 Handy-Auftrag».
+- Alles andere bleibt wie es war: von Hand bedienen geht genau wie vorher.
+
 ## Stand Version 0.9.8 (Brücke bleibt 1.2.1) – Zeitmarken gelten in jedem Durchlauf
 - Markus 07.11.2026, Generator 11, 3 Durchläufe mit «um 21:00 … um 06:00»: «das läuft weiter, als ob keine anfangszeit programmiert wäre».
 - Ursache: Ab Durchlauf 2 behielt die erste Zeitmarke die Zeit vom Vortag (Fr 21:00, vorbei). Der Durchlauf lief sofort los, die 06:00 war auch

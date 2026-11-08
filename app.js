@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.8';
+const VERSION = '0.9.9';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -150,6 +150,16 @@ const quellen = {
       if (vorher && k.aktiv != null && (k.aktiv !== vorher.aktiv || k.aktivZeit !== vorher.aktivZeit)) springeZu(k.aktiv);
     },
   },
+  auftrag: {                                                        // 0.9.9: Handy-Aufträge von Claude (RADIX liest nur)
+    titel: 'Handy-Aufträge', status: '#auftrag-status', knopf: '#btn-auftrag', alleMs: 5000,
+    typen: [{ description: 'Handy-Aufträge (RADIX_Auftraege.json)', accept: { 'application/json': ['.json'] } }],
+    verarbeite(text, datei) {
+      auftrag.liste = text.trim() ? K.leseAuftraege(text) : [];
+      auftrag.datei = datei.name;
+      auftragStand();
+      auftraegeAbarbeiten();
+    },
+  },
 };
 
 async function ladeQuelle(name, nurWennNeu = false) {
@@ -267,10 +277,12 @@ async function laufbuchSchreiben() {
   const mit = laufbuch.offen.slice();
   try {
     let alt = [];
-    try { const f = await laufbuch.handle.getFile(); const t = await f.text(); if (t.trim()) { const j = JSON.parse(t); if (Array.isArray(j.eintraege)) alt = j.eintraege; } } catch (e) { /* neu oder unlesbar: neu anlegen */ }
+    let altQ = [];
+    try { const f = await laufbuch.handle.getFile(); const t = await f.text(); if (t.trim()) { const j = JSON.parse(t); if (Array.isArray(j.eintraege)) alt = j.eintraege; if (Array.isArray(j.auftraege)) altQ = j.auftraege; } } catch (e) { /* neu oder unlesbar: neu anlegen */ }
     const eintraege = K.laufbuchMischen(alt, mit, Date.now());
+    const auftraege = K.quittungenMischen(altQ, auftrag.quittungen, Date.now());   // 0.9.9: Quittungen der Handy-Aufträge
     const w = await laufbuch.handle.createWritable();
-    await w.write(JSON.stringify({ radix: VERSION, stand: new Date().toISOString(), hinweis: 'Schreibt nur RADIX (Endlosschleife). Die Kontrollapp liest diese Datei.', eintraege }, null, 1));
+    await w.write(JSON.stringify({ radix: VERSION, stand: new Date().toISOString(), hinweis: 'Schreibt nur RADIX (Endlosschleife und Handy-Aufträge). Die Kontrollapp liest diese Datei.', eintraege, auftraege }, null, 1));
     await w.close();
     const ids = new Set(mit.map(e => e.id));
     laufbuch.offen = laufbuch.offen.filter(e => !ids.has(e.id));
@@ -284,6 +296,76 @@ async function laufbuchSchreiben() {
     laufbuch.schreibt = false;
     laufbuchStand();
     if (laufbuch.nochmal) { laufbuch.nochmal = false; laufbuchBald(); }
+  }
+}
+
+// ------------------------------------------------------------------ Handy-Aufträge (0.9.9)
+// Markus 07.11.2026: «Ich bin hier in der pampa am handy. Ich sage dir: opus mach für johanna ein mens Programm. Du greifst auf meine
+// programme und machst das und es läuft.» · «ich kann dann trotzdem, genau wie jetzt, alles selber machen wenn ich will?» – ja.
+// Claude (Desktop-App auf dem Spooky-PC) schreibt RADIX_Auftraege.json, nur Claude schreibt dort. RADIX liest sie alle 5 s und führt
+// jeden Auftrag genau einmal aus. Regeln: anhängen überschreibt nie etwas; ersetzen und stoppen nur, wenn Markus es so sagt.
+// Quittung: Feld «auftraege» im Laufbuch (RADIX schreibt, Claude liest). Programmzeilen tragen «[Handy]»: ihr Start kommt ins Laufbuch
+// und damit von selbst in die Tageszeile der Kontrollapp – mit jedem Loop-Durchgang, wie bei der Endlosschleife.
+const AUFTRAG_ERLEDIGT = 'radix-auftraege-erledigt', AUFTRAG_QUITTUNGEN = 'radix-auftraege-quittungen', AUFTRAG_MAX_ALTER = 3 * 3600e3;
+const auftrag = { liste: [], datei: '', erledigt: lade(AUFTRAG_ERLEDIGT, {}), quittungen: lade(AUFTRAG_QUITTUNGEN, []), laeuft: false };
+
+function auftragStand() {
+  const q = quellen.auftrag;
+  if (!q.handle) { setzeQuelle(q.status, 'nicht gewählt (für Aufträge vom Handy)', ''); return; }
+  if (q.zuletzt == null) return;                                    // noch nie gelesen (Zugriff bestätigen): Meldung von quelleBeimStart bleibt
+  const offen = auftrag.liste.filter(a => !auftrag.erledigt[a.id]).length;
+  const letzte = auftrag.quittungen[auftrag.quittungen.length - 1];
+  const z = letzte ? new Date(letzte.t).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' }) : '';
+  setzeQuelle(q.status, `${auftrag.datei || q.handle.name}${offen ? ` · ${offen} offen` : ''}${letzte ? ` · zuletzt ${z} Gen ${letzte.gen}: ${letzte.status}` : ''}`, offen ? '' : 'ok');
+}
+/** Quittung festhalten (gleiche Meldung nicht nochmals schreiben) und ins Laufbuch bringen. */
+function auftragQuittung(a, status, text, extra = {}) {
+  const alt = auftrag.quittungen.find(q => q.id === a.id);
+  if (alt && alt.status === status && alt.text === text) return;
+  const q = { id: a.id, t: Date.now(), gen: a.gen, kunde: a.kunde || '', status, text, ...extra };
+  auftrag.quittungen = K.quittungenMischen(auftrag.quittungen, [q], Date.now());
+  speichere(AUFTRAG_QUITTUNGEN, auftrag.quittungen);
+  laufbuchBald();
+  auftragStand();
+}
+function auftragErledigt(a) {
+  auftrag.erledigt[a.id] = Date.now();
+  const grenze = Date.now() - 7 * 864e5;
+  for (const [id, t] of Object.entries(auftrag.erledigt)) if (t < grenze) delete auftrag.erledigt[id];
+  speichere(AUFTRAG_ERLEDIGT, auftrag.erledigt);
+}
+async function auftraegeAbarbeiten() {
+  if (auftrag.laeuft) return;
+  auftrag.laeuft = true;
+  try {
+    for (const a of auftrag.liste) {
+      if (auftrag.erledigt[a.id]) continue;
+      if (a.fehler) { auftragErledigt(a); auftragQuittung(a, 'fehler', `Auftrag ungültig: ${a.fehler}`); continue; }
+      if (Date.now() - a.erstellt > AUFTRAG_MAX_ALTER) { auftragErledigt(a); auftragQuittung(a, 'verfallen', 'älter als 3 Stunden – nicht ausgeführt'); continue; }
+      if (!daten.geladen || !daten.finder) { auftragQuittung(a, 'wartet', 'Spooky2-Ordner oder Frequenz-Finder noch nicht geladen'); continue; }
+      const g = generatoren.find(x => zahl(x) === a.gen);
+      if (!g) { auftragQuittung(a, 'wartet', `Generator ${a.gen} nicht verbunden`); continue; }
+      auftragErledigt(a);                                         // vor dem Ausführen: nie zweimal
+      let r;
+      try { r = await g.handyAuftrag(a); }
+      catch (e) { r = { status: 'fehler', text: e.message || String(e) }; }
+      auftragQuittung(a, r.status, r.text, r.extra);
+      if (r.status === 'gestartet' || r.status === 'angehaengt') setTimeout(() => auftragNachkontrolle(a, g), 30000);
+    }
+  } finally { auftrag.laeuft = false; auftragStand(); }
+}
+/** 30 s später: läuft es wirklich (Generator eingerichtet), oder hat er einen Fehler gemeldet? */
+function auftragNachkontrolle(a, g) {
+  const l = g.lauf;
+  if (l) {
+    let ende = null; try { ende = laufZeiten(l).listeEnde; } catch (e) { /* noch kein Schritt */ }
+    const st = l.status === 'wartet' ? 'wartet auf Startzeit' : l.status === 'einrichten' ? 'wird eingerichtet' : l.plan.schritte[l.schritt] && l.plan.schritte[l.schritt].marke ? 'wartet auf Zeitmarke' : 'läuft';
+    auftragQuittung(a, 'laeuft', st, ende ? { ende } : {});
+  } else {
+    const st = $('.status', g.karte).textContent.trim();
+    if (/^Fertig/.test(st)) auftragQuittung(a, 'fertig', st);           // kurzer Auftrag: schon durch
+    else if (/^Gestoppt/.test(st)) auftragQuittung(a, 'gestoppt', st);
+    else auftragQuittung(a, 'fehler', `läuft nicht: ${st || 'gestoppt'}`);
   }
 }
 
@@ -621,6 +703,8 @@ function presetMitProgrammen(zeile) {
 
 /** Dual-Markierung in der Programmliste und Dual-Variante eines Presets («Killing (R) - JW» -> «Killing (Dual) (R) - JW»). */
 const DUAL_MARKE = /\[dual\]/i, DUAL_WEG = /\s*\[dual\]\s*/ig;
+/** 0.9.9: «[Handy]» am Zeilenende = kam per Handy-Auftrag von Claude; der Programmstart kommt ins Laufbuch (auch ohne Endlosschleife). */
+const HANDY_MARKE = /\[handy\]/i, HANDY_WEG = /\s*\[handy\]\s*/ig;
 function dualPreset(name) {
   if (/\(dual\)/i.test(name)) return name;
   const d = String(name).replace(/\s*\(R\)/i, ' (Dual) (R)');
@@ -637,20 +721,22 @@ function bereiteListeVor(text, standardPreset) {
     loop = 0;
   };
   String(text || '').split('\n').forEach((zeile, zeilenNr) => {
+    const handy = HANDY_MARKE.test(zeile);                            // 0.9.9
+    if (handy) zeile = zeile.replace(HANDY_WEG, ' ').trimEnd();
     const lp = K.loopmarke(zeile);
     if (lp) { if (loop) loopOhne.push(loop); loop = lp; return; }
     const um = deuteZeitmarke(zeile);
     if (um) { if (loop) { loopOhne.push(loop); loop = 0; } items.push({ zeile: zeile.trim(), zeilenNr, r: { art: 'zeit', um, am: K.markenDatum(zeile) }, fehler: '' }); return; }
     const dual = DUAL_MARKE.test(zeile);                              // 0.6.9: «[Dual]» am Zeilenende = Dual-Variante des Presets
     const pn = presetMitProgrammen(zeile);                            // 0.7.0: Name eines Spooky2-Presets («Adenoiditis (R)») -> seine Programme
-    if (pn) { nimm({ zeile: zeile.trim(), zeilenNr, r: { art: 'preset', name: pn }, dual: false, fehler: '' }); return; }
+    if (pn) { nimm({ zeile: zeile.trim(), zeilenNr, r: { art: 'preset', name: pn }, dual: false, handy, fehler: '' }); return; }
     let r = K.deuteListenZeile(dual ? zeile.replace(DUAL_WEG, ' ').trim() : zeile, daten.finder, PEPTIDE);
     if (r && r.art === 'peptid') {                                    // 0.7.1: pp-Nummer -> JW_Peptides-Preset «<Name> (R)» aus dem Spooky2-Ordner
       const name = daten.geladen ? findePreset(`${r.spooky2} (R)`) : null;
       r = name ? { art: 'preset', name, code: r.code, titel: r.deutsch ? `${r.deutsch} (${r.spooky2})` : r.spooky2 }
         : { art: 'fehler', text: daten.geladen ? `${r.code}: Peptid-Preset «${r.spooky2} (R)» nicht im Spooky2-Ordner` : 'Spooky2-Ordner noch nicht gewählt', code: r.code, titel: r.deutsch || r.spooky2 };
     }
-    if (r) nimm({ zeile: zeile.trim(), zeilenNr, r, dual: r.art === 'preset' ? false : dual, fehler: r.art === 'fehler' ? r.text : '' });
+    if (r) nimm({ zeile: zeile.trim(), zeilenNr, r, dual: r.art === 'preset' ? false : dual, handy, fehler: r.art === 'fehler' ? r.text : '' });
   });
   if (loop) loopOhne.push(loop);
   // Preset je Programm: Finder-Kachel; Pause/Schumann übernehmen das Preset davor (sonst danach); eigene Zeilen das Karten-Preset
@@ -1151,7 +1237,7 @@ class Generator {
     const m = z.match(/^\s*pr\s?(\d{1,4})\b/i);
     const code = m ? `pr${m[1].padStart(4, '0')} ${v}` : '';
     const p = code && daten.finder ? daten.finder.programme.get(code) : null;
-    zeilen[zeilenNr] = (p ? `${code}  ${p.name.replace(/^(pa|sm)\d{2}\s+/i, '')}` : z.replace(/^(\s*pr\s?\d{1,4})\b/i, `$1 ${v}`).replace(DUAL_WEG, ' ').trimEnd()) + (DUAL_MARKE.test(z) ? '  [Dual]' : '');
+    zeilen[zeilenNr] = (p ? `${code}  ${p.name.replace(/^(pa|sm)\d{2}\s+/i, '')}` : z.replace(/^(\s*pr\s?\d{1,4})\b/i, `$1 ${v}`).replace(DUAL_WEG, ' ').replace(HANDY_WEG, ' ').trimEnd()) + (DUAL_MARKE.test(z) ? '  [Dual]' : '') + (HANDY_MARKE.test(z) ? '  [Handy]' : '');
     const text = zeilen.join('\n');
     $('.liste', this.karte).value = text;
     this.setzeListe(text);
@@ -1636,16 +1722,72 @@ class Generator {
    */
   laufbuchPruefen(s) {
     const l = this.lauf;
-    if (!l || l.durchlaeufe || !s || s.marke) return;
+    if (!l || !s || s.marke) return;
     const it = l.items[s.pi];
     if (!it || it.r.art === 'zeit' || l.schritt !== it.start) return;
+    if (l.durchlaeufe && !it.handy) return;                         // 0.9.9: Handy-Aufträge kommen immer ins Laufbuch
     const key = `${l.durchlauf}:${s.pi}`;
     if (l.geloggt === key) return;
     l.geloggt = key;
     const e = K.laufbuchEintrag({ t: Date.now(), gen: this.einst.nr, code: it.code, name: it.name.replace(/ · Lauf \d+\/\d+$/, ''), sek: it.sek, durchlauf: l.durchlauf });
     if (!e) return;
     laufbuchNotiere(e);
-    this.log(`→ Kontrollblatt (Endlosschleife): ${e.code}${e.var ? ' ' + e.var : ''}${laufbuch.handle ? '' : ' – Laufbuch noch nicht gewählt, wartet'}`);
+    this.log(`→ Kontrollblatt (${it.handy ? 'Handy-Auftrag' : 'Endlosschleife'}): ${e.code}${e.var ? ' ' + e.var : ''}${laufbuch.handle ? '' : ' – Laufbuch noch nicht gewählt, wartet'}`);
+  }
+
+  /**
+   * 0.9.9: Handy-Auftrag ausführen. Rückgabe { status, text, extra? }.
+   * anhaengen: läuft er, kommt es hinten dran (nie in eine Endlosschleife); steht er mit leerer Liste, wird gesetzt und gestartet;
+   * steht etwas Ungestartetes in der Liste oder wartet ein Lauf auf «Weiter», bleibt alles unberührt.
+   * ersetzen: stoppen, Liste ersetzen, starten. stoppen: nur stoppen (Liste bleibt).
+   */
+  async handyAuftrag(a) {
+    const nr = zahl(this), b = this.blatt(), kunde = b && b.name ? b.name.trim() : '';
+    if (a.kunde && !K.kundePasst(kunde, a.kunde)) return { status: 'abgelehnt', text: `Generator ${nr} gehört ${kunde ? `«${kunde}»` : 'niemandem (Kontrollblatt)'}, nicht «${a.kunde}»` };
+    if (this.imTest) return { status: 'abgelehnt', text: 'Generator wird gerade getestet' };
+    const zeilen = a.zeilen.map(K.handyZeile), codes = a.zeilen.filter(z => !K.zeitmarke(z) && !K.loopmarke(z)).map(z => z.split(/\s{2,}|\t/)[0]).join(', ');
+    this.log(`📱 Handy-Auftrag (${a.art})${a.text ? ': ' + a.text : ''}`);
+    if (a.art === 'stoppen') {
+      if (!this.lauf) return { status: 'gestoppt', text: 'lief nicht' };
+      await this.stoppe('Gestoppt per Handy-Auftrag');
+      return { status: 'gestoppt', text: 'gestoppt, Liste bleibt' };
+    }
+    if (a.art === 'ersetzen') {
+      if (this.lauf) await this.stoppe('Gestoppt für Handy-Auftrag (ersetzen)');
+      this.fortsetzen = null; $('.btn-weiter', this.karte).hidden = true;
+      return this.handyNeu(a, zeilen, codes);
+    }
+    if (this.lauf) {
+      if (!this.lauf.durchlaeufe) return { status: 'abgelehnt', text: 'läuft in Endlosschleife – angehängt käme es jeden Tag wieder. Nichts geändert' };
+      const vorher = this.einst.liste, meldungen = [], melde = Object.getPrototypeOf(this).melde;
+      this.melde = (t, k) => { meldungen.push(t); melde.call(this, t, k); };
+      try { this.fuegeZeilenAn(zeilen); } finally { delete this.melde; }
+      if (this.einst.liste === vorher) return { status: 'fehler', text: meldungen.join(' · ') || 'nicht angehängt' };
+      let ende = null; try { ende = laufZeiten(this.lauf).listeEnde; } catch (e) { /* egal */ }
+      const warn = meldungen.find(t => /Achtung/.test(t));
+      return { status: 'angehaengt', text: `angehängt: ${codes}${warn ? ' – ' + warn : ''}`, extra: ende ? { ende } : {} };
+    }
+    if (this.fortsetzen) return { status: 'abgelehnt', text: 'ein Lauf wartet auf «Weiter» (nach dem Neuladen) – nichts geändert' };
+    if (this.einst.liste.trim()) return { status: 'abgelehnt', text: 'in der Liste steht schon etwas, das nicht läuft – nichts geändert' };
+    return this.handyNeu(a, zeilen, codes);
+  }
+  /** Liste setzen und sofort starten (Zeitmarken in der Liste lassen ihn warten). Vorher prüfen: Fehler = nichts anrühren. */
+  async handyNeu(a, zeilen, codes) {
+    const text = zeilen.join('\n'), vor = bereiteListeVor(text, this.einst.standardPreset);
+    if (vor.blockiert) return { status: 'fehler', text: vor.warnungen.join(' · ') || 'Liste leer' };
+    this.einst.durchlaeufe = a.durchlaeufe; $('.durchlaeufe', this.karte).value = a.durchlaeufe;
+    this.einst.startUm = ''; $('.start-um', this.karte).value = '';
+    $('.liste', this.karte).value = text;
+    this.setzeListe(text);
+    await this.starte(null, true);
+    if (!this.lauf) {
+      const grund = $('.status', this.karte).textContent.trim();
+      $('.liste', this.karte).value = ''; this.setzeListe('');        // nicht gestartet = Liste wieder leer, sonst blockiert sie den nächsten Auftrag
+      return { status: 'fehler', text: `nicht gestartet${grund ? ': ' + grund : ''}` };
+    }
+    let ende = null; try { ende = laufZeiten(this.lauf).listeEnde; } catch (e) { /* egal */ }
+    springeZu(zahl(this));
+    return { status: 'gestartet', text: `gestartet: ${codes}${a.durchlaeufe === 0 ? ' (endlos)' : a.durchlaeufe > 1 ? ` (${a.durchlaeufe} Durchläufe)` : ''}`, extra: ende ? { ende } : {} };
   }
 
   /** Vorspulen: der Taktgeber führt den Sprung beim nächsten Takt aus (nie mitten in einem Befehl an den Generator). */
@@ -2109,8 +2251,10 @@ async function init() {
       }
     }, 10000);
   }
-  await Promise.all([ordnerBeimStart(), quelleBeimStart('finder'), quelleBeimStart('kontrolle'), laufbuchBeimStart().catch(() => {})]);
+  await Promise.all([ordnerBeimStart(), quelleBeimStart('finder'), quelleBeimStart('kontrolle'), quelleBeimStart('auftrag'), laufbuchBeimStart().catch(() => {})]);
   beobachteQuellen();
+  auftragStand();
+  setInterval(auftraegeAbarbeiten, 5000);                            // 0.9.9: wartende Aufträge (Generator noch nicht da) wieder versuchen
   setInterval(() => alleKarten(g => { if (!g.lauf && Date.now() >= g.vorschauBis) g.pruefe(); }), 30000);   // 0.9.3: Uhrzeit vorbei = Vorschau zeigt den nächsten Tag
   starteTakt();
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
