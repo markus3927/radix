@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.14';
+const VERSION = '0.9.15';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -664,7 +664,9 @@ const fmtUhr = (ms) => { const d = new Date(ms), h = new Date(); const tag = d.t
 function laufZeiten(l) {
   const alle = l.plan.schritte, jetzt = Date.now(), s = alle[l.schritt];
   let j = l.schritt; while (j + 1 < alle.length && alle[j + 1].pi === s.pi && !alle[j + 1].marke) j++;
-  let progSek = Math.max(0, alle.slice(l.schritt, j + 1).reduce((a, x) => a + x.sek, 0) - l.tImSchritt), progEnde = jetzt + progSek * 1000, abbruch = false;
+  // 0.9.15 (Markus 08.11.2026, sm60 «um 23:00» zeigte «fertig 21.58»): wartet die Liste noch (Zeitmarke oder «Start um»), ab dieser Zeit rechnen, nicht ab jetzt
+  const ab = Math.max(jetzt, s.marke && s.zeitMs ? s.zeitMs : 0, l.status === 'wartet' && l.startUmMs ? l.startUmMs : 0);
+  let progSek = Math.max(0, alle.slice(l.schritt, j + 1).reduce((a, x) => a + x.sek, 0) - l.tImSchritt), progEnde = ab + progSek * 1000, abbruch = false;
   for (let k = j + 1; k < alle.length; k++) if (alle[k].marke) { if (alle[k].zeitMs && alle[k].zeitMs < progEnde) { progEnde = alle[k].zeitMs; progSek = (progEnde - jetzt) / 1000; abbruch = true; } break; }
   const vorher = alle.slice(0, l.schritt).reduce((a, x) => a + x.sek, 0) + l.tImSchritt;
   const restSek = l.plan.gesamtSek - vorher + (l.durchlaeufe ? (l.durchlaeufe - l.durchlauf) * l.plan.gesamtSek : 0);

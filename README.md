@@ -56,6 +56,13 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.15 (Brücke bleibt 1.2.1) – «fertig um» bei wartender Liste
+
+- Wartet eine Liste auf ihre Zeitmarke («um 23:00» zuoberst) oder auf «Start um», rechnet RADIX das «fertig um»
+  (Quittung `ende` im Laufbuch, «alles fertig» in der Anzeige) jetzt ab dieser Startzeit statt ab jetzt.
+  Beispiel: 2× sm60 «um 23:00», Auftrag um 19.58 → bisher 21.58, neu 01.00.
+- Sonst unverändert wie 0.9.14.
+
 ## Stand Version 0.9.14 (Brücke bleibt 1.2.1) – Plan fürs Kontrollblatt (Fixprogramm und Tageszeile)
 - Markus 08.11.2026: neue Nachtprogramme für die Kunden per Handy – «du trägst das gleich ein inkl. startzeit und allem» · «die grossen
   fix kacheln entsprechend geändert».
