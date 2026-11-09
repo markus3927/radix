@@ -21,8 +21,10 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
    - `loop-10` auf eigener Zeile – das Programm direkt darunter läuft 10-mal hintereinander
    - «Heute aus Kontrollblatt» übernimmt die heutige Zeile; «Programme des Kunden» zum Antippen
 5. Durchläufe, optional Startzeit → Start. Zwischen Programmen mit anderem Preset stellt RADIX den Generator selbst um.
-6. **«→ RADIX» in der Tageszeile des Kontrollblatts** (Blatt 1, ab 0.8.5) geht nach wenigen Sekunden auf Generator 1: Das Neue der Zeile
-   wird hinten angehängt, gestartet wird von Hand. Fehlt im Kontrollblatt NF/HF, sucht RADIX es im selben Blatt, sonst Knopf NF/HF.
+6. **«→ RADIX» in der Tageszeile des Kontrollblatts** (Blatt 1, ab 0.8.5) geht nach wenigen Sekunden auf Generator 1. Ab 0.9.20:
+   Wartet die Liste auf eine Zeitmarke («um 21:00»), kommt das Neue davor und startet sofort; steht die Liste noch und beginnt mit
+   einer Zeitmarke, kommt es zuoberst (Start = sofort). Sonst wird es hinten angehängt. Läuft die Liste mehr als einmal
+   (Durchläufe ≠ 1), bekommt es «[1×]» und läuft nur einmal. Fehlt im Kontrollblatt NF/HF, sucht RADIX es im selben Blatt, sonst Knopf NF/HF.
    Das laufende Preset steht gross auf der Karte (rot Killing, grün Healing). Schalter «→ RADIX im Kontrollblatt kommt hierher»
    pro Generator; aus = nur Hinweis mit «Anhängen».
 7. **Während dem Lauf** bleibt die Programmliste offen: Programme nach dem laufenden dürfen dazukommen, sich ändern oder
@@ -55,6 +57,26 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
     «⏭ Nächstes Programm» während dem Warten startet sofort. Mehrere Marken pro Liste möglich.
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
+
+## Stand Version 0.9.20 (Brücke bleibt 1.2.1) – «→ RADIX» sofort, Angehängtes nur einmal, Stand bleibt beim Neuladen
+Markus 09.11.2026: Gen 1 wartete mit der Woche (7×, «um 05:00») – pr2256 per «→ RADIX» «hängt unten dran anstelle von jetzt starten
+können». Dabei zeigte sich: alles, was in eine Liste mit mehreren Durchläufen angehängt wurde (auch Handy-Aufträge), lief jeden Tag
+wieder mit. Und beim Update auf 0.9.19 fehlte «Alle fortsetzen», alle Generatoren standen.
+- **«→ RADIX» wie ein Handy-Auftrag:** ohne eigene Zeitmarke und ohne Zeitmarke darunter in der Tageszeile kommt das Neue vor die
+  nächste Zeitmarke der laufenden Liste. Wartet der Generator dort, startet es sofort; dauert es zu lange, bricht es an der Zeitmarke ab.
+  Steht die Liste (nicht gestartet) und beginnt mit einer Zeitmarke, kommt es zuoberst. Sonst wie bisher hinten an.
+- **«[1×]» am Zeilenende = nur dieser Durchlauf.** Bekommen Zeilen von «→ RADIX» (heute und morgen) und Handy-«anhaengen», wenn die
+  Liste mehr als einmal läuft (auch endlos). Beim nächsten Durchlauf nimmt RADIX sie aus der Liste (Protokoll «1× gelaufen, aus der
+  Liste genommen»); Zeitmarken behalten ihre Uhrzeit. «fertig um» und die Vorschau fürs Kontrollblatt rechnen sie nur heute.
+  Von Hand in die Liste getippte Zeilen bleiben wie bisher in jedem Durchlauf. NF/HF-Knopf behält die Marke.
+- **Unterbrochener Stand bleibt bis «Weiter»/«Alle fortsetzen»:** Bisher schrieb schon das erste Neuladen «kein Lauf» zurück – lud man
+  ein zweites Mal (z. B. Strg+F5, weil noch die alte Version angezeigt wurde), war der Stand weg und «Alle fortsetzen» fehlte
+  (so am 09.11. um 15.07). Jetzt bleibt er, bis fortgesetzt, die Liste geändert oder neu gestartet wird.
+- Getestet im Browser (echtes index.html/app.js, simulierte XM, echter Frequenz-Finder v357 und echte Sicherung, verschiebbare Uhr):
+  26 Prüfungen grün (Gen-1-Fall, Handy-Killing Di nur Di, zuoberst bei stehender Liste, hinten an ohne Zeitmarke, zweimal Neuladen
+  → «Alle fortsetzen (2)» und Weiterlauf, endlos, NF/HF-Knopf); dieselben Prüfungen mit 0.9.19: 13 ✗ (zeigt die alten Fehler).
+  Wochenlisten ohne Zusätze (SIBO 2-Tage 4×, Esther mit 12:30, 7× Nacht+Morgen, Gen 24 06×, Block 3×) über 9 Tage: Starts mit 0.9.19
+  identisch. Handy anhängen/ersetzen/stoppen unverändert.
 
 ## Stand Version 0.9.19 (Brücke bleibt 1.2.1) – jeder Programmstart ins Laufbuch
 

@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.19';
+const VERSION = '0.9.20';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -744,8 +744,9 @@ function laufZeiten(l) {
     let t = progEnde;
     for (let k = j + 1; k < alle.length; k++) { if (alle[k].marke) { if (alle[k].zeitMs) t = alle[k].zeitMs; } else t += alle[k].sek * 1000; }
     let erste = (alle.find(x => x.marke) || {}).zeitMs || null, letzte = (alle.filter(x => x.marke && x.zeitMs).pop() || {}).zeitMs || null;
+    const spaeter = alle.filter(x => !(l.items && l.items[x.pi] && l.items[x.pi].einmal));   // 0.9.20: «[1×]» nur jetzt
     for (let d = l.durchlauf + 1; d <= l.durchlaeufe; d++) {
-      const ab = naechsterAb(erste, letzte, t), v = durchlaufVoraus(alle, t, ab);   // 0.9.16
+      const ab = naechsterAb(erste, letzte, t), v = durchlaufVoraus(spaeter, t, ab);   // 0.9.16
       t = v.ende; erste = v.erste; letzte = v.letzte;
     }
     listeEnde = t;
@@ -786,6 +787,7 @@ function laufVorschau(l, jetzt, bisMs, max = 80) {
     const ab = naechsterAb(erste, letzte, t);
     let kette = ab, direkt = false, neuErste = null, neuLetzte = null;
     for (const s of alle) {
+      if (l.items[s.pi] && l.items[s.pi].einmal) continue;              // 0.9.20: «[1×]» nur im laufenden Durchlauf
       if (s.marke) { kette = naechsteUhrzeit(s.um, direkt ? kette - 1 : kette, s.am); direkt = true; if (neuErste == null) neuErste = kette; neuLetzte = kette; marke(kette); t = kette; continue; }
       direkt = false; t = schritt(s, t, s.sek);
       if (t > bisMs) break;
@@ -854,6 +856,13 @@ const DUAL_MARKE = /\[dual\]/i, DUAL_WEG = /\s*\[dual\]\s*/ig;
  *  0.9.13: neu «↻» wie in der Kontrollapp (Markus: «es steht nur die nummer und handy»); «[Handy]» gilt weiter (ältere Listen). */
 const HANDY_MARKE = /\[handy\]|\u21bb/i, HANDY_WEG = /\s*(?:\[handy\]|\u21bb)\s*/ig, HANDY_ZEICHEN = '  \u21bb';
 /**
+ * 0.9.20 (Markus 09.11.2026, Gen 1: pr2256 per «→ RADIX» in die Woche mit 7 Durchläufen – «es hängt unten dran anstelle von jetzt
+ * starten können»; dazu kam alles Angehängte in JEDEM Durchlauf wieder): «[1×]» am Zeilenende = läuft nur in diesem Durchlauf.
+ * Bekommen Zeilen von «→ RADIX» und Handy-Aufträgen, wenn die Liste mehr als einmal läuft. Beginnt der nächste Durchlauf,
+ * nimmt RADIX sie aus der Liste (Protokoll «… 1× gelaufen, aus der Liste genommen»).
+ */
+const EINMAL_MARKE = /\[1\s*[×x]\]/i, EINMAL_WEG = /\s*\[1\s*[×x]\]\s*/ig, EINMAL_ZEICHEN = '  [1×]';
+/**
  * 0.9.13 (Markus 08.11.2026: «da sehe ich nicht gleich was es ist und muss in der kontroll app nachschauen»): Steht in einer Zeile
  * eines Handy-Auftrags nur die Nummer (pr0532 NF, pp0555, pa15), kommt der Name dazu – aus der Finder-Kachel bzw. der Peptid-Liste,
  * wie bei den Zeilen aus dem Kontrollblatt. Zeilen mit Text, Zeitmarken und loop bleiben, wie sie sind.
@@ -887,20 +896,22 @@ function bereiteListeVor(text, standardPreset) {
   String(text || '').split('\n').forEach((zeile, zeilenNr) => {
     const handy = HANDY_MARKE.test(zeile);                            // 0.9.9
     if (handy) zeile = zeile.replace(HANDY_WEG, ' ').trimEnd();
+    const einmal = EINMAL_MARKE.test(zeile);                          // 0.9.20
+    if (einmal) zeile = zeile.replace(EINMAL_WEG, ' ').trimEnd();
     const lp = K.loopmarke(zeile);
     if (lp) { if (loop) loopOhne.push(loop); loop = lp; return; }
     const um = deuteZeitmarke(zeile);
-    if (um) { if (loop) { loopOhne.push(loop); loop = 0; } items.push({ zeile: zeile.trim(), zeilenNr, r: { art: 'zeit', um, am: K.markenDatum(zeile) }, fehler: '' }); return; }
+    if (um) { if (loop) { loopOhne.push(loop); loop = 0; } items.push({ zeile: zeile.trim(), zeilenNr, r: { art: 'zeit', um, am: K.markenDatum(zeile) }, einmal, fehler: '' }); return; }
     const dual = DUAL_MARKE.test(zeile);                              // 0.6.9: «[Dual]» am Zeilenende = Dual-Variante des Presets
     const pn = presetMitProgrammen(zeile);                            // 0.7.0: Name eines Spooky2-Presets («Adenoiditis (R)») -> seine Programme
-    if (pn) { nimm({ zeile: zeile.trim(), zeilenNr, r: { art: 'preset', name: pn }, dual: false, handy, fehler: '' }); return; }
+    if (pn) { nimm({ zeile: zeile.trim(), zeilenNr, r: { art: 'preset', name: pn }, dual: false, handy, einmal, fehler: '' }); return; }
     let r = K.deuteListenZeile(dual ? zeile.replace(DUAL_WEG, ' ').trim() : zeile, daten.finder, PEPTIDE);
     if (r && r.art === 'peptid') {                                    // 0.7.1: pp-Nummer -> JW_Peptides-Preset «<Name> (R)» aus dem Spooky2-Ordner
       const name = daten.geladen ? findePreset(`${r.spooky2} (R)`) : null;
       r = name ? { art: 'preset', name, code: r.code, titel: r.deutsch ? `${r.deutsch} (${r.spooky2})` : r.spooky2 }
         : { art: 'fehler', text: daten.geladen ? `${r.code}: Peptid-Preset «${r.spooky2} (R)» nicht im Spooky2-Ordner` : 'Spooky2-Ordner noch nicht gewählt', code: r.code, titel: r.deutsch || r.spooky2 };
     }
-    if (r) nimm({ zeile: zeile.trim(), zeilenNr, r, dual: r.art === 'preset' ? false : dual, handy, fehler: r.art === 'fehler' ? r.text : '' });
+    if (r) nimm({ zeile: zeile.trim(), zeilenNr, r, dual: r.art === 'preset' ? false : dual, handy, einmal, fehler: r.art === 'fehler' ? r.text : '' });
   });
   if (loop) loopOhne.push(loop);
   // Preset je Programm: Finder-Kachel; Pause/Schumann übernehmen das Preset davor (sonst danach); eigene Zeilen das Karten-Preset
@@ -1157,7 +1168,7 @@ class Generator {
   }
   daten() {
     const l = this.lauf;
-    return { ...this.einst, uebernommen: this.uebernommen, uebernommenMorgen: this.uebernommenMorgen, geleert: this.geleert, lauf: l && l.status !== 'fertig' ? { schritt: l.schritt, tImSchritt: l.tImSchritt, durchlauf: l.durchlauf, status: l.status, startUm: l.startUmMs, liste: l.listeText, geloggt: l.geloggt || null, marken: markenSichern(l), t: Date.now() } : null };   // 0.9.17: marken, t
+    return { ...this.einst, uebernommen: this.uebernommen, uebernommenMorgen: this.uebernommenMorgen, geleert: this.geleert, lauf: l && l.status !== 'fertig' ? { schritt: l.schritt, tImSchritt: l.tImSchritt, durchlauf: l.durchlauf, status: l.status, startUm: l.startUmMs, liste: l.listeText, geloggt: l.geloggt || null, marken: markenSichern(l), t: Date.now() } : (this.fortsetzen || null) };   // 0.9.17: marken, t · 0.9.20: ungenutzter Stand bleibt (2. Neuladen)
   }
   /** Ganzes Protokoll in die Zwischenablage (zum Einfügen im Chat). */
   async kopiereProtokoll() {
@@ -1370,14 +1381,22 @@ class Generator {
       const vor = um && um.marke && um.anzahl > neuMorgen.length ? um.marke : '';
       for (const g of K.kontrolleGruppen(h.eintraege, neuHeute)) {   // 0.9.0: die Stelle in der Tageszeile gilt auch in der Liste
         const zeilen = K.kontrolleMitMarke(h.eintraege, g.neu, K.kontrolleLetzteMarke(this.einst.liste, g.vor ? `um ${g.vor}` : vor), minutenJetzt()).map(zeile);   // 0.8.6
+        // 0.9.20 (Markus 09.11.2026: «es hängt unten dran anstelle von jetzt starten können»): ohne eigene Zeitmarke und ohne Zeitmarke
+        // darunter in der Tageszeile kommt das Neue vor die nächste Zeitmarke der Liste – wie ein Handy-Auftrag. Wartet der Lauf dort,
+        // startet es sofort; steht die Liste (noch nicht gestartet) und beginnt mit einer Zeitmarke, kommt es zuoberst (Start = sofort).
+        let naechste = g.vor, oben = false;
+        if (!naechste && zeilen.length && !K.zeitmarke(zeilen[0])) {
+          if (this.lauf && this.lauf.status !== 'wartet') naechste = this.naechsteMarke() || '';
+          else if (!this.lauf) { const erste = this.einst.liste.split('\n').find(z => z.trim()) || ''; oben = !!K.zeitmarke(erste); }
+        }
         this.log(`Vom Kontrollblatt ${nr} (heute): ${codes(zeilen)}`);
-        this.fuegeZeilenAn(zeilen, vor, g.vor);
+        this.fuegeZeilenAn(zeilen, vor, naechste, { einmal: true, oben });
         gesendet.push(...zeilen);
       }
     }
     if (neuMorgen.length) {
       const zeilen = K.kontrolleMitMarke(m.eintraege, neuMorgen, K.kontrolleLetzteMarke(this.einst.liste), -1).map(zeile);   // 0.8.6
-      this.fuegeZeilenAn(K.morgenDatumSetzen(zeilen, m.datum, minutenJetzt()));
+      this.fuegeZeilenAn(K.morgenDatumSetzen(zeilen, m.datum, minutenJetzt()), '', '', { einmal: true });   // 0.9.20: nur einmal
       this.log(`Vom Kontrollblatt ${nr} (morgen ${m.datum}): ${codes(zeilen)}`);
       gesendet.push(...zeilen);
     }
@@ -1405,7 +1424,7 @@ class Generator {
     const m = z.match(/^\s*pr\s?(\d{1,4})\b/i);
     const code = m ? `pr${m[1].padStart(4, '0')} ${v}` : '';
     const p = code && daten.finder ? daten.finder.programme.get(code) : null;
-    zeilen[zeilenNr] = (p ? `${code}  ${p.name.replace(/^(pa|sm)\d{2}\s+/i, '')}` : z.replace(/^(\s*pr\s?\d{1,4})\b/i, `$1 ${v}`).replace(DUAL_WEG, ' ').replace(HANDY_WEG, ' ').trimEnd()) + (DUAL_MARKE.test(z) ? '  [Dual]' : '') + (HANDY_MARKE.test(z) ? HANDY_ZEICHEN : '');
+    zeilen[zeilenNr] = (p ? `${code}  ${p.name.replace(/^(pa|sm)\d{2}\s+/i, '')}` : z.replace(/^(\s*pr\s?\d{1,4})\b/i, `$1 ${v}`).replace(DUAL_WEG, ' ').replace(HANDY_WEG, ' ').replace(EINMAL_WEG, ' ').trimEnd()) + (DUAL_MARKE.test(z) ? '  [Dual]' : '') + (HANDY_MARKE.test(z) ? HANDY_ZEICHEN : '') + (EINMAL_MARKE.test(z) ? EINMAL_ZEICHEN : '');
     const text = zeilen.join('\n');
     $('.liste', this.karte).value = text;
     this.setzeListe(text);
@@ -1540,12 +1559,16 @@ class Generator {
    * Steht am Ende der Liste eine Zeitmarke ohne Programm danach und beginnen die neuen Zeilen mit einer Zeitmarke, gilt nur die neue.
    * 0.9.0: naechste = Uhrzeit («21:00»): die Zeilen kommen vor die nächste solche Zeitmarke ab der laufenden Stelle (Stelle in der Tageszeile).
    */
-  fuegeZeilenAn(zeilen, vor = '', naechste = '') {
+  fuegeZeilenAn(zeilen, vor = '', naechste = '', opt = {}) {
     let alt = this.einst.liste.replace(/\s+$/, '').split('\n');
     if (alt.length === 1 && !alt[0]) alt = [];
+    // 0.9.20: läuft die Liste mehr als einmal, laufen «→ RADIX» und Handy-Aufträge nur in diesem Durchlauf (Marke «[1×]»)
+    if (opt.einmal && (this.lauf ? this.lauf.durchlaeufe !== 1 : this.einst.durchlaeufe !== 1))
+      zeilen = zeilen.map(z => z.trim() && !EINMAL_MARKE.test(z) ? z.replace(/\s+$/, '') + EINMAL_ZEICHEN : z);
     let pos = alt.length;
     const nm = naechste ? this.markeZeile(alt, naechste) : -1;
     if (nm >= 0) pos = nm;
+    else if (opt.oben) { const i = alt.findIndex(z => z.trim()); pos = i < 0 ? alt.length : i; }   // 0.9.20: vor die wartende Liste
     else if (vor) { const i = alt.map(z => K.zeitmarke(z) ? `um ${K.zeitmarke(z)}` : '').lastIndexOf(vor); if (i >= 0) pos = i; }
     const ohneMarke = [...alt];
     if (pos === alt.length && zeilen.length && K.zeitmarke(zeilen[0])) {
@@ -1584,6 +1607,30 @@ class Generator {
     if (k >= s.length || k === l.schritt) return null;
     const rest = (s[k].zeitMs - Date.now()) / 1000;
     return sek > rest ? { um: s[k].um, sek: Math.ceil(sek - rest) } : null;
+  }
+
+  /**
+   * 0.9.20: Neuer Durchlauf – Zeilen mit «[1×]» sind gelaufen und kommen aus der Liste. Zeitmarken behalten ihre Uhrzeiten
+   * (der Reihe nach), das aktive Preset bleibt erkannt. Rückgabe false = danach bleibt kein Programm (Lauf ist fertig).
+   */
+  einmalWeg() {
+    const l = this.lauf;
+    if (!l.items.some(it => it.einmal)) return true;
+    const zeilen = String(l.listeText || '').split('\n'), weg = zeilen.filter(z => EINMAL_MARKE.test(z));
+    const text = zeilen.filter(z => !EINMAL_MARKE.test(z)).join('\n').replace(/^\s*\n+|\s+$/g, '');
+    const v = bereiteListeVor(text, this.einst.standardPreset);
+    const codes = weg.map(z => z.trim().split(/\s{2,}|\t/)[0]).join(', ');
+    if (!v.plan.schritte.some(s => !s.pause)) { this.log(`1× gelaufen (${codes}) – danach steht nichts mehr in der Liste`); $('.liste', this.karte).value = text; this.einst.liste = text; l.listeText = text; return false; }
+    const alteMarken = l.plan.schritte.filter(s => s.marke && !(l.items[s.pi] && l.items[s.pi].einmal)), neueMarken = v.plan.schritte.filter(s => s.marke);
+    neueMarken.forEach((s, i) => { if (alteMarken[i] && alteMarken[i].um === s.um) s.zeitMs = alteMarken[i].zeitMs; });
+    const aktiv = l.aktivEi != null && l.einst[l.aktivEi] ? l.einst[l.aktivEi].key : null;
+    l.plan = v.plan; l.items = v.items; l.einst = v.einst; l.listeText = text; l.schritt = 0; l.tImSchritt = 0;
+    l.warnungen = v.warnungen.filter(w => !/^Keine (Programme|abspielbaren)/.test(w));
+    l.aktivEi = aktiv ? (v.einst.findIndex(x => x.key === aktiv) >= 0 ? v.einst.findIndex(x => x.key === aktiv) : null) : null;
+    $('.liste', this.karte).value = text; this.einst.liste = text;
+    this.log(`1× gelaufen, aus der Liste genommen: ${codes}`);
+    this.pruefe();
+    return true;
   }
 
   /**
@@ -1974,7 +2021,7 @@ class Generator {
       const um = this.naechsteMarke();                               // 0.9.10: Zeitmarke voraus (wartet dort oder kommt noch): Neues kommt davor
       const vorher = this.einst.liste, meldungen = [], melde = Object.getPrototypeOf(this).melde;
       this.melde = (t, k) => { meldungen.push(t); melde.call(this, t, k); };
-      try { this.fuegeZeilenAn(zeilen, '', um || ''); } finally { delete this.melde; }
+      try { this.fuegeZeilenAn(zeilen, '', um || '', { einmal: true }); } finally { delete this.melde; }   // 0.9.20: nur dieser Durchlauf
       if (this.einst.liste === vorher) return { status: 'fehler', text: meldungen.join(' · ') || 'nicht angehängt' };
       let ende = null; try { ende = laufZeiten(this.lauf).listeEnde; } catch (e) { /* egal */ }
       const warn = meldungen.find(t => /Achtung/.test(t));
@@ -2153,6 +2200,7 @@ class Generator {
           if (l.durchlaeufe && l.durchlauf >= l.durchlaeufe) { await this.stoppe('fertig'); return; }
           l.durchlauf++;
           this.log(`Durchlauf ${l.durchlauf} beginnt`);
+          if (!this.einmalWeg()) { await this.stoppe('fertig'); return; }   // 0.9.20
           const ab = durchlaufAb(l.plan.schritte, Date.now());          // 0.9.8: frische Zeiten, nicht die von gestern
           for (const x of l.plan.schritte) if (x.marke) x.zeitMs = null;
           this.rechneMarken(ab);
