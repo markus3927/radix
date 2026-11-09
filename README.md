@@ -56,6 +56,14 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.19 (Brücke bleibt 1.2.1) – jeder Programmstart ins Laufbuch
+
+- Markus 09.11.2026 (Gen 23 Anti-Aging lief, Tageszeile von heute blieb leer): «die tagesliste sollte komplett sein. von wem auch immer
+  ausgefüllt». Bisher kamen nur Endlosschleife und Handy-Aufträge ins Laufbuch. Neu jeder Programmstart – auch Listen mit Durchläufen,
+  von Hand gestartet oder per «→ RADIX». Die Kontrollapp (ab R410, unverändert) trägt ihn in die Zeile des Start-Tags ein (↻ mit Uhrzeit);
+  steht die Nummer dort schon, nichts doppelt. Fortsetzen mitten im Programm schreibt nichts neu.
+- Sonst wie 0.9.18.
+
 ## Stand Version 0.9.18 (Brücke bleibt 1.2.1) – Durchläufe immer zurück auf 1
 
 - Markus 09.11.2026 (Gen 4 Pankreas lief endlos, weil «Durchläufe 0» vom letzten Mal stehen blieb): «immer wenn ein Programm gelaufen ist

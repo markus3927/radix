@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.18';
+const VERSION = '0.9.19';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -283,7 +283,7 @@ async function laufbuchSchreiben() {
     const auftraege = K.quittungenMischen(altQ, auftrag.quittungen, Date.now());   // 0.9.9: Quittungen der Handy-Aufträge
     const vorschau = vorschauAlle();                                                // 0.9.16
     const w = await laufbuch.handle.createWritable();
-    await w.write(JSON.stringify({ radix: VERSION, stand: new Date().toISOString(), hinweis: 'Schreibt nur RADIX (Endlosschleife und Handy-Aufträge). Die Kontrollapp liest diese Datei.', eintraege, auftraege, vorschau, vorschauStand: Date.now() }, null, 1));
+    await w.write(JSON.stringify({ radix: VERSION, stand: new Date().toISOString(), hinweis: 'Schreibt nur RADIX (jeder Programmstart, ab 0.9.19 auch normale Listen). Die Kontrollapp liest diese Datei.', eintraege, auftraege, vorschau, vorschauStand: Date.now() }, null, 1));
     laufbuch.vorschau = vorschau; laufbuch.vorschauT = Date.now();
     await w.close();
     const ids = new Set(mit.map(e => e.id));
@@ -1920,20 +1920,23 @@ class Generator {
   /**
    * 0.7.9: Endlosschleife (Durchläufe 0): Programmstart ins Laufbuch – einmal pro Programm und Durchlauf, nur am Anfang des
    * Programms (nicht beim Fortsetzen mitten drin). Zeitmarken und eigene Frequenzzeilen ohne Nummer kommen nicht hinein.
+   * 0.9.19 (Markus 09.11.2026, Gen 23 Anti-Aging lief, Tag 9 blieb leer: «die tagesliste sollte komplett sein. von wem auch immer
+   * ausgefüllt»): jeder Programmstart kommt ins Laufbuch – auch Listen mit Durchläufen, gestartet von Hand oder per «→ RADIX».
+   * Die Kontrollapp trägt ihn in die Tageszeile des Start-Tags ein; steht die Nummer dort schon (z. B. selbst geschrieben und
+   * mit «→ RADIX» geschickt), kommt nichts doppelt. Laufbuch-Zeilen (↻) schickt die Kontrollapp nie zurück an RADIX.
    */
   laufbuchPruefen(s) {
     const l = this.lauf;
     if (!l || !s || s.marke) return;
     const it = l.items[s.pi];
     if (!it || it.r.art === 'zeit' || l.schritt !== it.start) return;
-    if (l.durchlaeufe && !it.handy) return;                         // 0.9.9: Handy-Aufträge kommen immer ins Laufbuch
     const key = `${l.durchlauf}:${s.pi}`;
     if (l.geloggt === key) return;
     l.geloggt = key;
     const e = K.laufbuchEintrag({ t: Date.now(), gen: this.einst.nr, code: it.code, name: it.name.replace(/ · Lauf \d+\/\d+$/, ''), sek: it.sek, durchlauf: l.durchlauf });
     if (!e) return;
     laufbuchNotiere(e);
-    this.log(`→ Kontrollblatt (${it.handy ? 'Handy-Auftrag' : 'Endlosschleife'}): ${e.code}${e.var ? ' ' + e.var : ''}${laufbuch.handle ? '' : ' – Laufbuch noch nicht gewählt, wartet'}`);
+    this.log(`→ Kontrollblatt (${it.handy ? 'Handy-Auftrag' : l.durchlaeufe ? 'Liste' : 'Endlosschleife'}): ${e.code}${e.var ? ' ' + e.var : ''}${laufbuch.handle ? '' : ' – Laufbuch noch nicht gewählt, wartet'}`);
   }
 
   /**
