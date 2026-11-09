@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.17';
+const VERSION = '0.9.18';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -1201,7 +1201,7 @@ class Generator {
     const st = $('.start-um', k);
     st.onchange = () => { this.einst.startUm = st.value; speichereAlle(); };
     $('.btn-start', k).onclick = () => this.starte();
-    $('.btn-stop', k).onclick = async () => { if (this.lauf) { await this.stoppe('gestoppt'); this.durchlaeufeZurueck(false); } else if (this.imTest) this.beendeTest(); };
+    $('.btn-stop', k).onclick = async () => { if (this.lauf) { await this.stoppe('gestoppt'); this.durchlaeufeZurueck(true); } else if (this.imTest) this.beendeTest(); };   // 0.9.18: Stopp setzt auch endlos (0) auf 1
     $('.btn-testen', k).onclick = () => this.imTest ? this.beendeTest() : this.teste();
     $('.btn-weiter', k).onclick = () => this.starte(this.fortsetzen);
     $('.btn-naechste-f', k).onclick = () => this.springe('frequenz');
@@ -1499,8 +1499,10 @@ class Generator {
   }
   /**
    * 0.9.12 (Markus 08.11.2026, Olga: 2 Durchläufe waren vom letzten Mal stehen geblieben): «Durchläufe» zurück auf 1 –
-   * nach «Leeren» immer (auch Endlosschleife 0, die Liste ist ja leer), nach «Stopp» nur mehr als 1 (0 = endlos bleibt beim Stopp,
-   * damit ein kurz angehaltener Dauerlauf mit Start wieder endlos weiterläuft).
+   * nach «Leeren» immer (auch Endlosschleife 0, die Liste ist ja leer), nach «Stopp» nur mehr als 1.
+   * 0.9.18 (Markus 09.11.2026, Gen 4 Pankreas lief endlos, weil die 0 vom letzten Mal stehen blieb: «immer wenn ein Programm gelaufen ist
+   * sollten die durchläufe auf eins zurück gehen»): Stopp, «Alle stoppen» und Handy-«stoppen» setzen auch 0 (endlos) auf 1 zurück.
+   * Endlos gilt nur noch, wenn es vor dem Start wieder bewusst eingestellt wird.
    */
   durchlaeufeZurueck(auchEndlos) {
     const d = this.einst.durchlaeufe;
@@ -1523,7 +1525,7 @@ class Generator {
     this.einst.liste = '';
     this.einst.startUm = ''; $('.start-um', this.karte).value = '';   // «Start um» wieder leer
     this.log(`Gelaufen, Liste geleert (${war} Zeile${war === 1 ? '' : 'n'})`);
-    if (this.einst.durchlaeufe > 1) {                                 // 0.9.1: Durchläufe gemacht = zurück auf 1 (0 = endlos wird nie fertig, bleibt also 0)
+    if (this.einst.durchlaeufe !== 1) {                               // 0.9.1: Durchläufe gemacht = zurück auf 1 (0.9.18: auch 0)
       this.log(`Durchläufe von ${this.einst.durchlaeufe} zurück auf 1`);
       this.einst.durchlaeufe = 1; $('.durchlaeufe', this.karte).value = 1;
     }
@@ -1952,6 +1954,7 @@ class Generator {
     if (a.art === 'stoppen') {
       if (!this.lauf) return { status: 'gestoppt', text: 'lief nicht' };
       await this.stoppe('Gestoppt per Handy-Auftrag');
+      this.durchlaeufeZurueck(true);                                    // 0.9.18
       return { status: 'gestoppt', text: 'gestoppt, Liste bleibt' };
     }
     if (a.art === 'ersetzen') {
@@ -2481,7 +2484,7 @@ async function init() {
   $('#btn-ordner').onclick = waehleOrdner;
   $('#btn-hinzu').onclick = async () => { try { await fuegeHinzu(await navigator.serial.requestPort()); } catch (e) { /* abgebrochen */ } };
   $('#btn-alle-testen').onclick = () => { for (const g of generatoren) if (!g.lauf && !g.imTest) g.teste(); };   // 0.6.5: GX auch (öffnet den Anschluss bis «Test beenden»)
-  $('#btn-alle-stopp').onclick = () => { for (const g of generatoren) { if (g.lauf) g.stoppe('gestoppt'); else if (g.imTest) g.beendeTest(); } };
+  $('#btn-alle-stopp').onclick = () => { for (const g of generatoren) { if (g.lauf) g.stoppe('gestoppt').then(() => g.durchlaeufeZurueck(true)); else if (g.imTest) g.beendeTest(); } };   // 0.9.18: Durchläufe auf 1
   // 0.8.9: «Alle fortsetzen» – nach dem Neuladen (z. B. neue Version) alle unterbrochenen Generatoren mit einem Klick dort weiterlaufen
   // lassen, wo sie standen (gleich wie der Knopf «Weiter» auf jeder Karte). Nur sichtbar, solange es Unterbrochene gibt.
   { const stopp = $('#btn-alle-stopp'), vorlage = $('#btn-alle-testen') || stopp;

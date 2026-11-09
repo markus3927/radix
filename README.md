@@ -56,6 +56,14 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.18 (Brücke bleibt 1.2.1) – Durchläufe immer zurück auf 1
+
+- Markus 09.11.2026 (Gen 4 Pankreas lief endlos, weil «Durchläufe 0» vom letzten Mal stehen blieb): «immer wenn ein Programm gelaufen ist
+  sollten die durchläufe auf eins zurück gehen». Neu gehen die Durchläufe nach **Stopp**, **Alle stoppen**, Handy-«stoppen», **Leeren**
+  und **fertig** immer auf 1 zurück – auch eine Endlosschleife (0). Endlos läuft nur noch, wenn es vor dem Start bewusst eingestellt wird.
+  «Alle fortsetzen» nach Neuladen läuft weiter wie gestartet (auch endlos).
+- Sonst wie 0.9.17.
+
 ## Stand Version 0.9.17 (Brücke bleibt 1.2.1) – verpasste Zeitmarke nach Neustart nachholen
 
 - Markus 09.11.2026: PC in der Nacht hängen geblieben, Neustart 9.50 – die Morgenlisten «um 06:00» rutschten beim «Alle fortsetzen»
