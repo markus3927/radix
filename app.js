@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.16';
+const VERSION = '0.9.17';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -310,6 +310,8 @@ async function laufbuchSchreiben() {
 // und damit von selbst in die Tageszeile der Kontrollapp – mit jedem Loop-Durchgang, wie bei der Endlosschleife.
 const HANDY_MAX_DURCHLAEUFE = 14;                                    // 0.9.11: so oft wird ein Vorbereitetes höchstens ausgeschrieben
 const AUFTRAG_ERLEDIGT = 'radix-auftraege-erledigt', AUFTRAG_QUITTUNGEN = 'radix-auftraege-quittungen', AUFTRAG_MAX_ALTER = 3 * 3600e3;
+/** 0.9.17: verpasste Zeitmarke nach Neustart/Neuladen nachholen, wenn sie höchstens so lange her ist. */
+const NACHHOLEN_MAX = 6 * 3600e3;
 const auftrag = { liste: [], datei: '', erledigt: lade(AUFTRAG_ERLEDIGT, {}), quittungen: lade(AUFTRAG_QUITTUNGEN, []), laeuft: false };
 
 function auftragStand() {
@@ -690,6 +692,20 @@ function naechsterAb(erste, letzte, ende) {
   const tage = letzte && letzte > erste ? Math.floor((letzte - erste) / 864e5) : 0;
   const d = new Date(erste); d.setDate(d.getDate() + tage);           // Kalendertage (Zeitumstellung)
   return Math.max(d.getTime(), ende - 864e5);
+}
+/** 0.9.17: Uhrzeiten der Zeitmarken des laufenden Durchlaufs fürs Speichern: { Schritt: ms }. */
+function markenSichern(l) {
+  const m = {};
+  (l.plan.schritte || []).forEach((x, k) => { if (x.marke && x.zeitMs) m[k] = x.zeitMs; });
+  return m;
+}
+/** 0.9.17: zuletzt verpasste Zeitmarke ab dem gespeicherten Schritt, die nachgeholt wird (höchstens NACHHOLEN_MAX her), sonst -1. */
+function nachholSchritt(s, von, stand, jetzt) {
+  const m = stand && stand.marken;
+  if (!s || !m || von == null) return -1;
+  let f = -1;
+  for (let k = von; k < s.length; k++) if (s[k].marke && m[k] && m[k] <= jetzt) f = k;
+  return f >= 0 && jetzt - m[f] <= NACHHOLEN_MAX ? f : -1;
 }
 /** 0.9.8: Zeiten der Zeitmarken eines kommenden Durchlaufs (nur rechnen, nichts setzen) – für «alles fertig». Rückgabe { ende, erste }. */
 function durchlaufVoraus(s, start, ab) {
@@ -1141,7 +1157,7 @@ class Generator {
   }
   daten() {
     const l = this.lauf;
-    return { ...this.einst, uebernommen: this.uebernommen, uebernommenMorgen: this.uebernommenMorgen, geleert: this.geleert, lauf: l && l.status !== 'fertig' ? { schritt: l.schritt, tImSchritt: l.tImSchritt, durchlauf: l.durchlauf, status: l.status, startUm: l.startUmMs, liste: l.listeText, geloggt: l.geloggt || null } : null };
+    return { ...this.einst, uebernommen: this.uebernommen, uebernommenMorgen: this.uebernommenMorgen, geleert: this.geleert, lauf: l && l.status !== 'fertig' ? { schritt: l.schritt, tImSchritt: l.tImSchritt, durchlauf: l.durchlauf, status: l.status, startUm: l.startUmMs, liste: l.listeText, geloggt: l.geloggt || null, marken: markenSichern(l), t: Date.now() } : null };   // 0.9.17: marken, t
   }
   /** Ganzes Protokoll in die Zwischenablage (zum Einfügen im Chat). */
   async kopiereProtokoll() {
@@ -1616,6 +1632,23 @@ class Generator {
     for (const k of Object.keys(z)) s[k].zeitMs = z[k];
   }
 
+  /**
+   * 0.9.17 (Markus 09.11.2026: PC in der Nacht hängen geblieben, Neustart 9.50 – «es lief auch nichts»; die Morgenlisten «um 06:00»
+   * rutschten beim Fortsetzen auf morgen, wie am 08.11. Linda «um 22:00» nach Neuladen um 22.10): Beim Fortsetzen gelten die gespeicherten
+   * Uhrzeiten der Zeitmarken. Ist eine inzwischen vorbei (höchstens NACHHOLEN_MAX her), geht es sofort mit dem Block nach der zuletzt
+   * verpassten Zeitmarke weiter; was davor stand, ist vorbei (wie im normalen Ablauf). Spätere Zeitmarken (z. B. 21:00) bleiben pünktlich.
+   * Länger her, nichts verpasst oder Stand ohne Zeiten (vor 0.9.17 gespeichert): wie bisher, nächste Uhrzeit ab jetzt.
+   */
+  holeNach(stand) {
+    const l = this.lauf, k0 = nachholSchritt(l && l.plan.schritte, l && l.schritt, stand, Date.now());
+    if (!l || k0 < 0 || l.status === 'wartet') return false;
+    const s = l.plan.schritte;
+    for (let k = l.schritt; k < s.length; k++) if (s[k].marke && stand.marken[k]) s[k].zeitMs = stand.marken[k];
+    l.schritt = k0; l.tImSchritt = 0;                                    // gleich an die verpasste Zeitmarke: sie ist fällig, der Block danach startet
+    this.log(`⏰ Zeitmarke ${s[k0].um} (${fmtStart(stand.marken[k0])}) während der Unterbrechung verpasst – wird jetzt nachgeholt`);
+    return true;
+  }
+
   /** Meldung über der Vorschau, die der laufende Fortschritt nicht überschreibt (verschwindet nach 20 s). */
   melde(text, art = '') {
     this.meldung = { text, art, bis: Date.now() + 20000 };
@@ -1812,6 +1845,7 @@ class Generator {
       geloggt: stand?.geloggt ?? null,                                // 0.7.9: «Durchlauf:Programm», das schon im Laufbuch steht
     };
     this.rechneMarken(startUmMs || Date.now());
+    if (stand) this.holeNach(stand);                                   // 0.9.17
     this.sperre(true);
     this.pruefe();
     speichereAlle();
@@ -1909,7 +1943,10 @@ class Generator {
   async handyAuftrag(a) {
     const nr = zahl(this), b = this.blatt(), kunde = b && b.name ? b.name.trim() : '';
     if (a.kunde && !K.kundePasst(kunde, a.kunde)) return { status: 'abgelehnt', text: `Generator ${nr} gehört ${kunde ? `«${kunde}»` : 'niemandem (Kontrollblatt)'}, nicht «${a.kunde}»` };
-    if (this.imTest) return { status: 'abgelehnt', text: 'Generator wird gerade getestet' };
+    if (this.imTest) {                                                 // 0.9.17: nach Neustart «Alle testen» – Auftrag beendet den Test wie «Start» (Ausgänge waren aus)
+      this.log('Test beendet für Handy-Auftrag');
+      if (this.gx) await this.beendeTestGX(); else this.setzeTest(false);
+    }
     const zeilen = a.zeilen.map(z => K.handyZeile(handyMitName(z))), codes = a.zeilen.filter(z => !K.zeitmarke(z) && !K.loopmarke(z)).map(z => z.split(/\s{2,}|\t/)[0]).join(', ');
     this.log(`📱 Handy-Auftrag (${a.art})${a.text ? ': ' + a.text : ''}`);
     if (a.art === 'stoppen') {
@@ -2113,6 +2150,7 @@ class Generator {
           const ab = durchlaufAb(l.plan.schritte, Date.now());          // 0.9.8: frische Zeiten, nicht die von gestern
           for (const x of l.plan.schritte) if (x.marke) x.zeitMs = null;
           this.rechneMarken(ab);
+          speichereAlle();                                              // 0.9.17: neue Zeiten gesichert (fürs Nachholen)
         }
       }
       const s = l.plan.schritte[l.schritt];

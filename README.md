@@ -56,6 +56,17 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.17 (Brücke bleibt 1.2.1) – verpasste Zeitmarke nach Neustart nachholen
+
+- Markus 09.11.2026: PC in der Nacht hängen geblieben, Neustart 9.50 – die Morgenlisten «um 06:00» rutschten beim «Alle fortsetzen»
+  auf morgen (wie am 08.11. Linda «um 22:00» nach Neuladen um 22.10). Neu speichert RADIX die Uhrzeiten der Zeitmarken mit (`marken`).
+  Beim Fortsetzen: Ist eine Zeitmarke inzwischen vorbei und höchstens **6 Stunden** her, geht es **sofort** mit dem Block nach der zuletzt
+  verpassten Zeitmarke weiter (was davor stand, ist vorbei – wie im normalen Ablauf). Spätere Zeitmarken bleiben pünktlich, z. B. die
+  Nacht um 21:00. Länger her oder Stand noch von 0.9.16: wie bisher (nächste Uhrzeit ab jetzt). Protokoll: «⏰ … verpasst – wird jetzt nachgeholt».
+- Handy-Auftrag an einen Generator im Test («Alle testen» nach Neustart): beendet den Test wie «Start» und läuft, statt abgelehnt zu werden.
+- Nach jedem neuen Durchlauf wird der Stand gleich gesichert (neue Zeiten der Zeitmarken).
+- Sonst wie 0.9.16.
+
 ## Stand Version 0.9.16 (Brücke bleibt 1.2.1) – Vorschau fürs Kontrollblatt, Mehrtages-Listen
 
 - Laufbuch neu mit `vorschau` ({ Generator: [{ code, name, von, bis }] }, 36 h voraus) und `vorschauStand`: kommende Programme,
