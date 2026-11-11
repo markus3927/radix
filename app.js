@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.21';
+const VERSION = '0.9.22';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -1811,7 +1811,13 @@ class Generator {
     const l = this.lauf, pi = l && l.plan.schritte[l.schritt] ? l.plan.schritte[l.schritt].pi : -1;
     const vs = $('.vorschau', this.karte);
     let akt = null;
-    for (const row of vs.querySelectorAll('.p')) { const ja = +row.dataset.pi === pi; row.classList.toggle('aktiv', ja); if (ja) akt = row; }
+    // 0.9.22 (Markus 11.11.2026): aktive Zeile in der Vorschau in derselben Farbe wie der Balken in der Liste
+    const st = l && l.plan.schritte[l.schritt], ein = st && !st.marke ? l.einst[st.ei ?? l.aktivEi] : null;
+    const farbe = !st ? '' : st.marke ? 'w' : farbArt(l.items[st.pi], ein && ein.e, st);
+    for (const row of vs.querySelectorAll('.p')) {
+      const ja = +row.dataset.pi === pi; row.classList.toggle('aktiv', ja); if (ja) akt = row;
+      for (const f of ['k', 'h', 'm', 'v', 'w']) row.classList.toggle('f-' + f, ja && f === farbe);
+    }
     // 0.9.21: wechselt das laufende Programm, Vorschau und Liste dorthin scrollen (nicht, solange die Maus in der Vorschau ist)
     const neu = pi !== this.balkenPi || (l && l.listeText) !== this.balkenText;
     this.balkenPi = pi; this.balkenText = l && l.listeText;

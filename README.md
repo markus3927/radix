@@ -58,6 +58,10 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.22 (Brücke bleibt 1.2.1) – aktive Zeile der Vorschau in der Programmfarbe
+Markus 11.11.2026: Die laufende Zeile in der Vorschau hat dieselbe Farbe wie der Balken in der Liste (rot Killing, blau Healing,
+grün Peptid/Preset, violett MW, gelb wartet auf Zeitmarke). Tests: 6 neue + 23 aus 0.9.21 grün.
+
 ## Stand Version 0.9.21 (Brücke bleibt 1.2.1) – Vorschau scrollt für sich, laufende Zeile markiert, Gestriges weg
 Markus 11.11.2026.
 - **Vorschau** (Liste mit Presets und Zeiten unter der Programmliste) hat eine feste Höhe und scrollt mit dem Mausrad für sich;

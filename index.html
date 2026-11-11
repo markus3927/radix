@@ -181,6 +181,12 @@
   .vorschau div.p{display:grid;grid-template-columns:auto 1fr auto;gap:2px 8px;padding:4px 8px;border-top:1px solid var(--royal-light)}
   .vorschau div.p:first-child{border-top:none}
   .vorschau div.p.aktiv{background:var(--ok-bg);box-shadow:inset 3px 0 var(--ok)}
+  /* 0.9.22: aktive Zeile in der Farbe des Programms (wie der Balken in der Liste) */
+  .vorschau div.p.aktiv.f-k{background:rgba(200,16,46,.13);box-shadow:inset 4px 0 var(--kill)}
+  .vorschau div.p.aktiv.f-h{background:rgba(43,82,206,.13);box-shadow:inset 4px 0 var(--heal)}
+  .vorschau div.p.aktiv.f-m{background:rgba(27,127,59,.15);box-shadow:inset 4px 0 var(--mw)}
+  .vorschau div.p.aktiv.f-v{background:rgba(106,27,154,.13);box-shadow:inset 4px 0 var(--mwv)}
+  .vorschau div.p.marke.aktiv.f-w{background:#FFE9A8;box-shadow:inset 4px 0 var(--gold)}
   .vorschau div.p.fehler{background:var(--rot-bg);color:var(--rot)}
   .vorschau div.p.marke{background:var(--gold-bg)} .vorschau div.p.marke .name{font-weight:700;color:var(--gold)}
   .vorschau code{font:600 12px Consolas,monospace;color:var(--royal-dark)}
