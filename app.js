@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.20';
+const VERSION = '0.9.21';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -1204,6 +1204,10 @@ class Generator {
       warte = setTimeout(() => this.setzeListe(li.value), 350);
     };
     li.onchange = () => { clearTimeout(warte); this.setzeListe(li.value); };
+    li.addEventListener('scroll', () => this.zeigeBalken(), { passive: true });                       // 0.9.21
+    li.addEventListener('input', () => this.zeigeBalken());
+    if (window.ResizeObserver) new ResizeObserver(() => { this.zeigeBalken(); this.vorschauHoehe(); }).observe(li);
+    $('.menue', k).addEventListener('toggle', () => this.vorschauHoehe());
     li.onpaste = () => setTimeout(() => { const n = K.listeEingefuegt(li.value); if (n !== li.value) { li.value = n; clearTimeout(warte); this.setzeListe(n); } }, 0);   // 0.8.6
     const pr = $('.preset', k);
     pr.onchange = () => { this.einst.standardPreset = pr.value.trim(); speichereAlle(); this.pruefe(); };
@@ -1634,6 +1638,55 @@ class Generator {
   }
 
   /**
+   * 0.9.21 (Markus 11.11.2026: «das der tag gestern nicht mehr zu sehen ist resp. sich selber löscht»): Läuft eine Liste mit 1 Durchlauf
+   * über mehrere Tage, kommt alles vor dem ersten Block von heute aus der Liste (Block = ab einer Zeitmarke, die heute schon war).
+   * Gab es heute noch keine (z. B. 01:00, Nacht von gestern läuft), dann alles vor dem laufenden Block. Das laufende Programm und alles
+   * danach bleibt unverändert; Zeiten der Zeitmarken bleiben. Passt der neue Plan nicht 1:1 zum alten, bleibt alles, wie es ist.
+   * Rückgabe true = gekürzt.
+   */
+  gesternWeg() {
+    const l = this.lauf, li = $('.liste', this.karte);
+    if (!l || l.beschaeftigt || l.status !== 'laeuft' || Number(l.durchlaeufe) !== 1) return false;
+    if (document.activeElement === li || li.value !== l.listeText || this.einst.liste !== l.listeText) return false;   // tippt gerade
+    const s = l.plan.schritte, jetzt = Date.now(), mitternacht = new Date(jetzt).setHours(0, 0, 0, 0);
+    let heute = -1, letzte = -1;
+    for (let k = 1; k <= l.schritt && k < s.length; k++) {
+      if (!s[k].marke || !s[k].zeitMs || s[k].zeitMs > jetzt) continue;
+      if (heute < 0 && s[k].zeitMs >= mitternacht) heute = k;
+      letzte = k;
+    }
+    const cut = heute >= 0 ? heute : letzte;
+    if (cut <= 0) return false;
+    const cutPi = s[cut].pi, ab = l.items[cutPi] && l.items[cutPi].zeilenNr;
+    if (!ab) return false;
+    const zeilen = String(l.listeText || '').split('\n'), weg = zeilen.slice(0, ab).filter(z => z.trim());
+    if (!weg.length) return false;
+    const text = zeilen.slice(ab).join('\n');
+    const v = bereiteListeVor(text, this.einst.standardPreset), ns = v.plan.schritte;
+    // Sicherheit: der Rest muss Schritt für Schritt derselbe sein
+    if (ns.length !== s.length - cut || v.items.length !== l.items.length - cutPi) return false;
+    for (let j = 0; j < ns.length; j++) {
+      const a = s[j + cut], n = ns[j];
+      if (!!a.marke !== !!n.marke || !!a.pause !== !!n.pause || Math.abs((a.sek || 0) - (n.sek || 0)) > 0.001 || a.pi - cutPi !== n.pi) return false;
+      if (a.ei != null && (n.ei == null || l.einst[a.ei].key !== v.einst[n.ei].key)) return false;
+    }
+    for (let i = 0; i < v.items.length; i++) if (v.items[i].zeile !== l.items[i + cutPi].zeile) return false;
+    ns.forEach((n, j) => { if (n.marke) n.zeitMs = s[j + cut].zeitMs; });
+    const aktiv = l.aktivEi != null && l.einst[l.aktivEi] ? l.einst[l.aktivEi].key : null;
+    l.plan = v.plan; l.items = v.items; l.einst = v.einst; l.listeText = text;
+    l.warnungen = v.warnungen.filter(w => !/^Keine (Programme|abspielbaren)/.test(w));
+    l.schritt -= cut;
+    if (l.aktivPi != null) l.aktivPi = l.aktivPi >= cutPi ? l.aktivPi - cutPi : null;
+    if (l.geloggt) { const m = /^(\d+):(\d+)$/.exec(l.geloggt); if (m) l.geloggt = +m[2] >= cutPi ? `${m[1]}:${+m[2] - cutPi}` : null; }
+    l.aktivEi = aktiv ? (v.einst.findIndex(x => x.key === aktiv) >= 0 ? v.einst.findIndex(x => x.key === aktiv) : null) : null;
+    li.value = text; this.einst.liste = text;
+    this.log(`🗓 Vergangenes aus der Liste genommen (${weg.length} Zeile${weg.length === 1 ? '' : 'n'}, bis ${fmtStart(s[cut].zeitMs)})`);
+    speichereAlle();
+    this.pruefe();
+    return true;
+  }
+
+  /**
    * Neue Programmliste in den laufenden Ablauf übernehmen. Das laufende und die schon gelaufenen Programme müssen gleich
    * bleiben; alles danach darf neu sein, sich ändern oder wegfallen. Programme mit offenem Punkt (z. B. NF/HF fehlt) werden
    * übersprungen, bis er geklärt ist. Rückgabe: Fehlertext oder null.
@@ -1746,7 +1799,9 @@ class Generator {
     w.className = 'warnungen' + (m && m.art === 'ok' && !anzeigen.warnungen.length ? ' ok' : '');
     const d = this.einst.durchlaeufe, n = anzeigen.items.filter(it => it.r.art !== 'zeit').length, nm = anzeigen.items.length - n;
     z.textContent = !daten.geladen ? 'Zuerst den Spooky2-Ordner wählen.' : n ? `${n} Programm${n === 1 ? '' : 'e'} · ${anzeigen.einst.length} Preset${anzeigen.einst.length === 1 ? '' : 's'} · ${fmtZeit(anzeigen.plan.gesamtSek)} pro Durchlauf` + (d ? ` · ${d} × = ${fmtZeit(anzeigen.plan.gesamtSek * d)}` : ` · endlos${laufbuch.handle ? ' · Starts gehen ins Kontrollblatt' : ' · ⚠ oben «Laufbuch» wählen, sonst kommt nichts ins Kontrollblatt'}`) + (nm ? ` · ${nm} Zeitmarke${nm === 1 ? '' : 'n'} (Wartezeit nicht eingerechnet)` : '') : 'Liste leer';
+    this.vorschauHoehe();
     if (this.lauf) { this.markiereAktiv(); return this.lauf; }
+    this.zeigeBalken();
     this.vorbereitet = anzeigen.blockiert ? null : anzeigen;
     $('.btn-start', this.karte).disabled = !this.vorbereitet;
     $('.btn-weiter', this.karte).disabled = !this.vorbereitet;
@@ -1754,7 +1809,48 @@ class Generator {
   }
   markiereAktiv() {
     const l = this.lauf, pi = l && l.plan.schritte[l.schritt] ? l.plan.schritte[l.schritt].pi : -1;
-    for (const row of this.karte.querySelectorAll('.vorschau .p')) row.classList.toggle('aktiv', +row.dataset.pi === pi);
+    const vs = $('.vorschau', this.karte);
+    let akt = null;
+    for (const row of vs.querySelectorAll('.p')) { const ja = +row.dataset.pi === pi; row.classList.toggle('aktiv', ja); if (ja) akt = row; }
+    // 0.9.21: wechselt das laufende Programm, Vorschau und Liste dorthin scrollen (nicht, solange die Maus in der Vorschau ist)
+    const neu = pi !== this.balkenPi || (l && l.listeText) !== this.balkenText;
+    this.balkenPi = pi; this.balkenText = l && l.listeText;
+    if (neu && akt && !vs.matches(':hover') && (akt.offsetTop < vs.scrollTop || akt.offsetTop + akt.offsetHeight > vs.scrollTop + vs.clientHeight))
+      vs.scrollTop = Math.max(0, akt.offsetTop - 30);
+    this.zeigeBalken(neu);
+  }
+  /**
+   * 0.9.21 (Markus 11.11.2026: «in diesem feld auch markieren was gerade läuft … ein halb transparenter balken darüber»): Balken über der
+   * laufenden Zeile der Programmliste, Farbe wie das Programm (rot Killing, blau Healing, grün Peptid/Preset, violett MW, gelb wartet
+   * auf Zeitmarke). Während im Feld getippt wird (Text ≠ laufende Liste), ist er weg.
+   */
+  zeigeBalken(scrollen = false) {
+    const li = $('.liste', this.karte), b = $('.liste-balken', this.karte);
+    if (!li || !b) return;
+    const l = this.lauf, s = l && l.plan.schritte[l.schritt], it = s && l.items[s.pi];
+    if (!it || it.zeilenNr == null || li.value !== l.listeText) { b.hidden = true; return; }
+    const cs = getComputedStyle(li), lh = parseFloat(cs.lineHeight) || 19.5, pt = parseFloat(cs.paddingTop) || 0;
+    if (scrollen && document.activeElement !== li) {
+      const ziel = pt + it.zeilenNr * lh;
+      if (ziel < li.scrollTop || ziel + lh > li.scrollTop + li.clientHeight) li.scrollTop = Math.max(0, ziel - lh);
+    }
+    const oben = li.offsetTop + li.clientTop, y = oben + pt + it.zeilenNr * lh - li.scrollTop;
+    const y1 = Math.max(y, oben), y2 = Math.min(y + lh, oben + li.clientHeight);
+    if (y2 - y1 < 2) { b.hidden = true; return; }
+    const ein = s.marke ? null : l.einst[s.ei ?? l.aktivEi];
+    b.className = 'liste-balken ' + (s.marke ? 'w' : farbArt(it, ein && ein.e, s));
+    b.style.top = y1 + 'px'; b.style.height = (y2 - y1) + 'px';
+    b.style.left = (li.offsetLeft + li.clientLeft) + 'px'; b.style.width = li.clientWidth + 'px';
+    b.hidden = false;
+  }
+  /** 0.9.21: In der Einzelansicht reicht die Vorschau bis zum Fensterrand – sie scrollt für sich, die Liste darüber bleibt sichtbar. */
+  vorschauHoehe() {
+    const vs = $('.vorschau', this.karte);
+    if (!vs) return;
+    if (!document.body.classList.contains('einzel') || !this.karte.classList.contains('gezeigt')) { vs.style.maxHeight = ''; return; }
+    const kopf = ($('#kopfbereich') || {}).offsetHeight || 0;
+    const ab = vs.getBoundingClientRect().top - this.karte.getBoundingClientRect().top;
+    vs.style.maxHeight = Math.max(220, window.innerHeight - kopf - ab - 28) + 'px';
   }
 
   sperre(laufend) {
@@ -2167,6 +2263,7 @@ class Generator {
     }
     if (l.status === 'einrichten') { await this.einrichten(); return; }
     if (l.status !== 'laeuft') return;
+    if (Date.now() - (this.gesternGeprueft || 0) > 60000) { this.gesternGeprueft = Date.now(); try { this.gesternWeg(); } catch (e) { this.log('Vergangenes wegnehmen: ' + e.message); } }   // 0.9.21
     const t = performance.now();
     l.tImSchritt += (t - l.letzterTick) / 1000;
     l.letzterTick = t;
@@ -2318,6 +2415,7 @@ function zeige(g, merken = true) {
   if (!g) return;
   gezeigt = g;
   for (const x of generatoren) x.karte.classList.toggle('gezeigt', x === g);
+  requestAnimationFrame(() => { g.vorschauHoehe(); g.zeigeBalken(true); });   // 0.9.21: Karte jetzt sichtbar
   if (merken) { ansicht.nr = zahl(g); speichere(ANSICHT, ansicht); }
   aktualisiereLeiste();
 }
@@ -2333,6 +2431,7 @@ function setzeAnsicht(einzel) {
   document.body.classList.toggle('einzel', einzel);
   $('#btn-ansicht').textContent = einzel ? 'Alle zeigen' : 'Nur gewählten';
   setzeKopfHoehe();
+  alleKarten(g => { g.vorschauHoehe(); g.zeigeBalken(); });   // 0.9.21
   if (gezeigt) gezeigt.karte.scrollIntoView({ block: 'start' });
 }
 
@@ -2348,6 +2447,7 @@ function springeZu(nr) {
 /** Höhe des stehenbleibenden Kopfs, damit die Karte beim Springen nicht darunter verschwindet. */
 function setzeKopfHoehe() {
   document.documentElement.style.setProperty('--kopf', $('#kopfbereich').offsetHeight + 'px');
+  alleKarten(g => g.vorschauHoehe && g.vorschauHoehe());          // 0.9.21: Kopf schmal/gross -> Vorschau bis zum Fensterrand
 }
 /** Beim Scrollen bleibt der Kopf stehen und wird schmal (kleines Logo); oben wieder gross. */
 function beobachteScrollen() {
@@ -2556,7 +2656,7 @@ async function init() {
   $('#btn-ansicht').onclick = () => setzeAnsicht(!ansicht.einzel);
   $('#btn-zuordnen').onclick = oeffneZuordnen;
   setzeAnsicht(ansicht.einzel);
-  window.addEventListener('resize', setzeKopfHoehe);
+  window.addEventListener('resize', () => { setzeKopfHoehe(); alleKarten(g => { g.vorschauHoehe(); g.zeigeBalken(); }); });   // 0.9.21
   beobachteScrollen();
   window.addEventListener('beforeunload', (ev) => { speichereAlle(); if (generatoren.some(g => g.lauf)) { ev.preventDefault(); ev.returnValue = ''; } });
   if (await verbindeBruecke()) {

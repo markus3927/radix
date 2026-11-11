@@ -165,7 +165,18 @@
   .menue-liste .eintrag code{font:600 12px Consolas,monospace;color:var(--royal-dark);flex:none}
   .menue-liste .eintrag span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .menue-liste .eintrag small{color:var(--text-light);flex:none}
-  .vorschau{font-size:12.5px;border:1px solid var(--divider);border-radius:8px;overflow:hidden}
+  /* 0.9.21 (Markus 11.11.2026): Vorschau scrollt für sich, die Liste darüber bleibt stehen */
+  .vorschau{font-size:12.5px;border:1px solid var(--divider);border-radius:8px;overflow-x:hidden;overflow-y:auto;max-height:55vh;overscroll-behavior:contain;position:relative}
+  /* 0.9.21: laufende Zeile in der Programmliste – halb durchsichtiger Balken in der Farbe des Programms */
+  .liste-rahmen{position:relative}
+  .liste-rahmen textarea{display:block}
+  .liste-balken{position:absolute;pointer-events:none;border-radius:2px}
+  .liste-balken[hidden]{display:none}
+  .liste-balken.k{background:rgba(200,16,46,.20);box-shadow:inset 3px 0 var(--kill)}
+  .liste-balken.h{background:rgba(43,82,206,.20);box-shadow:inset 3px 0 var(--heal)}
+  .liste-balken.m{background:rgba(27,127,59,.22);box-shadow:inset 3px 0 var(--mw)}
+  .liste-balken.v{background:rgba(106,27,154,.20);box-shadow:inset 3px 0 var(--mwv)}
+  .liste-balken.w{background:rgba(154,106,0,.20);box-shadow:inset 3px 0 var(--gold)}
   .vorschau:empty{display:none}
   .vorschau div.p{display:grid;grid-template-columns:auto 1fr auto;gap:2px 8px;padding:4px 8px;border-top:1px solid var(--royal-light)}
   .vorschau div.p:first-child{border-top:none}
@@ -278,7 +289,10 @@
         <button class="ghost klein btn-morgen" title="Zuerst unten bei «Start um» die Startzeit für morgen eintragen. Hängt dann die Zeile von morgen aus dem Kontrollblatt an, mit dieser Uhrzeit davor.">Morgen aus Kontrollblatt</button>
         <button class="ghost klein btn-leeren" title="Liste leeren (läuft der Generator, wird er zuerst gestoppt). Danach mit Start wieder von vorne.">Leeren</button>
       </div>
-      <textarea class="liste" spellcheck="false" wrap="off" placeholder="Beispiel (Liste ist leer):&#10;pr0245 NF&#10;pa30&#10;um 06:00&#10;437=240, 727=420"></textarea>
+      <div class="liste-rahmen">
+        <textarea class="liste" spellcheck="false" wrap="off" placeholder="Beispiel (Liste ist leer):&#10;pr0245 NF&#10;pa30&#10;um 06:00&#10;437=240, 727=420"></textarea>
+        <div class="liste-balken" hidden></div>
+      </div>
     </div>
     <div class="neu" hidden><span class="neu-text"></span><button class="ghost klein btn-anhaengen">Anhängen</button></div>
     <details class="menue" hidden><summary>Programme des Kunden (Kontrollblatt)</summary><div class="menue-liste"></div></details>

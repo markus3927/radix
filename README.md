@@ -58,6 +58,19 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.21 (Brücke bleibt 1.2.1) – Vorschau scrollt für sich, laufende Zeile markiert, Gestriges weg
+Markus 11.11.2026.
+- **Vorschau** (Liste mit Presets und Zeiten unter der Programmliste) hat eine feste Höhe und scrollt mit dem Mausrad für sich;
+  die Programmliste darüber bleibt stehen. In der Einzelansicht reicht sie bis zum Fensterrand. Wechselt das Programm, scrollen
+  Vorschau und Liste zum laufenden (nicht, solange die Maus in der Vorschau ist bzw. im Feld getippt wird).
+- **Laufende Zeile in der Programmliste**: halb durchsichtiger Balken in der Farbe des Programms (rot Killing, blau Healing,
+  grün Peptid/Preset, violett MW, gelb = wartet auf Zeitmarke). Beim Tippen im Feld verschwindet er, bis die Änderung übernommen ist.
+- **Gestriges löscht sich selbst** (nur Listen mit 1 Durchlauf): einmal pro Minute nimmt RADIX alles vor dem ersten Block von heute
+  aus der Liste (Block = ab einer Zeitmarke, die heute schon war). Gab es heute noch keine (z. B. 01:00, Nacht läuft), dann alles vor
+  dem laufenden Block. Laufendes und Kommendes bleibt gleich, Zeitmarken behalten ihre Zeit, Fortsetzen nach Neuladen geht weiter.
+  Passt etwas nicht 1:1, bleibt die Liste unverändert. Im Protokoll: «🗓 Vergangenes aus der Liste genommen».
+- Tests (Playwright, simulierter XM, Uhr per Date-Offset): 13 Fälle Tageswechsel/Neuladen + 10 Fälle Scrollen/Balken/Durchläufe 2 – alle grün.
+
 ## Stand Version 0.9.20 (Brücke bleibt 1.2.1) – «→ RADIX» sofort, Angehängtes nur einmal, Stand bleibt beim Neuladen
 Markus 09.11.2026: Gen 1 wartete mit der Woche (7×, «um 05:00») – pr2256 per «→ RADIX» «hängt unten dran anstelle von jetzt starten
 können». Dabei zeigte sich: alles, was in eine Liste mit mehreren Durchläufen angehängt wurde (auch Handy-Aufträge), lief jeden Tag
