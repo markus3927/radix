@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.22';
+const VERSION = '0.9.23';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -219,7 +219,18 @@ function beobachteQuellen() {
 // Kontrollblatts (die speichert die Kontrollapp selbst nach jedem Eintrag – zwei Schreiber würden sich überschreiben).
 // Noch nicht geschriebene Einträge warten im Browser (localStorage), bis die Datei gewählt bzw. freigegeben ist.
 const LAUFBUCH_OFFEN = 'radix-laufbuch-offen';
-const laufbuch = { handle: null, offen: lade(LAUFBUCH_OFFEN, []), uhr: null, schreibt: false, nochmal: false, frei: false, zuletzt: '' };
+const laufbuch = { handle: null, offen: lade(LAUFBUCH_OFFEN, []), uhr: null, schreibt: false, nochmal: false, frei: false, zuletzt: '',
+  aktiv: null, aktivZeit: null };                                   // 0.9.23: in RADIX angeklickter Generator -> Kontrollapp springt zum Blatt
+/** 0.9.23 (Markus 12.11.2026: «wenn ich im kontrollfinder auf die kundenkachel klicke springt die radix zur gleichen kunden nummer.
+ *  das sollte umgekehrt auch so sein»): Klick auf einen Knopf der Leiste -> "aktiv"/"aktivZeit" sofort ins Laufbuch; die Kontrollapp
+ *  (ab R418) liest das und öffnet dieses Blatt. Nur echte Klicks – Sprünge, die von der Kontrollapp oder von Handy-Aufträgen kommen,
+ *  melden nichts zurück (kein Pingpong). */
+function laufbuchAktiv(nr) {
+  const n = Number(nr);
+  if (!Number.isFinite(n) || n < 1) return;
+  laufbuch.aktiv = n; laufbuch.aktivZeit = Date.now();
+  laufbuchSchreiben();
+}
 
 function laufbuchElemente() {
   if (laufbuch.knopf) return;
@@ -283,7 +294,7 @@ async function laufbuchSchreiben() {
     const auftraege = K.quittungenMischen(altQ, auftrag.quittungen, Date.now());   // 0.9.9: Quittungen der Handy-Aufträge
     const vorschau = vorschauAlle();                                                // 0.9.16
     const w = await laufbuch.handle.createWritable();
-    await w.write(JSON.stringify({ radix: VERSION, stand: new Date().toISOString(), hinweis: 'Schreibt nur RADIX (jeder Programmstart, ab 0.9.19 auch normale Listen). Die Kontrollapp liest diese Datei.', eintraege, auftraege, vorschau, vorschauStand: Date.now() }, null, 1));
+    await w.write(JSON.stringify({ radix: VERSION, stand: new Date().toISOString(), hinweis: 'Schreibt nur RADIX (jeder Programmstart, ab 0.9.19 auch normale Listen). Die Kontrollapp liest diese Datei.', eintraege, auftraege, vorschau, vorschauStand: Date.now(), ...(laufbuch.aktiv ? { aktiv: laufbuch.aktiv, aktivZeit: laufbuch.aktivZeit } : {}) }, null, 1));
     laufbuch.vorschau = vorschau; laufbuch.vorschauT = Date.now();
     await w.close();
     const ids = new Set(mit.map(e => e.id));
@@ -2658,7 +2669,7 @@ async function init() {
       };
       setInterval(zeige, 1500); setTimeout(zeige, 300);
     } }
-  $('#leiste').onclick = (ev) => { const b = ev.target.closest('button[data-nr]'); if (b) springeZu(b.dataset.nr); };
+  $('#leiste').onclick = (ev) => { const b = ev.target.closest('button[data-nr]'); if (b) { springeZu(b.dataset.nr); laufbuchAktiv(b.dataset.nr); } };   // 0.9.23
   $('#btn-ansicht').onclick = () => setzeAnsicht(!ansicht.einzel);
   $('#btn-zuordnen').onclick = oeffneZuordnen;
   setzeAnsicht(ansicht.einzel);

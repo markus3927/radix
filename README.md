@@ -31,7 +31,7 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
    wegfallen; das laufende und die schon gelaufenen bleiben gesperrt (Meldung über der Vorschau). Offenes NF/HF wird
    übersprungen, bis es per Knopf geklärt ist.
 8. **Leiste im Kopf:** ein Knopf pro Generator, Farbe = Zustand (rot Killing, blau Healing, gelb stellt um/wartet, weiss steht,
-   roter Rand Fehler). Klick springt zur Karte. Klickt man im Kontrollblatt ein Blatt an, springt RADIX zur Karte dieses
+   roter Rand Fehler). Klick springt zur Karte und öffnet (ab 0.9.23 / Kontrollapp R418) dasselbe Blatt in der Kontrollapp. Klickt man im Kontrollblatt ein Blatt an, springt RADIX zur Karte dieses
    Generators – sobald das Kontrollblatt beim Blattwechsel `"aktiv": <Nummer>` und `"aktivZeit": <Zeitstempel>` in die
    Sicherungsdatei schreibt.
 
@@ -57,6 +57,13 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
     «⏭ Nächstes Programm» während dem Warten startet sofort. Mehrere Marken pro Liste möglich.
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
+
+## Stand Version 0.9.23 (Brücke bleibt 1.2.1) – Klick in der Leiste öffnet das Blatt in der Kontrollapp
+Markus 12.11.2026: «wenn ich im kontrollfinder auf die kundenkachel klicke springt die radix zur gleichen kunden nummer. das sollte
+umgekehrt auch so sein.» Klick auf einen Generator-Knopf in der Leiste im Kopf schreibt sofort `"aktiv": <Nummer>` und
+`"aktivZeit": <Zeitstempel>` ins Laufbuch (`RADIX_Laufbuch.json`). Die Kontrollapp (ab R418) prüft das Laufbuch alle 1,5 s und
+öffnet dieses Blatt. Sprünge, die von der Kontrollapp oder von Handy-Aufträgen kommen, melden nichts zurück (kein Hin und Her).
+Voraussetzung: Laufbuch in RADIX und in der Kontrollapp gewählt (wie bisher).
 
 ## Stand Version 0.9.22 (Brücke bleibt 1.2.1) – aktive Zeile der Vorschau in der Programmfarbe
 Markus 11.11.2026: Die laufende Zeile in der Vorschau hat dieselbe Farbe wie der Balken in der Liste (rot Killing, blau Healing,
