@@ -58,6 +58,11 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.24 (Brücke bleibt 1.2.1) – ganzer Plan ins Laufbuch
+Markus 12.11.2026: Im Feld «Programme» der Kontrollapp soll nur stehen, was läuft oder noch kommt. RADIX schreibt dazu ins Laufbuch das Feld
+`plan`: je Generator alle Programme der Liste ab dem laufenden (bei Endlosschleife bzw. weiteren Durchläufen die ganze Liste), mit NF/HF.
+Die Kontrollapp (ab R423) räumt danach auf.
+
 ## Stand Version 0.9.23 (Brücke bleibt 1.2.1) – Klick in der Leiste öffnet das Blatt in der Kontrollapp
 Markus 12.11.2026: «wenn ich im kontrollfinder auf die kundenkachel klicke springt die radix zur gleichen kunden nummer. das sollte
 umgekehrt auch so sein.» Klick auf einen Generator-Knopf in der Leiste im Kopf schreibt sofort `"aktiv": <Nummer>` und

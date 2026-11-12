@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.23';
+const VERSION = '0.9.24';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -294,7 +294,7 @@ async function laufbuchSchreiben() {
     const auftraege = K.quittungenMischen(altQ, auftrag.quittungen, Date.now());   // 0.9.9: Quittungen der Handy-Aufträge
     const vorschau = vorschauAlle();                                                // 0.9.16
     const w = await laufbuch.handle.createWritable();
-    await w.write(JSON.stringify({ radix: VERSION, stand: new Date().toISOString(), hinweis: 'Schreibt nur RADIX (jeder Programmstart, ab 0.9.19 auch normale Listen). Die Kontrollapp liest diese Datei.', eintraege, auftraege, vorschau, vorschauStand: Date.now(), ...(laufbuch.aktiv ? { aktiv: laufbuch.aktiv, aktivZeit: laufbuch.aktivZeit } : {}) }, null, 1));
+    await w.write(JSON.stringify({ radix: VERSION, stand: new Date().toISOString(), hinweis: 'Schreibt nur RADIX (jeder Programmstart, ab 0.9.19 auch normale Listen). Die Kontrollapp liest diese Datei.', eintraege, auftraege, vorschau, vorschauStand: Date.now(), plan: (() => { try { return planAlle(); } catch (e) { return {}; } })(), ...(laufbuch.aktiv ? { aktiv: laufbuch.aktiv, aktivZeit: laufbuch.aktivZeit } : {}) }, null, 1));
     laufbuch.vorschau = vorschau; laufbuch.vorschauT = Date.now();
     await w.close();
     const ids = new Set(mit.map(e => e.id));
@@ -808,6 +808,26 @@ function laufVorschau(l, jetzt, bisMs, max = 80) {
     if (!alle.some(x => x.marke) && !l.durchlaeufe && d > l.durchlauf + 400) break;   // Sicherung
   }
   return out;
+}
+/** 0.9.24 (Markus 12.11.2026: Feld «Programme» soll nur zeigen, was läuft oder noch kommt): je Generator alle Programme, die in der
+ *  Liste ab jetzt noch kommen (laufendes eingeschlossen; Endlosschleife / weitere Durchläufe = ganze Liste), ohne Zeitgrenze.
+ *  Laufbuch-Feld «plan»: { "9": ["pr0001", "pr0532 HF", …] }. Die Kontrollapp (ab R423) räumt danach auf. */
+function planAlle() {
+  const v = {};
+  for (const g of generatoren) {
+    const l = g.lauf; if (!l || !l.items || !l.plan || !l.plan.schritte) continue;
+    const s = l.plan.schritte[l.schritt] || l.plan.schritte[0];
+    const letzter = l.durchlaeufe && l.durchlauf >= l.durchlaeufe;
+    const ab = (letzter && s) ? s.pi : 0;
+    const set = new Set();
+    l.items.forEach((it, i) => {
+      if (i < ab || !it || it.fehler || (it.r && it.r.art === 'zeit')) return;
+      const m = /^(pr\d{4}|pp\d{4})(?:\s+(NF|HF))?/i.exec(String(it.code || '').trim());
+      if (m) set.add(m[1].toLowerCase() + (m[2] ? ' ' + m[2].toUpperCase() : ''));
+    });
+    if (set.size) v[parseInt(g.einst.nr, 10)] = [...set];
+  }
+  return v;
 }
 /** 0.9.16: Vorschau aller Generatoren fürs Laufbuch: { "1": [ … ], … }, 36 Stunden voraus. */
 function vorschauAlle(jetzt = Date.now()) {
