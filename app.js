@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.24';
+const VERSION = '0.9.25';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -391,11 +391,46 @@ function auftragErledigt(a) {
   for (const [id, t] of Object.entries(auftrag.erledigt)) if (t < grenze) delete auftrag.erledigt[id];
   speichere(AUFTRAG_ERLEDIGT, auftrag.erledigt);
 }
+/**
+ * 0.9.25: Kachel in der Kontrollapp geleert bzw. heute ausgeschaltet -> ihre Zeilen von heute aus der Programmliste nehmen.
+ * Schon Gelaufenes und das laufende Programm bleiben (lassen sich nicht ändern), alles danach geht weg.
+ */
+function fixAufraeumen() {
+  if (!daten.kontrolle || !Array.isArray(daten.kontrolle.ablaeufe)) return;
+  const jetzt = new Date(), heute = `${zwei(jetzt.getMonth() + 1)}${zwei(jetzt.getDate())}`;
+  for (const g of generatoren) {
+    const zeilen = g.einst.liste.split('\n');
+    if (!zeilen.some(z => /\uDB40/.test(z))) continue;
+    let ab = 0;                                                         // erste Zeile, die noch geändert werden darf
+    const l = g.lauf, s = l && l.plan && l.plan.schritte[l.schritt];
+    if (l && s && l.items[s.pi]) ab = l.items[s.pi].zeilenNr + 1;     // laufendes Programm bzw. Zeitmarke, an der er wartet, bleibt
+    const weg = [], namen = new Set();
+    zeilen.forEach((z, i) => {
+      if (i < ab) return;
+      const m = K.fixMarkeLesen(z);
+      if (!m || m.gen !== zahl(g) || m.mmtt !== heute || K.fixAktiv(daten.kontrolle, m.gen, m.fix, jetzt)) return;
+      weg.push(i); namen.add(m.fix);
+    });
+    if (!weg.length) continue;
+    const codes = weg.map(i => zeilen[i]).filter(z => !K.zeitmarke(z) && !K.loopmarke(z)).map(z => K.sauber(z).split(/\s{2,}|\t/)[0]).join(', ');
+    const text = zeilen.filter((z, i) => !weg.includes(i)).join('\n');
+    const vorher = g.einst.liste;
+    if (g.fixWegVersucht === vorher + '\u0000' + text) continue;        // schon versucht, ging nicht: nicht alle 5 s wieder melden
+    $('.liste', g.karte).value = text;
+    g.setzeListe(text);
+    if (g.einst.liste === vorher) { g.fixWegVersucht = vorher + '\u0000' + text; continue; }   // ging nicht (Meldung steht auf der Karte)
+    const w = `🗓 Fixkachel ${[...namen].join(', ')} in der Kontrollapp geleert bzw. heute aus – aus der Liste genommen: ${codes || 'Zeitmarke'}`;
+    g.log(w); g.melde(w, 'ok');
+  }
+}
 async function auftraegeAbarbeiten() {
   if (auftrag.laeuft) return;
   auftrag.laeuft = true;
   try {
-    for (const a of auftrag.liste) {
+    try { fixAufraeumen(); } catch (e) { /* nächster Durchgang */ }
+    let fix = [];                                                   // 0.9.25: fällige Fixkacheln (Kontrollapp ab R425) wie Handy-Aufträge
+    try { fix = daten.kontrolle ? K.fixFaellig(daten.kontrolle, new Date(), daten.finder) : []; } catch (e) { fix = []; }
+    for (const a of [...auftrag.liste, ...fix]) {
       if (auftrag.erledigt[a.id]) continue;
       if (a.fehler) { auftragErledigt(a); auftragQuittung(a, 'fehler', `Auftrag ungültig: ${a.fehler}`); continue; }
       if (Date.now() - a.erstellt > AUFTRAG_MAX_ALTER) { auftragErledigt(a); auftragQuittung(a, 'verfallen', 'älter als 3 Stunden – nicht ausgeführt'); continue; }
@@ -2133,7 +2168,7 @@ class Generator {
       if (this.gx) await this.beendeTestGX(); else this.setzeTest(false);
     }
     const zeilen = a.zeilen.map(z => K.handyZeile(handyMitName(z))), codes = a.zeilen.filter(z => !K.zeitmarke(z) && !K.loopmarke(z)).map(z => z.split(/\s{2,}|\t/)[0]).join(', ');
-    this.log(`📱 Handy-Auftrag (${a.art})${a.text ? ': ' + a.text : ''}`);
+    this.log(a.fixKachel ? `🗓 ${a.text}` : `📱 Handy-Auftrag (${a.art})${a.text ? ': ' + a.text : ''}`);   // 0.9.25
     if (a.art === 'stoppen') {
       if (!this.lauf) return { status: 'gestoppt', text: 'lief nicht' };
       await this.stoppe('Gestoppt per Handy-Auftrag');

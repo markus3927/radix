@@ -642,7 +642,77 @@
     if (!Object.keys(blaetter).length) throw new Error('Keine Kontrollblätter in der Datei');
     // Gerade angeklicktes Blatt (schreibt das Kontrollblatt beim Blattwechsel): «aktiv»: 5, «aktivZeit»: Zeitstempel
     const a = parseInt(d.aktiv, 10);
-    return { blaetter, aktiv: Number.isFinite(a) ? a : null, aktivZeit: d.aktivZeit ?? null };
+    return { blaetter, aktiv: Number.isFinite(a) ? a : null, aktivZeit: d.aktivZeit ?? null, ablaeufe: Array.isArray(d.ablaeufe) ? d.ablaeufe : [] };   // 0.9.25: Fixkacheln
+  }
+
+  /**
+   * 0.9.25 (Markus 15.11.2026, Kontrollapp R425 mit Wochentagen in den Fixkacheln: «dann macht die wochen planung kein sinn. es sollte
+   * so sein, das es immer dann kommt, so wie es eingestellt ist»). Fixkacheln laufen an ihren aktiven Wochentagen von selbst.
+   * Kachel = Ablauf im Kontrollblatt { fix: 1–8, gen: [Blatt], name, z: ['um 10.27', 'pr0085\tName', …], tage?: [1–7] (1 = Mo,
+   * ohne Feld = jeden Tag, [] = aus) }. Fällig ab der ersten Zeitmarke bis 3 Stunden danach (RADIX war zu: wird nachgeholt; später
+   * nicht mehr). Ohne Zeitmarke läuft eine Kachel nie von selbst. Rückgabe: Aufträge wie vom Handy (art «anhaengen», Durchläufe 1) –
+   * die erste Zeitmarke fällt weg (sie ist die Startzeit), weitere Zeitmarken und loop bleiben. id je Tag, Blatt, Platz und Startzeit.
+   */
+  const FIX_FENSTER = 3 * 3600e3;
+  function fixTageListe(t) { return Array.isArray(t) ? [...new Set(t.map(x => Math.round(+x)).filter(x => x >= 1 && x <= 7))] : [1, 2, 3, 4, 5, 6, 7]; }
+  /** Programmzeile einer Kachel: NF/HF wie in der Tageszeile; bleibt es offen (Kombi wie pr2262), gilt NF (Standard wie bei Handy-Aufträgen). */
+  function fixZeile(x, b, katalog) {
+    const z = kontrolleZeile(x, b, katalog);
+    if (!x.code.startsWith('pr') || /^pr\d{4} (NF|HF)\b/.test(z) || !katalog || katalog.programme.has(x.code) || !katalog.programme.has(`${x.code} NF`)) return z;
+    return `${x.code} NF  ${x.name}`.trim();
+  }
+  /**
+   * 0.9.25 (Markus 15.11.2026: «Und wenn das nicht mehr aktuell ist sollte ich das auch wieder löschen können. Es sollte auch im radix
+   * gelöscht werden.»): Jede Zeile einer Kachel trägt in der Programmliste eine unsichtbare Marke (Tag-Zeichen wie die Uhrzeit-Marken des
+   * Kontrollblatts, «sauber» entfernt sie): «K<Blatt>-<Platz>-<MMTT>», Ziffern als Tag-Buchstaben a–j (keine Tag-Ziffern, die braucht die
+   * Kontrollapp für ihre Uhrzeiten). Wird die Kachel geleert oder ist sie heute nicht mehr aktiv, nimmt RADIX ihre Zeilen wieder heraus.
+   */
+  const tagZeichen = (t) => [...String(t)].map(c => String.fromCharCode(0xDB40, 0xDC00 + (/\d/.test(c) ? 0x61 + +c : c.charCodeAt(0)))).join('');
+  function fixMarke(gen, fix, datum) { return tagZeichen(`K${gen}-${fix}-${zwei(datum.getMonth() + 1)}${zwei(datum.getDate())}`); }
+  function fixMarkeLesen(zeile) {
+    const m = /((?:\uDB40[\uDC00-\uDC7F])+)/.exec(String(zeile || ''));
+    if (!m) return null;
+    const t = m[1].match(/\uDB40[\uDC00-\uDC7F]/g).map(x => x.charCodeAt(1) - 0xDC00).map(c => c >= 0x61 && c <= 0x6A ? String(c - 0x61) : String.fromCharCode(c)).join('');
+    const k = /K(\d+)-(\d)-(\d{4})/.exec(t);
+    return k ? { gen: +k[1], fix: +k[2], mmtt: k[3] } : null;
+  }
+  /** Ist die Kachel (Blatt, Platz) heute noch aktiv? Kachel weg, Tag aus oder ohne Startzeit = nein. */
+  function fixAktiv(kontrolle, gen, fix, jetzt = new Date()) {
+    const wt = ((jetzt.getDay() + 6) % 7) + 1;
+    return !!(kontrolle && Array.isArray(kontrolle.ablaeufe) && kontrolle.ablaeufe.some(a => a && parseInt(a.fix, 10) === fix && Array.isArray(a.gen) &&
+      a.gen.some(g => parseInt(g, 10) === gen) && fixTageListe(a.tage).includes(wt) && Array.isArray(a.z) && a.z.some(z => zeitmarke(z))));
+  }
+  function fixFaellig(kontrolle, jetzt = new Date(), katalog = null) {
+    const aus = [];
+    if (!kontrolle || !Array.isArray(kontrolle.ablaeufe)) return aus;
+    const wt = ((jetzt.getDay() + 6) % 7) + 1, iso = `${jetzt.getFullYear()}-${zwei(jetzt.getMonth() + 1)}-${zwei(jetzt.getDate())}`;
+    for (const a of kontrolle.ablaeufe) {
+      const fix = parseInt(a && a.fix, 10);
+      if (!(fix >= 1 && fix <= 8) || !Array.isArray(a.gen) || !Array.isArray(a.z)) continue;
+      if (!fixTageListe(a.tage).includes(wt)) continue;
+      const e = kontrolleEintraege(a.z.join('\n'));
+      const i0 = e.findIndex(x => x.code === 'um');
+      if (i0 < 0 || e.slice(0, i0).some(x => x.code !== 'loop')) continue;      // muss mit einer Startzeit beginnen
+      const [h, mi] = e[i0].um.split(':').map(Number);
+      const start = new Date(jetzt.getFullYear(), jetzt.getMonth(), jetzt.getDate(), h, mi, 0, 0).getTime();
+      if (jetzt.getTime() < start || jetzt.getTime() >= start + FIX_FENSTER) continue;
+      const rest = e.slice(i0 + 1);
+      if (!rest.some(x => /^(pr|pp|pa|sm)/.test(x.code))) continue;
+      for (const g of a.gen) {
+        const nr = parseInt(g, 10), b = kontrolle.blaetter && kontrolle.blaetter[String(nr)];
+        const kunde = b && b.name ? String(b.name).trim() : '';
+        if (!kunde) continue;                                             // freies Blatt: nichts
+        const name = String(a.name || `Fix ${fix}`).trim(), mk = fixMarke(nr, fix, jetzt);
+        aus.push({
+          id: `fix-${iso}-gen${nr}-k${fix}-${e[i0].um.replace(':', '')}`, erstellt: start, gen: nr, kunde, art: 'anhaengen', durchlaeufe: 1,
+          zeilen: rest.map(x => (x.code === 'um' ? `um ${x.um}` : x.code === 'loop' ? `loop-${x.loop}` : fixZeile(x, b, katalog)) + mk),
+          text: `Fixkachel «${name}» (${['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'][wt - 1]} ${e[i0].um})`, fixKachel: { fix, name, um: e[i0].um },
+          kontrolle: kontrolleProgramme(rest.filter(x => /^(pr|pp)/.test(x.code)).map(x => ({ tok: x.code, zeile: `${x.code} ${x.name}`.trim() }))),
+          plan: null, fehler: '',
+        });
+      }
+    }
+    return aus;
   }
 
   /**
@@ -979,6 +1049,7 @@
     lesePresetAngabe, finderDaten, finderKatalog, deuteListenZeile, sauber, zeitmarke, loopmarke, markenDatum, morgenDatumSetzen,
     kontrolleEintraege, kontrolleZeile, leseKontrolle, kontrolleHeute, kontrolleSendeStempel, datumText, kontrolleSchluessel, kontrolleNeu, kontrolleGesehen, kontrolleLetzteMarke, kontrolleMitMarke, kontrolleGruppen, listeEingefuegt,
     LAUF_MARKE, laufbuchEintrag, laufbuchMischen, leseAuftraege, kontrolleProgramme, kontrollePlan, handyZeile, kundePasst, quittungenMischen,
+    fixFaellig, fixTageListe, fixMarke, fixMarkeLesen, fixAktiv,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = Kern;
   else root.Kern = Kern;

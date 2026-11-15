@@ -58,6 +58,16 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.25 (Brücke bleibt 1.2.1) – Fixkacheln laufen von selbst
+- Markus 15.11.2026: «es sollte so sein, das es immer dann kommt, so wie es eingestellt ist» · «Es sollte auch im radix gelöscht werden.»
+- RADIX liest die Fixkacheln der Kontrollapp (ab R426, Feld `ablaeufe` der Sicherung). Jede Kachel startet an ihren aktiven Wochentagen
+  zur ersten Zeitmarke («um 10.27») von selbst – wie ein Handy-Auftrag «anhängen» (läuft schon etwas: vor die nächste Zeitmarke).
+  RADIX war zu: bis 3 Stunden später nachgeholt. Ohne Zeitmarke zuoberst läuft eine Kachel nie von selbst. Quittung im Laufbuch (`fix-…`).
+- Kachel geleert oder Tag ausgeschaltet: RADIX nimmt, was davon heute noch nicht gelaufen ist, wieder aus der Liste (laufendes Programm läuft fertig).
+  Die Zeilen tragen dazu eine unsichtbare Marke.
+- Getestet: Kern 21/21 (echte Sicherung + Finder), Browser mit simuliertem XM 18/18 (starten, anhängen vor «um 23:00», leeren, Tag aus,
+  nicht doppelt, Handy-Auftrag wie bisher).
+
 ## Stand Version 0.9.24 (Brücke bleibt 1.2.1) – ganzer Plan ins Laufbuch
 Markus 12.11.2026: Im Feld «Programme» der Kontrollapp soll nur stehen, was läuft oder noch kommt. RADIX schreibt dazu ins Laufbuch das Feld
 `plan`: je Generator alle Programme der Liste ab dem laufenden (bei Endlosschleife bzw. weiteren Durchläufen die ganze Liste), mit NF/HF.
