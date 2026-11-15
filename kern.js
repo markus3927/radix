@@ -682,7 +682,23 @@
     return !!(kontrolle && Array.isArray(kontrolle.ablaeufe) && kontrolle.ablaeufe.some(a => a && parseInt(a.fix, 10) === fix && Array.isArray(a.gen) &&
       a.gen.some(g => parseInt(g, 10) === gen) && fixTageListe(a.tage).includes(wt) && Array.isArray(a.z) && a.z.some(z => zeitmarke(z))));
   }
-  function fixFaellig(kontrolle, jetzt = new Date(), katalog = null) {
+  /**
+   * 0.9.26 (Markus 15.11.2026: «frage nur weil der nächste tag nirgends erscheint» – «das wäre perfekt»): kommende Kachel-Läufe
+   * (Start nach «jetzt» bis «bisMs»), heute und die nächsten Tage. Gleiche Zeilen wie fixFaellig; Rückgabe [{ gen, fix, name, startMs, zeilen }].
+   */
+  function fixKommend(kontrolle, jetzt = new Date(), bisMs = jetzt.getTime() + 36 * 3600e3, katalog = null) {
+    const aus = [];
+    for (let t = 0; t <= 3; t++) {
+      const tag = new Date(jetzt.getFullYear(), jetzt.getMonth(), jetzt.getDate() + t, 0, 0, 0, 0);
+      if (tag.getTime() > bisMs) break;
+      const spaet = new Date(tag.getTime()); spaet.setHours(23, 59, 0, 0);
+      for (const a of fixFaellig(kontrolle, spaet, katalog, true)) {
+        if (a.erstellt > jetzt.getTime() && a.erstellt < bisMs) aus.push({ gen: a.gen, fix: a.fixKachel.fix, name: a.fixKachel.name, startMs: a.erstellt, zeilen: a.zeilen, id: a.id });
+      }
+    }
+    return aus.sort((x, y) => x.startMs - y.startMs);
+  }
+  function fixFaellig(kontrolle, jetzt = new Date(), katalog = null, ganzerTag = false) {
     const aus = [];
     if (!kontrolle || !Array.isArray(kontrolle.ablaeufe)) return aus;
     const wt = ((jetzt.getDay() + 6) % 7) + 1, iso = `${jetzt.getFullYear()}-${zwei(jetzt.getMonth() + 1)}-${zwei(jetzt.getDate())}`;
@@ -695,7 +711,7 @@
       if (i0 < 0 || e.slice(0, i0).some(x => x.code !== 'loop')) continue;      // muss mit einer Startzeit beginnen
       const [h, mi] = e[i0].um.split(':').map(Number);
       const start = new Date(jetzt.getFullYear(), jetzt.getMonth(), jetzt.getDate(), h, mi, 0, 0).getTime();
-      if (jetzt.getTime() < start || jetzt.getTime() >= start + FIX_FENSTER) continue;
+      if (!ganzerTag && (jetzt.getTime() < start || jetzt.getTime() >= start + FIX_FENSTER)) continue;   // ganzerTag: alle des Tags (0.9.26)
       const rest = e.slice(i0 + 1);
       if (!rest.some(x => /^(pr|pp|pa|sm)/.test(x.code))) continue;
       for (const g of a.gen) {
@@ -1049,7 +1065,7 @@
     lesePresetAngabe, finderDaten, finderKatalog, deuteListenZeile, sauber, zeitmarke, loopmarke, markenDatum, morgenDatumSetzen,
     kontrolleEintraege, kontrolleZeile, leseKontrolle, kontrolleHeute, kontrolleSendeStempel, datumText, kontrolleSchluessel, kontrolleNeu, kontrolleGesehen, kontrolleLetzteMarke, kontrolleMitMarke, kontrolleGruppen, listeEingefuegt,
     LAUF_MARKE, laufbuchEintrag, laufbuchMischen, leseAuftraege, kontrolleProgramme, kontrollePlan, handyZeile, kundePasst, quittungenMischen,
-    fixFaellig, fixTageListe, fixMarke, fixMarkeLesen, fixAktiv,
+    fixFaellig, fixKommend, fixTageListe, fixMarke, fixMarkeLesen, fixAktiv,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = Kern;
   else root.Kern = Kern;

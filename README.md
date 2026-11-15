@@ -58,6 +58,13 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.26 (Brücke bleibt 1.2.1) – kommende Fixkacheln sichtbar
+- Markus 15.11.2026: «frage nur weil der nächste tag nirgends erscheint» – «das wäre perfekt».
+- Karte: unten in der Vorschau je kommender Kachel-Lauf (36 h) «🗓 Name · 10:27 Uhr am Dienstag» mit Dauer und Programmen (hellblau).
+- Laufbuch-Vorschau enthält die Kachel-Programme (Feld `fix`) – die Kontrollapp zeigt sie halb transparent in der Tageszeile ihres Tags.
+- Zeiten ab der Startzeit gerechnet (läuft dann noch etwas, kommt die Kachel danach). Heute schon gelaufene zählen nicht.
+- Getestet: Kern 23/23, Browser mit simuliertem XM 24/24, Kontrollapp R426 zeigt die Einträge in der Zeile von morgen.
+
 ## Stand Version 0.9.25 (Brücke bleibt 1.2.1) – Fixkacheln laufen von selbst
 - Markus 15.11.2026: «es sollte so sein, das es immer dann kommt, so wie es eingestellt ist» · «Es sollte auch im radix gelöscht werden.»
 - RADIX liest die Fixkacheln der Kontrollapp (ab R426, Feld `ablaeufe` der Sicherung). Jede Kachel startet an ihren aktiven Wochentagen

@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.25';
+const VERSION = '0.9.26';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -145,7 +145,7 @@ const quellen = {
       daten.kontrolle = { ...k, zeit: datei.lastModified, name: datei.name };
       const stand = new Date(datei.lastModified).toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
       setzeQuelle(this.status, `Stand ${stand} · ${Object.keys(k.blaetter).length} Blätter · ${datei.name}`, 'ok');
-      alleKarten(g => g.aktualisiereKunde());
+      alleKarten(g => { g.aktualisiereKunde(); if ((g.fixH || '') !== (() => { try { return g.fixHtml(); } catch (e) { return ''; } })()) g.pruefe(); });   // 0.9.26
       // Blatt im Kontrollblatt angeklickt -> zur Karte dieses Generators springen (nicht beim ersten Lesen)
       if (vorher && k.aktiv != null && (k.aktiv !== vorher.aktiv || k.aktivZeit !== vorher.aktivZeit)) springeZu(k.aktiv);
     },
@@ -864,13 +864,36 @@ function planAlle() {
   }
   return v;
 }
-/** 0.9.16: Vorschau aller Generatoren fürs Laufbuch: { "1": [ … ], … }, 36 Stunden voraus. */
+/**
+ * 0.9.26: Kommende Kachel-Läufe eines Generators als Vorschau-Einträge { code, name, von, bis, fix } (Zeiten ab der Startzeit
+ * hintereinander gerechnet; läuft dann noch etwas, kommt die Kachel danach – die Zeiten sind darum «ab»). Erledigte (heute schon
+ * gelaufen) zählen nicht. Weitere Zeitmarken in der Kachel: warten bis dahin.
+ */
+function fixKommendFuer(nr, jetzt = Date.now(), bis = jetzt + 36 * 3600e3) {
+  if (!daten.kontrolle || !daten.finder) return [];
+  let k = []; try { k = K.fixKommend(daten.kontrolle, new Date(jetzt), bis, daten.finder); } catch (e) { return []; }
+  return k.filter(x => x.gen === nr && !auftrag.erledigt[x.id]).map(x => {
+    const v = bereiteListeVor(x.zeilen.join('\n'), '');
+    let t = x.startMs; const prog = [];
+    for (const it of v.items) {
+      if (it.r.art === 'zeit') { t = naechsteUhrzeit(it.r.um, t - 1); continue; }
+      const sek = it.sek || 0;
+      if (/^(pr\d{4}|pp\d{4}|pa\d{2}|sm\d{2})/i.test(it.code || '')) prog.push({ code: it.code, name: String(it.name || '').replace(/ · Lauf \d+\/\d+$/, ''), von: t, bis: t + sek * 1000, fix: x.fix, sek, fehler: it.fehler || '' });
+      t += sek * 1000;
+    }
+    return { ...x, prog, ende: t };
+  });
+}
+/** 0.9.16: Vorschau aller Generatoren fürs Laufbuch: { "1": [ … ], … }, 36 Stunden voraus. 0.9.26: mit kommenden Fixkacheln. */
 function vorschauAlle(jetzt = Date.now()) {
   const v = {};
   for (const g of generatoren) {
-    if (!g.lauf) continue;
-    let liste = []; try { liste = laufVorschau(g.lauf, jetzt, jetzt + 36 * 3600e3); } catch (e) { liste = []; }
-    if (liste.length) v[parseInt(g.einst.nr, 10)] = liste;
+    let liste = [];
+    if (g.lauf) { try { liste = laufVorschau(g.lauf, jetzt, jetzt + 36 * 3600e3); } catch (e) { liste = []; } }
+    const nr = parseInt(g.einst.nr, 10);
+    for (const f of fixKommendFuer(nr, jetzt)) for (const p of f.prog) liste.push({ code: p.code, name: p.name, von: p.von, bis: p.bis, fix: p.fix });
+    liste.sort((a, b) => a.von - b.von);
+    if (liste.length) v[nr] = liste.slice(0, 120);
   }
   return v;
 }
@@ -1859,7 +1882,7 @@ class Generator {
       const hinweis = it.fehler ? esc(it.fehler) + wahl : (it.warnungen || []).filter(x => !NICHT_UNTERSTUETZT.test(x)).map(esc).join(' · ');
       return `<div class="p${it.fehler ? ' fehler' : ''}" data-pi="${i}"><code>${esc(it.code)}</code><span class="name" title="${esc(it.zeile)}">${esc(it.name)}</span><span class="zeit">${it.sek != null ? fmtZeit(it.sek) : ''}</span>` +
         `<span class="pinfo">${preset}${wob}${hinweis ? (preset ? ' · ' : '') + hinweis : ''}${wechsel}${dualKnopf}</span></div>`;
-    }).join('');
+    }).join('') + this.fixHtml();                                    // 0.9.26: kommende Fixkacheln
     const m = this.meldung && this.meldung.bis > Date.now() ? this.meldung : null;
     w.textContent = [m ? m.text : '', ...anzeigen.warnungen.map(x => this.lauf ? 'Übersprungen, bis geklärt – ' + x : x)].filter(Boolean).join(' · ');
     w.className = 'warnungen' + (m && m.art === 'ok' && !anzeigen.warnungen.length ? ' ok' : '');
@@ -1872,6 +1895,17 @@ class Generator {
     $('.btn-start', this.karte).disabled = !this.vorbereitet;
     $('.btn-weiter', this.karte).disabled = !this.vorbereitet;
     return this.vorbereitet;
+  }
+  /** 0.9.26: kommende Fixkacheln (Kontrollapp) unten in der Vorschau – nur Anzeige. */
+  fixHtml() {
+    let k = []; try { k = fixKommendFuer(zahl(this)); } catch (e) { k = []; }
+    const h = k.map(f => {
+      const codes = f.prog.map(p => p.code).join(', '), sek = Math.round((f.ende - f.startMs) / 1000);
+      return `<div class="p fixk"><code>🗓</code><span class="name">${esc(f.name)} · ${esc(fmtStart(f.startMs))}</span><span class="zeit">${fmtZeit(sek)}</span>` +
+        `<span class="pinfo">Fixkachel, startet von selbst (läuft dann noch etwas, danach): ${esc(codes)}</span></div>`;
+    }).join('');
+    this.fixH = h;
+    return h;
   }
   markiereAktiv() {
     const l = this.lauf, pi = l && l.plan.schritte[l.schritt] ? l.plan.schritte[l.schritt].pi : -1;
@@ -2762,7 +2796,7 @@ async function init() {
   beobachteQuellen();
   auftragStand();
   setInterval(auftraegeAbarbeiten, 5000);                            // 0.9.9: wartende Aufträge (Generator noch nicht da) wieder versuchen
-  setInterval(() => alleKarten(g => { if (!g.lauf && Date.now() >= g.vorschauBis) g.pruefe(); }), 30000);   // 0.9.3: Uhrzeit vorbei = Vorschau zeigt den nächsten Tag
+  setInterval(() => alleKarten(g => { if ((!g.lauf && Date.now() >= g.vorschauBis) || (() => { const a = g.fixH; let n = ''; try { n = g.fixHtml(); } catch (e) {} g.fixH = a; return n !== a; })()) g.pruefe(); }), 30000);   // 0.9.26: Fixkacheln   // 0.9.3: Uhrzeit vorbei = Vorschau zeigt den nächsten Tag
   starteTakt();
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 }
