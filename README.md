@@ -58,6 +58,17 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.27 (Brücke bleibt 1.2.1) – jede Zeitmarke einer Fixkachel startet für sich
+
+- Markus 15.11.2026: «es sollte so sein, das was ich in der kachel eintrage auf dem radix läuft». Kachel Blatt 24 mit «um 5.00 …
+  um 10.30 … um 18.00 …»: Bisher startete die ganze Kachel nur zur ersten Zeitmarke (die übrigen warteten im selben Lauf). Wurde die
+  Kachel erst nach 5.00 gespeichert (oder RADIX war länger als 3 h zu), lief auch 18.00 nicht.
+- Neu (kern.js `fixFaellig`): jede Zeitmarke ist ein eigenes Fenster mit eigener Quittung `fix-…-k<Platz>-<HHMM>` und startet zu ihrer Zeit
+  wie ein Handy-Auftrag «anhaengen» (3 h nachholbar). Ein «loop-N» direkt vor einer Zeitmarke fällt weg. Kacheln mit nur einer Zeitmarke
+  laufen genau wie bisher (7 Tage stündlich verglichen).
+- Vorschau auf der Karte: je Fenster eine eigene «🗓»-Zeile mit richtiger Dauer (statt «14 h»).
+- Tests: kern 13/13 (echte Sicherung 15.11.), Browser-Start ohne Fehler.
+
 ## Stand Version 0.9.26 (Brücke bleibt 1.2.1) – kommende Fixkacheln sichtbar
 - Markus 15.11.2026: «frage nur weil der nächste tag nirgends erscheint» – «das wäre perfekt».
 - Karte: unten in der Vorschau je kommender Kachel-Lauf (36 h) «🗓 Name · 10:27 Uhr am Dienstag» mit Dauer und Programmen (hellblau).

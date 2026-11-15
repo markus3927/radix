@@ -709,24 +709,31 @@
       const e = kontrolleEintraege(a.z.join('\n'));
       const i0 = e.findIndex(x => x.code === 'um');
       if (i0 < 0 || e.slice(0, i0).some(x => x.code !== 'loop')) continue;      // muss mit einer Startzeit beginnen
-      const [h, mi] = e[i0].um.split(':').map(Number);
-      const start = new Date(jetzt.getFullYear(), jetzt.getMonth(), jetzt.getDate(), h, mi, 0, 0).getTime();
-      if (!ganzerTag && (jetzt.getTime() < start || jetzt.getTime() >= start + FIX_FENSTER)) continue;   // ganzerTag: alle des Tags (0.9.26)
-      const rest = e.slice(i0 + 1);
-      if (!rest.some(x => /^(pr|pp|pa|sm)/.test(x.code))) continue;
-      for (const g of a.gen) {
-        const nr = parseInt(g, 10), b = kontrolle.blaetter && kontrolle.blaetter[String(nr)];
-        const kunde = b && b.name ? String(b.name).trim() : '';
-        if (!kunde) continue;                                             // freies Blatt: nichts
-        const name = String(a.name || `Fix ${fix}`).trim(), mk = fixMarke(nr, fix, jetzt);
-        aus.push({
-          id: `fix-${iso}-gen${nr}-k${fix}-${e[i0].um.replace(':', '')}`, erstellt: start, gen: nr, kunde, art: 'anhaengen', durchlaeufe: 1,
-          zeilen: rest.map(x => (x.code === 'um' ? `um ${x.um}` : x.code === 'loop' ? `loop-${x.loop}` : fixZeile(x, b, katalog)) + mk),
-          text: `Fixkachel «${name}» (${['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'][wt - 1]} ${e[i0].um})`, fixKachel: { fix, name, um: e[i0].um },
-          kontrolle: kontrolleProgramme(rest.filter(x => /^(pr|pp)/.test(x.code)).map(x => ({ tok: x.code, zeile: `${x.code} ${x.name}`.trim() }))),
-          plan: null, fehler: '',
-        });
-      }
+      // 0.9.27 (Markus 15.11.2026: «es sollte so sein, das was ich in der kachel eintrage auf dem radix läuft»): jede Zeitmarke der
+      // Kachel ist ein eigenes Zeitfenster und startet für sich (bisher nur die erste, die übrigen warteten im selben Lauf – ein Fenster,
+      // das erst nach der ersten Startzeit dazukam oder nach dem Neuladen, lief nie).
+      const marken = []; e.forEach((x, i) => { if (i >= i0 && x.code === 'um') marken.push(i); });
+      marken.forEach((im, k) => {
+        const [h, mi] = e[im].um.split(':').map(Number);
+        const start = new Date(jetzt.getFullYear(), jetzt.getMonth(), jetzt.getDate(), h, mi, 0, 0).getTime();
+        if (!ganzerTag && (jetzt.getTime() < start || jetzt.getTime() >= start + FIX_FENSTER)) return;   // ganzerTag: alle des Tags (0.9.26)
+        const rest = e.slice(im + 1, k + 1 < marken.length ? marken[k + 1] : e.length);
+        while (rest.length && rest[rest.length - 1].code === 'loop') rest.pop();          // «loop-3» vor der nächsten Zeitmarke: gehört zu nichts
+        if (!rest.some(x => /^(pr|pp|pa|sm)/.test(x.code))) return;
+        for (const g of a.gen) {
+          const nr = parseInt(g, 10), b = kontrolle.blaetter && kontrolle.blaetter[String(nr)];
+          const kunde = b && b.name ? String(b.name).trim() : '';
+          if (!kunde) continue;                                             // freies Blatt: nichts
+          const name = String(a.name || `Fix ${fix}`).trim(), mk = fixMarke(nr, fix, jetzt);
+          aus.push({
+            id: `fix-${iso}-gen${nr}-k${fix}-${e[im].um.replace(':', '')}`, erstellt: start, gen: nr, kunde, art: 'anhaengen', durchlaeufe: 1,
+            zeilen: rest.map(x => (x.code === 'loop' ? `loop-${x.loop}` : fixZeile(x, b, katalog)) + mk),
+            text: `Fixkachel «${name}» (${['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'][wt - 1]} ${e[im].um})`, fixKachel: { fix, name, um: e[im].um },
+            kontrolle: kontrolleProgramme(rest.filter(x => /^(pr|pp)/.test(x.code)).map(x => ({ tok: x.code, zeile: `${x.code} ${x.name}`.trim() }))),
+            plan: null, fehler: '',
+          });
+        }
+      });
     }
     return aus;
   }
