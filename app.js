@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.27';
+const VERSION = '0.9.29';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -451,7 +451,7 @@ function auftragNachkontrolle(a, g) {
   const l = g.lauf;
   if (l) {
     let ende = null; try { ende = laufZeiten(l).listeEnde; } catch (e) { /* noch kein Schritt */ }
-    const st = l.status === 'wartet' ? 'wartet auf Startzeit' : l.status === 'einrichten' ? 'wird eingerichtet' : l.plan.schritte[l.schritt] && l.plan.schritte[l.schritt].marke ? 'wartet auf Zeitmarke' : 'läuft';
+    const st = l.status === 'wartet' ? 'wartet auf Startzeit' : l.status === 'einrichten' ? 'wird eingerichtet' : l.status === 'pause' ? 'pausiert' : l.plan.schritte[l.schritt] && l.plan.schritte[l.schritt].marke ? 'wartet auf Zeitmarke' : 'läuft';
     let teil = null; try { teil = g.bisMarke(); } catch (e) { /* egal */ }            // 0.9.10: vor einer Zeitmarke eingefügt = fertig um diese Zeit
     auftragQuittung(a, 'laeuft', st, { ...(ende ? { ende } : {}), ...(teil ? { teilEnde: teil.endeMs, marke: teil.um, abbruch: teil.abbruch } : {}) });
   } else {
@@ -1309,6 +1309,7 @@ class Generator {
     $('.btn-testen', k).onclick = () => this.imTest ? this.beendeTest() : this.teste();
     $('.btn-weiter', k).onclick = () => this.starte(this.fortsetzen);
     $('.btn-naechste-f', k).onclick = () => this.springe('frequenz');
+    $('.btn-pause', k).onclick = () => this.pauseKnopf();   // 0.9.29
     $('.btn-naechstes-p', k).onclick = () => this.springe('programm');
     $('.btn-heute', k).onclick = () => this.uebernehmeHeute();
     $('.btn-leeren', k).onclick = () => this.leere();
@@ -1787,9 +1788,13 @@ class Generator {
     const l = this.lauf;
     const v = bereiteListeVor(text, this.einst.standardPreset);
     const s = l.plan.schritte[l.schritt], pi = s ? s.pi : -1, wartet = !!(s && s.marke);
+    const pausiert = l.status === 'pause' && !wartet && pi >= 0;     // 0.9.29: pausiert – laufende Zeile darf NF/HF/Dual wechseln
+    const nummer = (z) => { const m = String(z || '').match(/^\s*(pr|pp)\s?(\d{1,4})\b/i); return m ? m[1].toLowerCase() + m[2].padStart(4, '0') : null; };
+    const nurVariante = (alt, neu) => pausiert && neu && alt.zeilenNr === l.items[pi].zeilenNr && neu.zeilenNr === alt.zeilenNr && nummer(alt.zeile) && nummer(alt.zeile) === nummer(neu.zeile);
     for (let i = 0; i < (wartet ? pi : pi + 1); i++) {
       const alt = l.items[i], neu = v.items[i];
       if (alt.fehler) continue;                                    // war übersprungen: darf nachträglich geklärt werden
+      if (neu && neu.zeile !== alt.zeile && nurVariante(alt, neu)) continue;
       if (!neu || neu.zeile !== alt.zeile) return i === pi ? `${alt.code} läuft gerade – das laufende Programm lässt sich nicht ändern` : `${alt.code} ist schon gelaufen – nur Programme nach dem laufenden ändern`;
     }
     let los = false;
@@ -1803,8 +1808,19 @@ class Generator {
       l.schritt = v.items[los ? von : marke].start;
     } else if (s) {
       const alt = l.items[pi], neu = v.items[pi];
-      if (neu.fehler || neu.ende - neu.start !== alt.ende - alt.start) return `${alt.code} läuft gerade – das laufende Programm lässt sich nicht ändern`;
-      l.schritt = neu.start + (l.schritt - alt.start);
+      if (neu && neu.zeile !== alt.zeile && nurVariante(alt, neu)) {
+        // 0.9.29: gleiche Stelle im Programm (Anteil der Programmzeit) – NF↔HF gleich viele Schritte, Dual etwa halb so viele
+        if (neu.fehler) return `${neu.code}: ${neu.fehler}`;
+        const gelaufen = l.plan.schritte.slice(alt.start, l.schritt).reduce((a, x) => a + x.sek, 0) + l.tImSchritt;
+        const anteil = alt.sek > 0 ? Math.min(1, Math.max(0, gelaufen / alt.sek)) : 0;
+        let rest = anteil * neu.sek, k = neu.start;
+        while (k < neu.ende - 1 && rest >= v.plan.schritte[k].sek) { rest -= v.plan.schritte[k].sek; k++; }
+        l.schritt = k; l.tImSchritt = Math.min(rest, v.plan.schritte[k].sek);
+        this.log(`⏸ ${alt.code}${alt.dual ? ' [Dual]' : ''} → ${neu.code}${neu.dual ? ' [Dual]' : ''}: weiter bei ${Math.round(anteil * 100)} % (Schritt ${k - neu.start + 1}/${neu.ende - neu.start}, noch ${fmtZeit(neu.sek * (1 - anteil))})`);
+      } else {
+        if (neu.fehler || neu.ende - neu.start !== alt.ende - alt.start) return `${alt.code} läuft gerade – das laufende Programm lässt sich nicht ändern`;
+        l.schritt = neu.start + (l.schritt - alt.start);
+      }
     }
     const aktiv = l.aktivEi != null && l.einst[l.aktivEi] ? l.einst[l.aktivEi].key : null;
     if (s && s.marke && !los && v.plan.schritte[l.schritt]) v.plan.schritte[l.schritt].zeitMs = s.zeitMs;
@@ -1857,13 +1873,14 @@ class Generator {
       if (gw.length) anzeigen = { ...anzeigen, warnungen: [...anzeigen.warnungen, ...gw], blockiert: true };
     }
     const aktPi = this.lauf && this.lauf.plan.schritte[this.lauf.schritt] ? this.lauf.plan.schritte[this.lauf.schritt].pi : -1;
+    const pausePi = this.lauf && this.lauf.status === 'pause' ? aktPi : -2;   // 0.9.29: pausiert – das laufende Programm darf NF/HF/Dual wechseln
     // 0.9.3: nicht gestartet = dieselbe Rechnung wie beim Start, ab «Start um» bzw. jetzt; nach Neuladen ab der Stelle, wo es weitergeht
     const jetzt = Date.now(), su = this.einst.startUm, fs = this.fortsetzen;
     const von = fs && fs.schritt < anzeigen.plan.schritte.length ? fs.schritt : 0;
     const ab = !von && su ? naechsteUhrzeit(su, jetzt) : jetzt;
     const zeiten = this.lauf ? {} : markenZeiten(anzeigen.plan.schritte, von, ab);
     this.vorschauBis = this.lauf ? Infinity : Math.min(...Object.values(zeiten).filter(x => x > jetzt), ab > jetzt ? ab : Infinity);   // ab dann gilt ein anderes Datum
-    vs.innerHTML = anzeigen.items.map((it, i) => {
+    const zeilenHtml = anzeigen.items.map((it, i) => {
       if (it.r.art === 'zeit') {
         const ms = this.lauf ? (this.lauf.plan.schritte[it.start] || {}).zeitMs : zeiten[it.start];
         const wann = ms ? fmtStart(ms) : `${it.r.um} Uhr`;
@@ -1871,9 +1888,9 @@ class Generator {
           `<span class="pinfo">Was darunter steht, startet erst um ${it.r.um} Uhr. Läuft dann noch ein Programm davor, wird es beendet.</span></div>`;
       }
       const nv = /^(pr\d{4}) (NF|HF)$/.exec(it.code || ''), andere = nv && (nv[2] === 'NF' ? 'HF' : 'NF');
-      const wechsel = nv && !it.fehler && i > aktPi && daten.finder && daten.finder.programme.has(`${nv[1]} ${andere}`)
+      const wechsel = nv && !it.fehler && (i > aktPi || i === pausePi) && daten.finder && daten.finder.programme.has(`${nv[1]} ${andere}`)
         ? ` <button class="ghost klein wechsel" data-z="${it.zeilenNr}" data-v="${andere}" title="Dieses Programm als ${andere} spielen">→ ${andere}</button>` : '';
-      const kannDual = !it.fehler && i > aktPi && daten.geladen && (it.dual || (it.preset && !/\(dual\)/i.test(it.preset) && dualPreset(it.preset)));
+      const kannDual = !it.fehler && (i > aktPi || i === pausePi) && daten.geladen && (it.dual || (it.preset && !/\(dual\)/i.test(it.preset) && dualPreset(it.preset)));
       const dualKnopf = kannDual ? ` <button class="ghost klein dual${it.dual ? ' an' : ''}" data-dual="${it.zeilenNr}" title="${it.dual ? 'Zurück auf das Preset ohne Dual' : 'Dieses Programm im Dual-Modus spielen wie Spooky2 (Out2 spielt gleichzeitig die nächste Frequenz bzw. den nächsten Sweep in der Zeit von Out1, etwa halbe Zeit)'}">${it.dual ? 'Dual aus' : 'Dual'}</button>` : '';
       const ie = it.preset ? anzeigen.einst.find(x => x.key === it.preset) : null;
       const preset = it.preset ? `<b class="${farbArt(it, ie && ie.e)}">${esc(it.preset)}</b>` : '';
@@ -1882,7 +1899,11 @@ class Generator {
       const hinweis = it.fehler ? esc(it.fehler) + wahl : (it.warnungen || []).filter(x => !NICHT_UNTERSTUETZT.test(x)).map(esc).join(' · ');
       return `<div class="p${it.fehler ? ' fehler' : ''}" data-pi="${i}"><code>${esc(it.code)}</code><span class="name" title="${esc(it.zeile)}">${esc(it.name)}</span><span class="zeit">${it.sek != null ? fmtZeit(it.sek) : ''}</span>` +
         `<span class="pinfo">${preset}${wob}${hinweis ? (preset ? ' · ' : '') + hinweis : ''}${wechsel}${dualKnopf}</span></div>`;
-    }).join('') + this.fixHtml();                                    // 0.9.26: kommende Fixkacheln
+    });
+    // 0.9.28 (Markus 15.11.2026: «das wäre besser und übersichtlicher»): kommende Fixkacheln nach Uhrzeit zwischen die Programme der Liste
+    // (bisher alle zuunterst, nach der ganzen Liste – bei langer Liste nur mit Scrollen zu sehen)
+    let st = {}; try { st = this.startZeiten(anzeigen, zeiten, ab, von); } catch (e) { st = {}; }
+    vs.innerHTML = this.mitFixNachZeit(zeilenHtml, st);
     const m = this.meldung && this.meldung.bis > Date.now() ? this.meldung : null;
     w.textContent = [m ? m.text : '', ...anzeigen.warnungen.map(x => this.lauf ? 'Übersprungen, bis geklärt – ' + x : x)].filter(Boolean).join(' · ');
     w.className = 'warnungen' + (m && m.art === 'ok' && !anzeigen.warnungen.length ? ' ok' : '');
@@ -1896,16 +1917,52 @@ class Generator {
     $('.btn-weiter', this.karte).disabled = !this.vorbereitet;
     return this.vorbereitet;
   }
-  /** 0.9.26: kommende Fixkacheln (Kontrollapp) unten in der Vorschau – nur Anzeige. */
+  /** 0.9.26: kommende Fixkacheln (Kontrollapp) in der Vorschau – nur Anzeige. 0.9.28: this.fixZeilen = [{ startMs, html }] zum Einordnen. */
   fixHtml() {
     let k = []; try { k = fixKommendFuer(zahl(this)); } catch (e) { k = []; }
-    const h = k.map(f => {
+    const zeilen = k.map(f => {
       const codes = f.prog.map(p => p.code).join(', '), sek = Math.round((f.ende - f.startMs) / 1000);
-      return `<div class="p fixk"><code>🗓</code><span class="name">${esc(f.name)} · ${esc(fmtStart(f.startMs))}</span><span class="zeit">${fmtZeit(sek)}</span>` +
-        `<span class="pinfo">Fixkachel, startet von selbst (läuft dann noch etwas, danach): ${esc(codes)}</span></div>`;
-    }).join('');
+      return { startMs: f.startMs, html: `<div class="p fixk"><code>🗓</code><span class="name">${esc(f.name)} · ${esc(fmtStart(f.startMs))}</span><span class="zeit">${fmtZeit(sek)}</span>` +
+        `<span class="pinfo">Fixkachel, startet von selbst (läuft dann noch etwas, danach): ${esc(codes)}</span></div>` };
+    }).sort((a, b) => a.startMs - b.startMs);
+    const h = zeilen.map(z => z.html).join('');
+    this.fixZeilen = zeilen;
     this.fixH = h;
     return h;
+  }
+  /**
+   * 0.9.28: Startzeit (ms) je Listenzeile (Index in items) für den laufenden bzw. nächsten Durchlauf – wie die Vorschau rechnet:
+   * Programme hintereinander, Zeitmarken setzen die Uhr. Schon gelaufene Zeilen haben keine Zeit.
+   */
+  startZeiten(anz, zeiten, ab, von) {
+    const s = anz.plan.schritte, st = {}, l = this.lauf, jetztMs = Date.now();
+    const lauft = l && l.status !== 'wartet';
+    let t = l ? (l.status === 'wartet' && l.startUmMs ? Math.max(jetztMs, l.startUmMs) : jetztMs) : ab;
+    for (let k = l ? (lauft ? l.schritt : 0) : von; k < s.length; k++) {
+      const x = s[k], hier = lauft && k === l.schritt;
+      if (x.marke) {
+        const z = l ? x.zeitMs : zeiten[k];
+        if (z) t = hier ? Math.max(z, jetztMs) : z;
+        if (x.pi != null && st[x.pi] == null) st[x.pi] = t;
+        continue;
+      }
+      if (x.pi != null && st[x.pi] == null) st[x.pi] = hier ? t - (l.tImSchritt || 0) * 1000 : t;
+      t += (hier ? Math.max(0, x.sek - (l.tImSchritt || 0)) : x.sek) * 1000;
+    }
+    return st;
+  }
+  /** 0.9.28: Kachel-Zeilen vor die erste Listenzeile setzen, die später (oder gleichzeitig) beginnt; der Rest zuunterst. */
+  mitFixNachZeit(zeilenHtml, st) {
+    this.fixHtml();
+    const fx = this.fixZeilen || [], aus = [];
+    let j = 0;
+    zeilenHtml.forEach((h, i) => {
+      const t = st[i];
+      if (t != null) while (j < fx.length && fx[j].startMs <= t) aus.push(fx[j++].html);
+      aus.push(h);
+    });
+    while (j < fx.length) aus.push(fx[j++].html);
+    return aus.join('');
   }
   markiereAktiv() {
     const l = this.lauf, pi = l && l.plan.schritte[l.schritt] ? l.plan.schritte[l.schritt].pi : -1;
@@ -1965,6 +2022,7 @@ class Generator {
     $('.btn-stop', this.karte).disabled = !laufend && !this.imTest;
     $('.btn-naechste-f', this.karte).disabled = !laufend;
     $('.btn-naechstes-p', this.karte).disabled = !laufend;
+    const bp = $('.btn-pause', this.karte); bp.disabled = !laufend; if (!laufend) { bp.textContent = '⏸ Pause'; bp.classList.remove('an'); }   // 0.9.29
     this.karte.classList.toggle('laeuft', laufend);
     if (!laufend) $('.btn-heute', this.karte).disabled = !this.blatt();
   }
@@ -2325,11 +2383,64 @@ class Generator {
     return { status: 'gestartet', text: `gestartet: ${codes}${a.durchlaeufe === 0 ? ' (endlos)' : a.durchlaeufe > 1 ? ` (${a.durchlaeufe} Durchläufe)` : ''}`, extra: ende ? { ende } : {} };
   }
 
+  // ---------------------------------------------------------------- Pause (0.9.29)
+  /**
+   * 0.9.29 (Markus 18.11.2026: «es wäre sinnvoll, wenn ich laufende Programme am RADIX pausieren könnte, um auf NF oder HF oder Dual
+   * umzustellen. Wenn ich das jetzt machen will, muss ich auf Stopp drücken, dann ist eh alles durch und ich muss von vorne beginnen.»):
+   * «⏸ Pause» schaltet die Ausgänge aus und hält die Stelle fest (die Zeit steht). In der Vorschau lässt sich jetzt auch das laufende
+   * Programm auf NF, HF oder Dual umstellen – es geht beim selben Anteil der Programmzeit weiter. «▶ Weiter» richtet den Generator
+   * (ggf. auf das neue Preset) ein und spielt ab dieser Stelle weiter. Eine Zeitmarke, die während der Pause fällig wird, greift beim Weiter.
+   */
+  pauseKnopf() { const l = this.lauf; if (!l) return; if (l.status === 'pause') this.weiterNachPause(); else this.pausiere(); }
+  async pausiere() {
+    const l = this.lauf;
+    if (!l) return false;
+    if (l.status === 'wartet' || (l.plan.schritte[l.schritt] || {}).marke) { this.melde('Wartet gerade (Startzeit/Zeitmarke) – nichts zu pausieren', 'fehler'); return false; }
+    if (l.status !== 'laeuft') { this.melde('Wird gerade eingerichtet – gleich nochmals versuchen', 'fehler'); return false; }
+    for (let i = 0; l.beschaeftigt && i < 300; i++) await new Promise(r => setTimeout(r, 10));   // nie mitten in einem Befehl
+    if (this.lauf !== l || l.status !== 'laeuft' || l.beschaeftigt) return false;
+    l.beschaeftigt = true;
+    try {
+      const t = performance.now();
+      l.tImSchritt += (t - l.letzterTick) / 1000; l.letzterTick = t;
+      l.status = 'pause'; l.pauseSeit = Date.now();
+      const b = (this.gx ? K.gxAusgangBefehle : K.ausgangBefehle)(false, l.zustand);
+      if (b.length) await this.sende(b);
+      const s = l.plan.schritte[l.schritt], it = l.items[s.pi];
+      const gelaufen = l.plan.schritte.slice(it.start, l.schritt).reduce((a, x) => a + x.sek, 0) + l.tImSchritt;
+      this.log(`⏸ Pause: ${it.code}${it.dual ? ' [Dual]' : ''} bei ${Math.round(it.sek ? gelaufen / it.sek * 100 : 0)} % (Schritt ${l.schritt - it.start + 1}/${it.ende - it.start}) – Ausgänge aus`);
+      const bp = $('.btn-pause', this.karte); bp.textContent = '▶ Weiter'; bp.classList.add('an');
+      this.zeigePreset(`pausiert · ${it.code}`, false, 'w');
+      this.setzeStatus(`⏸ Pausiert: ${it.code}${it.dual ? ' [Dual]' : ''} – noch ${fmtZeit(Math.max(0, it.sek - gelaufen))}`, 'warnung', 'In der Vorschau jetzt «→ HF/NF» bzw. «Dual» beim laufenden Programm möglich – dann «▶ Weiter» (geht an derselben Stelle weiter). Ausgänge sind aus.');
+      speichereAlle();
+      this.pruefe();
+      return true;
+    } catch (e) {
+      if (this.lauf !== l) return false;
+      this.verbunden = false; this.zeigeVerbindung('fehler', 'keine Antwort');
+      this.stoppe('Verbindung verloren: ' + e.message, true);
+      return false;
+    } finally { if (this.lauf) this.lauf.beschaeftigt = false; }
+  }
+  weiterNachPause() {
+    const l = this.lauf;
+    if (!l || l.status !== 'pause') return;
+    const s = l.plan.schritte[l.schritt], it = s && l.items[s.pi];
+    this.log(`▶ Weiter nach ${fmtZeit((Date.now() - (l.pauseSeit || Date.now())) / 1000)} Pause${it ? `: ${it.code}${it.dual ? ' [Dual]' : ''}` : ''}`);
+    l.pauseSeit = null;
+    l.aktivEi = null; l.aktivPi = null;                               // Generator neu einrichten (Preset kann gewechselt haben), Ausgänge wieder an
+    l.status = 'einrichten';
+    const bp = $('.btn-pause', this.karte); bp.textContent = '⏸ Pause'; bp.classList.remove('an');
+    speichereAlle();
+    this.pruefe();
+  }
+
   /** Vorspulen: der Taktgeber führt den Sprung beim nächsten Takt aus (nie mitten in einem Befehl an den Generator). */
   springe(art) {
     const l = this.lauf;
     if (!l) return;
     if (l.status === 'wartet') { this.melde('Wartet noch auf die Startzeit – nichts zu überspringen', 'fehler'); return; }
+    if (l.status === 'pause') { this.melde('Pausiert – zuerst «▶ Weiter»', 'fehler'); return; }   // 0.9.29
     if (art === 'programm') {                                       // würde der Sprung den Generator stoppen? -> nachfragen
       const s = l.plan.schritte, i = l.schritt;
       let j = i;
@@ -2474,7 +2585,7 @@ const zahl = (g) => parseInt(g.einst.nr, 10) || 0;
 function zustand(g) {
   const l = g.lauf, st = $('.status', g.karte);
   if (l) {
-    if (l.status !== 'laeuft') return { art: 'w', text: l.status === 'wartet' ? 'wartet auf Startzeit' : 'wird eingerichtet' };
+    if (l.status !== 'laeuft') return { art: 'w', text: l.status === 'wartet' ? 'wartet auf Startzeit' : l.status === 'pause' ? 'pausiert (Ausgänge aus)' : 'wird eingerichtet' };
     const st = l.plan.schritte[l.schritt];
     if (st && st.marke) return { art: 'w', text: `wartet bis ${st.um}` };
     const e = l.einst[l.aktivEi], name = e ? e.e.name : '';

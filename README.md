@@ -58,6 +58,31 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.29 (Brücke bleibt 1.2.1) – Pause mit NF/HF/Dual-Wechsel
+
+- Markus 18.11.2026: «es wäre sinnvoll, wenn ich laufende Programme am RADIX pausieren könnte, um auf NF oder HF oder Dual umzustellen.
+  Wenn ich das jetzt machen will, muss ich auf Stopp drücken, dann ist eh alles durch und ich muss von vorne beginnen.»
+- Neu auf der Karte (Zeile mit «⏭»): **⏸ Pause** – Ausgänge aus, die Stelle bleibt stehen (die Zeit läuft nicht weiter), Leiste gelb
+  «pausiert». Jetzt zeigt die Vorschau auch beim **laufenden** Programm «→ HF/NF» und «Dual». Umstellen, dann **▶ Weiter**: RADIX richtet den
+  Generator (ggf. auf das Dual-Preset) neu ein und spielt beim **selben Anteil der Programmzeit** weiter (NF↔HF gleiche Stelle, Dual etwa halb so
+  viele Schritte). Läuft das Programm mit «loop-N», wechseln alle Läufe mit. Das Laufbuch bekommt keinen zweiten Eintrag.
+- In der Pause gesperrt: «⏭ Nächste Frequenz/Programm». Stopp geht. Handy-Aufträge «anhaengen» gehen, die Pause bleibt.
+  Pausieren geht nicht, solange er auf eine Startzeit/Zeitmarke wartet oder gerade einrichtet. Eine Zeitmarke, die während der Pause
+  fällig wird, greift beim Weiter (wie sonst auch). Nach dem Neuladen: «Fortsetzen» spielt an der gespeicherten Stelle weiter.
+- Tests: Browser mit simuliertem XM, echtem Finder v363, Ersatz-Presets Healing/Killing (+ Dual), Uhr beschleunigt – Pause, Zeit steht,
+  Ausgänge aus/an, NF→HF gleiche Stelle, Dual an/aus mit gleichem Anteil, Weiter mit Dual-Preset, Stopp aus der Pause, Pause beim Warten
+  abgelehnt, Handy anhaengen in der Pause, loop-Läufe: 38/38 (zweimal). Regression normaler Lauf bis fertig + Laufbuch: 6/6.
+
+## Stand Version 0.9.28 (Brücke bleibt 1.2.1) – Fixkacheln nach Uhrzeit in der Vorschau
+
+- Markus 15.11.2026: Die sm60 seiner Kachel «Schuhman» (23.00) sah er nur in der Kontrollapp, auf der RADIX-Karte nicht – die 🗓-Zeilen
+  standen zuunterst, nach der ganzen Liste. «das wäre besser und übersichtlicher».
+- Neu (app.js `startZeiten`, `mitFixNachZeit`): jede kommende Kachel steht in der Vorschau dort, wo sie zeitlich hingehört – vor der
+  ersten Listenzeile, die zur gleichen Zeit oder später beginnt (laufend und vorbereitet gleich gerechnet); was nach dem Listenende
+  kommt, zuunterst.
+- Tests: Browser mit echten Remote-Presets, echtem Finder und echter Sicherung, Uhr So 19:45: vorbereitete Liste mit Zeitmarken,
+  leere Liste, kurze Liste, lange Liste über 23:00, laufende Liste – 6/6; kern 13/13.
+
 ## Stand Version 0.9.27 (Brücke bleibt 1.2.1) – jede Zeitmarke einer Fixkachel startet für sich
 
 - Markus 15.11.2026: «es sollte so sein, das was ich in der kachel eintrage auf dem radix läuft». Kachel Blatt 24 mit «um 5.00 …
