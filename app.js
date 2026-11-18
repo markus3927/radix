@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.29';
+const VERSION = '0.9.30';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -14,6 +14,7 @@ const $ = (s, el = document) => el.querySelector(s);
 const K = window.Kern;
 const SPEICHER = 'radix-generatoren-v2';   // { zuordnung: [Nummer je Anschluss], gen: { Nummer: Einstellungen } }
 const STD_PRESET = 'Healing (R) - JW';
+const SCHUMANN_PRESET = 'Healing (R) - JW';   // 0.9.30 (Markus 18.11.2026): Schumann immer Healing, nie das Preset der Nachbarn (z. B. Killing)
 
 // ------------------------------------------------------------------ Hilfen
 /** 0.8.7: Programm-Zähler ohne Zeitmarken – gleich wie «5 Programme» in der Zusammenfassung. */
@@ -1003,9 +1004,9 @@ function bereiteListeVor(text, standardPreset) {
     if (r) nimm({ zeile: zeile.trim(), zeilenNr, r, dual: r.art === 'preset' ? false : dual, handy, einmal, fehler: r.art === 'fehler' ? r.text : '' });
   });
   if (loop) loopOhne.push(loop);
-  // Preset je Programm: Finder-Kachel; Pause/Schumann übernehmen das Preset davor (sonst danach); eigene Zeilen das Karten-Preset
+  // Preset je Programm: Finder-Kachel; Schumann immer Healing (0.9.30); Pause übernimmt das Preset davor (sonst danach); eigene Zeilen das Karten-Preset
   const std = standardPreset || STD_PRESET;
-  const grund = (it) => it.r.art === 'finder' && it.r.programm.art === 'pr' ? it.r.programm.preset : it.r.art === 'zeile' ? std : it.r.art === 'preset' ? it.r.name : null;
+  const grund = (it) => it.r.art === 'finder' && it.r.programm.art === 'sm' ? SCHUMANN_PRESET : it.r.art === 'finder' && it.r.programm.art === 'pr' ? it.r.programm.preset : it.r.art === 'zeile' ? std : it.r.art === 'preset' ? it.r.name : null;
   const eigenes = (it) => { const g = grund(it); return g && it.dual ? dualPreset(g) || g : g; };
   for (const it of items) if (!it.fehler && it.dual && grund(it) && !dualPreset(grund(it))) it.fehler = `Zu «${grund(it)}» gibt es kein Dual-Preset`;
   let letztes = null;

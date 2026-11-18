@@ -16,7 +16,7 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
    Programmliste, Kunde und gespeicherter Stand wandern mit der Nummer.
 4. Pro Generator: Nummer = Nummer am Gerät = Nummer des Kontrollblatts. Programmliste, eine Zeile pro Programm:
    - `pr0245 NF`, `pr0409 HF`, `pr0001` – Programm aus dem Finder, Preset kommt aus der Kachel
-   - `pa15`–`pa60` (Pause), `sm15`–`sm60` (Schumann) – übernehmen das Preset davor
+   - `pa15`–`pa60` (Pause), `sm15`–`sm60` (Schumann) – Pause übernimmt das Preset davor, Schumann läuft immer mit Healing (R) - JW (ab 0.9.30)
    - eigene Frequenzzeile `437=240, 727=420, 120-128=600` – läuft mit «Preset für eigene Zeilen»
    - `loop-10` auf eigener Zeile – das Programm direkt darunter läuft 10-mal hintereinander
    - «Heute aus Kontrollblatt» übernimmt die heutige Zeile; «Programme des Kunden» zum Antippen
@@ -57,6 +57,12 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
     «⏭ Nächstes Programm» während dem Warten startet sofort. Mehrere Marken pro Liste möglich.
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
+
+## Stand Version 0.9.30 (Brücke bleibt 1.2.1) – Schumann immer Healing
+
+- Markus 18.11.2026: sm60 auf Gen 2 zeigte «Killing (R) - JW». Ursache: Schumann übernahm das Preset des Nachbarprogramms (oben in der Liste: das danach, pr0438 Killing).
+- Neu: sm15–sm60 laufen immer mit **Healing (R) - JW** (mit [Dual]: Healing (Dual) (R) - JW), egal was davor oder danach steht. Pausen (pa) unverändert.
+- Dauer bleibt fest (wie seit 0.9.7, ohne Dwell-Multiplikator).
 
 ## Stand Version 0.9.29 (Brücke bleibt 1.2.1) – Pause mit NF/HF/Dual-Wechsel
 
