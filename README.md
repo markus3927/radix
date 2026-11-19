@@ -58,6 +58,12 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.34 (Brücke bleibt 1.2.1) – «um»-Zeile wie unten
+
+- Markus 19.11.2026 18.01: Datum und Zeit in der Programmliste «gleich wie unten, auch fett und gleiche Reihenfolge».
+- Die Zeile «um 08:00» zeigt fett «Start um 08:00 Uhr am Freitag 20.11.26» (wie die Zeitmarke in der Vorschau). Der getippte Text liegt
+  unsichtbar darunter; wird die Zeile geändert, steht bis zum Übernehmen wieder der getippte Text da.
+
 ## Stand Version 0.9.33 (Brücke bleibt 1.2.1) – «steht»-Hinweis, Datum bei Zeitmarken, Gelaufenes grau
 
 - Markus 19.11.2026: Gen 3 (Michelle) stand seit dem Fieber-Stopp, die Liste sah aber geplant aus («wie hätte ich das erkannt?»).

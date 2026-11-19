@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.33';
+const VERSION = '0.9.34';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -793,7 +793,7 @@ function listeBildHtml(text, opt = {}) {
   return String(text).split('\n').map((z, i) => {
     let cls = i < bis ? ' war' : '', inner;
     const m = /^(\s*)((?:pr|pp)\d{4}(?:\s+(?:NF|HF))?|pa\d+|sm\d+)(.*)$/i.exec(z);
-    if (/^\s*um\s+\d{1,2}[:.]\d{2}/i.test(z)) { cls += ' zm'; inner = esc(z) + (md[i] ? `<span class="zd${opt.steht ? ' grau' : ''}">${esc(fmtTag(md[i]))}</span>` : ''); }
+    if (/^\s*um\s+\d{1,2}[:.]\d{2}/i.test(z)) { cls += ' zm'; inner = md[i] ? `<span class="zt">${esc(z)}</span><span class="zd${opt.steht ? ' grau' : ''}">Start um ${esc(fmtStart(md[i]))}</span>` : esc(z); }   // 0.9.34: wie unten «Start um 08:00 Uhr am Freitag 20.11.26», fett
     else if (/^\s*loop-\d+/i.test(z)) { cls += ' loop'; inner = esc(z); }
     else if (m) inner = `${esc(m[1])}<span class="c">${esc(m[2])}</span><span class="n">${esc(m[3]).replace(/↻|\[1×\]|\[Dual\]/g, x => `<span class="r">${x}</span>`)}</span>`;
     else inner = `<span class="e">${esc(z)}</span>`;
