@@ -120,6 +120,13 @@
     body.einzel .spalte{display:flex;flex-direction:column;gap:9px;min-width:0}
     body.einzel .spalte.links > *, body.einzel .spalte.rechts > *{order:0}
     body.einzel textarea.liste{min-height:240px}
+    /* 0.9.38: Ablauf und Jetzt in derselben Zeile, gleich hoch; die Liste scrollt innen */
+    body.einzel .gen-innen{grid-template-rows:auto;row-gap:9px}
+    body.einzel .spalte{display:contents}
+    body.einzel .ablauf-box{grid-column:1;grid-row:1;align-self:stretch;min-height:420px;display:flex}
+    body.einzel .jetzt-box{grid-column:2;grid-row:1;align-self:stretch}
+    body.einzel .spalte.rechts > :not(.jetzt-box){grid-column:2}
+    body.einzel .ablauf-box .vorschau{flex:1 1 0;min-height:0;max-height:none;contain:size}
   }
   body.einzel .preset-aktiv{font-size:18px}
   body.einzel .status{font-size:15px}
@@ -255,7 +262,9 @@
   details.protokoll{opacity:.6} details.protokoll[open]{opacity:1}
   /* 0.9.36 (Markus 19.11.2026: «das Gesamtbild sollte Sinn machen … nicht chronologisch»): links Ablauf nach Zeit, rechts Jetzt, Werkzeuge eingeklappt */
   .ablauf-titel, .jetzt-titel{font-size:12px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--text-light)}
-  .jetzt-box{display:flex;flex-direction:column;gap:9px;background:#fff;border:1px solid var(--divider);border-radius:12px;padding:12px 14px}
+  .jetzt-box, .ablauf-box{display:flex;flex-direction:column;gap:9px;background:#fff;border:1px solid var(--divider);border-radius:12px;padding:12px 14px;min-width:0}   /* 0.9.38: beide Felder gleich */
+  .ablauf-box .vorschau{border-radius:8px}
+  .ablauf-box:has(> .vorschau:empty):has(> .neu[hidden]){display:none}   /* leer: nur in der Einzelansicht breit zeigen */
   .jetzt-box .fq-panel{margin-top:2px;border-radius:8px}
   details.werkzeug{border:1px solid var(--divider);border-radius:10px;background:#fff}
   details.werkzeug > summary{padding:9px 14px;cursor:pointer;font-weight:600;color:var(--royal-dark);list-style:none;user-select:none}
@@ -377,9 +386,11 @@
     </div>
     <div class="gen-innen">
     <div class="spalte links">
-    <div class="neu" hidden><span class="neu-text"></span><button class="ghost klein btn-anhaengen">Anhängen</button></div>
+    <div class="ablauf-box">
     <div class="ablauf-titel">Ablauf</div>
+    <div class="neu" hidden><span class="neu-text"></span><button class="ghost klein btn-anhaengen">Anhängen</button></div>
     <div class="vorschau"></div>
+    </div>
     </div>
     <div class="spalte rechts">
     <div class="jetzt-box">

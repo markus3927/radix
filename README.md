@@ -58,6 +58,13 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.38 (Brücke bleibt 1.2.1) – Ablauf und Jetzt gleich gross
+
+- Markus 19.11.2026 22.08: «der Radius der Felder ist nicht gleich und die Höhe der nebeneinander liegenden Felder ist nicht gleich».
+- Der Ablauf steht jetzt in einem eigenen Feld (`.ablauf-box`) wie «Jetzt»: gleicher Rahmen, Radius 12 px, Titel innen.
+- Einzelansicht breit: Ablauf und Jetzt teilen sich eine Zeile, gleiche Ober- und Unterkante (mind. 420 px). Die Liste scrollt innen; die Werkzeuge stehen rechts darunter.
+- Übersicht/schmal: leeres Ablauf-Feld wird ausgeblendet. Umlaute in pr-Namen bleiben bewusst unverändert.
+
 ## Stand Version 0.9.37 (Brücke bleibt 1.2.1) – jeder Tag mit eigenem Trenner
 
 - Markus 19.11.2026 21.58/22.00: «Fr 04.00 Antiaging» stand unter «Heute · Donnerstag», oben der gelaufene Trenner «Start um 15:00/17:40» – «verwirrt».
