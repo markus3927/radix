@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.42';
+const VERSION = '0.9.43';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -144,7 +144,7 @@ const quellen = {
       const k = K.leseKontrolle(text);
       const vorher = daten.kontrolle;
       daten.kontrolle = { ...k, zeit: datei.lastModified, name: datei.name };
-      const stand = new Date(datei.lastModified).toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+      const stand = `${fmtTag(datei.lastModified)} ${nurUhr(datei.lastModified)}`;   // 0.9.43
       setzeQuelle(this.status, `Stand ${stand} · ${Object.keys(k.blaetter).length} Blätter · ${datei.name}`, 'ok');
       alleKarten(g => { g.aktualisiereKunde(); if ((g.fixH || '') !== (() => { try { return g.fixHtml(); } catch (e) { return ''; } })()) g.pruefe(); });   // 0.9.26
       // Blatt im Kontrollblatt angeklickt -> zur Karte dieses Generators springen (nicht beim ersten Lesen)
@@ -332,7 +332,7 @@ function auftragStand() {
   if (q.zuletzt == null) return;                                    // noch nie gelesen (Zugriff bestätigen): Meldung von quelleBeimStart bleibt
   const offen = auftrag.liste.filter(a => !auftrag.erledigt[a.id]).length;
   const letzte = auftrag.quittungen[auftrag.quittungen.length - 1];
-  const z = letzte ? new Date(letzte.t).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' }) : '';
+  const z = letzte ? uhrKurz(letzte.t) : '';   // 0.9.43: «00.28 Uhr»
   setzeQuelle(q.status, `${auftrag.datei || q.handle.name}${offen ? ` · ${offen} offen` : ''}${letzte ? ` · zuletzt ${z} Gen ${letzte.gen}: ${letzte.status}` : ''}`, offen ? '' : 'ok');
 }
 /** Quittung festhalten (gleiche Meldung nicht nochmals schreiben) und ins Laufbuch bringen. */
@@ -769,8 +769,8 @@ function durchlaufVoraus(s, start, ab) {
 /** 0.9.2 (Markus 05.11.2026): Zeitmarke ausgeschrieben – «06:00 Uhr am Freitag 06.11.26». */
 const WOCHENTAGE = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 /** 0.9.4: Uhrzeit wie in der Kontrollapp «05.08», an einem anderen Tag mit Wochentag davor («Fr 05.08»). 0.9.5: «05.08 Uhr». */
-const fmtUhr = (ms) => { const d = new Date(ms), h = new Date(); const tag = d.toDateString() === h.toDateString() ? '' : WOCHENTAGE[d.getDay()].slice(0, 2) + '\u00a0';
-  return `${tag}${zwei(d.getHours())}.${zwei(d.getMinutes())}\u00a0Uhr`; };   // 0.9.5 (Markus: «sieht aus wie ein datum») mit «Uhr»
+// 0.9.43 (Markus 20.11.2026: «datum überall so schreiben» wie «Sonntag 22.11.26», «hinter jede uhrzeit Uhr»): anderer Tag = ganzes Datum
+const fmtUhr = (ms) => uhrKurz(ms);
 /**
  * 0.9.4 (Markus 05.11.2026: «ich möchte auch wissen wie lange das laufende programm noch dauert»): Restzeit und Ende des laufenden
  * Programms. Kommt vorher eine Zeitmarke, endet es dort (wie im Ablauf: die fällige Zeitmarke beendet das Programm).
@@ -801,7 +801,7 @@ function listeBildHtml(text, opt = {}) {
   }).join('');
 }
 /** 0.9.31: kurze Uhrzeit für Listen «16.34», an einem anderen Tag «Fr 16.34». */
-const uhrKurz = (ms) => { const d = new Date(ms), h = new Date(); return (d.toDateString() === h.toDateString() ? '' : WOCHENTAGE[d.getDay()].slice(0, 2) + '\u00a0') + `${zwei(d.getHours())}.${zwei(d.getMinutes())}`; };
+const uhrKurz = (ms) => { const d = new Date(ms), h = new Date(); return (d.toDateString() === h.toDateString() ? '' : fmtTag(ms) + '\u00a0') + nurUhr(ms); };   // 0.9.43: «Dienstag 24.11.26 00.42 Uhr»
 const mmss = (sek) => { sek = Math.max(0, Math.ceil(sek)); const h = Math.floor(sek / 3600), m = Math.floor(sek % 3600 / 60), x = sek % 60; return h ? `${h}:${zwei(m)}:${zwei(x)}` : `${m}:${zwei(x)}`; };
 /** 0.9.31: Dauer einer Frequenz kurz: «3 min», «1 min 30 s», «45 s» (Bruchteile gerundet). */
 const fmtDauerKurz = (sek) => { sek = Math.round(sek); const m = Math.floor(sek / 60), x = sek % 60; return m ? (x ? `${m} min ${x} s` : `${m} min`) : `${x} s`; };
@@ -955,17 +955,17 @@ setInterval(() => {
   if (!vorschauGleich(v, laufbuch.vorschau) || (Object.keys(v).length && Date.now() - (laufbuch.vorschauT || 0) > 20 * 60e3)) laufbuchBald();
 }, 60e3);
 const zwei = (n) => String(n).padStart(2, '0');
-const nurUhr = (ms) => { const d = new Date(ms); return `${zwei(d.getHours())}.${zwei(d.getMinutes())}`; };
+const nurUhr = (ms) => { const d = new Date(ms); return `${zwei(d.getHours())}.${zwei(d.getMinutes())}\u00a0Uhr`; };   // 0.9.43: «21.09 Uhr»
 const gleicherTag = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
 /** 0.9.36: Tagestrenner im Ablauf – «Heute · Donnerstag 19.11.», «Morgen · Freitag 20.11.», sonst «Samstag 21.11.». */
 function tagName(ms) {
   const d = new Date(ms), h = new Date(), tage = Math.round((new Date(d.toDateString()) - new Date(h.toDateString())) / 864e5);
-  const n = `${WOCHENTAGE[d.getDay()]} ${zwei(d.getDate())}.${zwei(d.getMonth() + 1)}.`;
+  const n = fmtTag(ms);   // 0.9.43: mit Jahr, «Sonntag 22.11.26»
   return tage === 0 ? `Heute · ${n}` : tage === 1 ? `Morgen · ${n}` : tage === -1 ? `Gestern · ${n}` : n;
 }
 /** 0.9.33: «Donnerstag 19.11.26» (wie in der Zeile «Start um … Uhr am …» der Vorschau). */
 const fmtTag = (ms) => { const d = new Date(ms); return `${WOCHENTAGE[d.getDay()]} ${zwei(d.getDate())}.${zwei(d.getMonth() + 1)}.${zwei(d.getFullYear() % 100)}`; };
-const fmtStart = (ms) => { const d = new Date(ms); return `${zwei(d.getHours())}:${zwei(d.getMinutes())} Uhr am ${WOCHENTAGE[d.getDay()]} ${zwei(d.getDate())}.${zwei(d.getMonth() + 1)}.${zwei(d.getFullYear() % 100)}`; };
+const fmtStart = (ms) => `${nurUhr(ms)} am ${fmtTag(ms)}`;   // 0.9.43: «21.00 Uhr am Sonntag 22.11.26»
 
 /** Peptid-Liste (peptide.js): pp-Nummer -> [Spooky2-Name, Deutsch]. */
 const PEPTIDE = self.RADIX_PEPTIDE || null;
@@ -1978,7 +1978,7 @@ class Generator {
       // 0.9.32 (Markus 19.11.2026: «Startzeiten nicht gleich untereinander», «nur pp0140 Gutartige Prostatavergrösserung, den Rest bei Mouse over»):
       // Startzeit eigene Spalte (bündig), Name gekürzt, ganzer Name + Zeile im Popup
       let uhr = '';
-      if (!it.fehler && i === lauftPi) { try { uhr = `bis ${uhrKurz(laufZeiten(this.lauf).progEnde)}`; } catch (e) { uhr = 'läuft'; } }
+      if (!it.fehler && i === lauftPi) { try { uhr = `bis ${nurUhr(laufZeiten(this.lauf).progEnde)}`; } catch (e) { uhr = 'läuft'; } }
       else if (!it.fehler && st[i] != null) uhr = nurUhr(st[i]);   // 0.9.37: jeder Tag hat seinen Trenner – Uhrzeit ohne Wochentag
       const auf = !it.fehler && it.ende > it.start;
       const voll = it.name + (it.zeile && it.zeile.trim() !== String(it.code).trim() && !it.zeile.includes(it.name) ? `\n${it.zeile}` : '');
@@ -2013,7 +2013,7 @@ class Generator {
       if (e.war && !this.warOffen) { if (!e.marke) teile.push(e.h); continue; }    // eingeklappt (Zeile per CSS versteckt, Trenner weg)
       if (e.marke) {                                                 // gleicher Tag wie darüber: nur «Start um 21:00», ohne den Tag zu wiederholen
         const neuTag = e.ms ? new Date(e.ms).toDateString() : tag;
-        teile.push(neuTag === tag ? e.h.replace('class="p marke trenner', 'class="p marke trenner gleich') : e.h); tag = neuTag; continue;
+        teile.push(e.h); tag = neuTag; continue;   // 0.9.43 (Markus 20.11.2026): auch am gleichen Tag wie «Sonntag 22.11.26 · Start um 21.00 Uhr»
       }
       const msT = e.ms ?? (e.war && tag === null ? Date.now() : null);
       if (msT != null && new Date(msT).toDateString() !== tag) {
@@ -2165,7 +2165,7 @@ class Generator {
       if (akt >= 0 && j < akt) { cls = 'd'; rechts = '✓'; }
       else if (j === akt) { cls = 'a'; rechts = pausiert ? 'pausiert' : 'noch ' + mmss(Math.min(rest, (schluss - jetztMs) / 1000)); }
       else if (e.von != null && e.von >= schluss) { cls = 'x'; rechts = 'entfällt'; }
-      else if (e.von != null) rechts = uhrKurz(e.von);
+      else if (e.von != null) rechts = nurUhr(e.von);
       return `<div class="r ${cls}"><span>${j + 1}</span><span>${esc(e.text)}</span><span>${fmtDauerKurz(e.sek)}</span><span class="t">${rechts}</span></div>`;
     };
     let von = 0, bis = n;
@@ -2180,7 +2180,7 @@ class Generator {
     for (let j = von; j < bis; j++) h += zeile(j);
     if (bis < n) {
       const letzte = ein[n - 1], ende = letzte.von != null ? Math.min(letzte.von + letzte.sek * 1000, schluss) : null;
-      h += `<div class="r mehr" data-fq-alle="1"><span></span><span>… ${n - bis} weitere</span><span></span><span class="t">${ende != null ? 'bis ' + uhrKurz(ende) : ''}</span></div>`;
+      h += `<div class="r mehr" data-fq-alle="1"><span></span><span>… ${n - bis} weitere</span><span></span><span class="t">${ende != null ? 'bis ' + nurUhr(ende) : ''}</span></div>`;
     } else if (this.fqAlle && n > 14) h += `<div class="r mehr" data-fq-alle="1"><span></span><span>weniger zeigen</span><span></span><span class="t"></span></div>`;
     return h;
   }
