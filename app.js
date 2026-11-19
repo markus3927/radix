@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.35';
+const VERSION = '0.9.36';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -955,6 +955,13 @@ setInterval(() => {
   if (!vorschauGleich(v, laufbuch.vorschau) || (Object.keys(v).length && Date.now() - (laufbuch.vorschauT || 0) > 20 * 60e3)) laufbuchBald();
 }, 60e3);
 const zwei = (n) => String(n).padStart(2, '0');
+const gleicherTag = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
+/** 0.9.36: Tagestrenner im Ablauf – «Heute · Donnerstag 19.11.», «Morgen · Freitag 20.11.», sonst «Samstag 21.11.». */
+function tagName(ms) {
+  const d = new Date(ms), h = new Date(), tage = Math.round((new Date(d.toDateString()) - new Date(h.toDateString())) / 864e5);
+  const n = `${WOCHENTAGE[d.getDay()]} ${zwei(d.getDate())}.${zwei(d.getMonth() + 1)}.`;
+  return tage === 0 ? `Heute · ${n}` : tage === 1 ? `Morgen · ${n}` : tage === -1 ? `Gestern · ${n}` : n;
+}
 /** 0.9.33: «Donnerstag 19.11.26» (wie in der Zeile «Start um … Uhr am …» der Vorschau). */
 const fmtTag = (ms) => { const d = new Date(ms); return `${WOCHENTAGE[d.getDay()]} ${zwei(d.getDate())}.${zwei(d.getMonth() + 1)}.${zwei(d.getFullYear() % 100)}`; };
 const fmtStart = (ms) => { const d = new Date(ms); return `${zwei(d.getHours())}:${zwei(d.getMinutes())} Uhr am ${WOCHENTAGE[d.getDay()]} ${zwei(d.getDate())}.${zwei(d.getMonth() + 1)}.${zwei(d.getFullYear() % 100)}`; };
@@ -1341,6 +1348,7 @@ class Generator {
     li.addEventListener('input', () => this.zeigeBalken());
     if (window.ResizeObserver) new ResizeObserver(() => { this.zeigeBalken(); this.vorschauHoehe(); }).observe(li);
     $('.menue', k).addEventListener('toggle', () => this.vorschauHoehe());
+    $('.wz-liste', k).addEventListener('toggle', () => { this.bildText = null; this.zeigeBalken(true); });   // 0.9.36
     li.onpaste = () => setTimeout(() => { const n = K.listeEingefuegt(li.value); if (n !== li.value) { li.value = n; clearTimeout(warte); this.setzeListe(n); } }, 0);   // 0.8.6
     const pr = $('.preset', k);
     pr.onchange = () => { this.einst.standardPreset = pr.value.trim(); speichereAlle(); this.pruefe(); };
@@ -1365,6 +1373,7 @@ class Generator {
       const d = ev.target.closest('button[data-dual]'); if (d) { this.schalteDual(+d.dataset.dual); return; }
       const b = ev.target.closest('button[data-z]'); if (b) { this.setzeVariante(+b.dataset.z, b.dataset.v); return; }
       if (ev.target.closest('button')) return;
+      if (ev.target.closest('[data-war]')) { this.warOffen = !this.warOffen; this.pruefe(); return; }
       // 0.9.31: «… weitere» zeigt alle Frequenzen des Programms; Programmzeile antippen klappt ihre Frequenzen auf/zu (immer nur eine offen)
       // 0.9.32: Programmzeile antippen = ihre Frequenzen rechts zeigen; nochmals = wieder das laufende
       const p = ev.target.closest('div.p.auf');
@@ -1947,12 +1956,16 @@ class Generator {
     if (lauftPi !== this.fqLaufPi) { this.fqLaufPi = lauftPi; this.fqWahl = null; this.fqAlle = false; }   // neues Programm läuft: wieder automatisch das laufende aufklappen
     const offen = this.fqWahl != null ? this.fqWahl : lauftPi;
     { const it = anzeigen.items[offen]; this.fqPi = it && !it.fehler && it.ende > it.start ? offen : -1; }
+    // 0.9.36: Tag des zuletzt gezeigten Trenners – Uhrzeiten an diesem Tag ohne Wochentag
+    let tagZ = Date.now();
+    { const k = anzeigen.items.findIndex((x, i) => !(this.lauf && i < aktPi) && x.r.art !== 'zeit'); if (k >= 0 && st[k] != null && !(this.lauf && k <= aktPi)) tagZ = st[k]; }
     const zeilenHtml = anzeigen.items.map((it, i) => {
       if (it.r.art === 'zeit') {
         const ms = this.lauf ? (this.lauf.plan.schritte[it.start] || {}).zeitMs : zeiten[it.start];
+        if (ms) tagZ = ms;
         const wann = ms ? fmtStart(ms) : `${it.r.um} Uhr`;
-        return `<div class="p marke${this.lauf && i < aktPi ? ' war' : ''}" data-pi="${i}"><code>⏰</code><span class="name">Start um ${wann}</span><span class="uhr"></span><span class="zeit"></span>` +
-          `<span class="pinfo">Was darunter steht, startet erst um ${it.r.um} Uhr. Läuft dann noch ein Programm davor, wird es beendet.</span></div>`;
+        // 0.9.36: Zeitmarke = Tagestrenner im Ablauf («Heute · Donnerstag 19.11. · Start um 21:00»)
+        return `<div class="p marke trenner${this.lauf && i < aktPi ? ' war' : ''}" data-pi="${i}" title="${esc(`Start um ${wann}. Was darunter steht, startet erst dann. Läuft noch ein Programm davor, wird es beendet.`)}"><span class="tag">${esc(ms ? tagName(ms) : 'Zeitmarke')}</span><span class="um">Start um ${esc(it.r.um)}</span></div>`;
       }
       const nv = /^(pr\d{4}) (NF|HF)$/.exec(it.code || ''), andere = nv && (nv[2] === 'NF' ? 'HF' : 'NF');
       const wechsel = nv && !it.fehler && (i > aktPi || i === pausePi) && daten.finder && daten.finder.programme.has(`${nv[1]} ${andere}`)
@@ -1969,7 +1982,7 @@ class Generator {
       // Startzeit eigene Spalte (bündig), Name gekürzt, ganzer Name + Zeile im Popup
       let uhr = '';
       if (!it.fehler && i === lauftPi) { try { uhr = `bis ${uhrKurz(laufZeiten(this.lauf).progEnde)}`; } catch (e) { uhr = 'läuft'; } }
-      else if (!it.fehler && st[i] != null) uhr = uhrKurz(st[i]);
+      else if (!it.fehler && st[i] != null) uhr = gleicherTag(st[i], tagZ) ? uhrKurz(st[i]).replace(/^\S+\u00a0/, '').replace(/^.*\u00a0/, '') : uhrKurz(st[i]);   // 0.9.36: unter dem Tagestrenner ohne Wochentag
       const auf = !it.fehler && it.ende > it.start;
       const voll = it.name + (it.zeile && it.zeile.trim() !== String(it.code).trim() && !it.zeile.includes(it.name) ? `\n${it.zeile}` : '');
       return `<div class="p${it.fehler ? ' fehler' : ''}${auf ? ' auf' : ''}${i === offen && auf ? ' offen' : ''}${this.lauf && i < aktPi ? ' war' : ''}" data-pi="${i}" title="${esc(it.code + ' ' + voll)}"><code>${esc(it.code)}</code><span class="name">${esc(kurzName(it.name))}</span><span class="uhr${i === lauftPi ? ' laeuft' : ''}">${uhr}</span><span class="zeit">${it.sek != null ? fmtZeit(it.sek) : ''}</span>` +
@@ -1981,7 +1994,26 @@ class Generator {
     const steht = !this.lauf && anzeigen.items.length > 0;
     vs.classList.toggle('steht', steht);
     const vsTop = vs.scrollTop;                                     // 0.9.35: Neuaufbau behält die Scroll-Stelle
-    vs.innerHTML = (steht ? `<div class="steht-hinweis">⏹ Generator ${esc(this.einst.nr)} steht – diese Liste startet nicht von selbst. Die Uhrzeiten gelten erst nach «Start».</div>` : '') + this.mitFixNachZeit(zeilenHtml, st);
+    // 0.9.36: Gelaufenes eingeklappt («✓ 3 gelaufen»), oben ein Tagestrenner, wenn der sichtbare Ablauf nicht mit einer Zeitmarke beginnt
+    const istWar = (x, i) => this.lauf && i < aktPi && x.r.art !== 'zeit';
+    const nWar = anzeigen.items.filter(istWar).length;
+    const sichtbar = anzeigen.items.findIndex((x, i) => this.warOffen ? true : !istWar(x, i));
+    const vorTrenner = anzeigen.items.slice(0, Math.max(0, sichtbar)).some(x => x.r.art === 'zeit');
+    const erste = anzeigen.items[sichtbar];
+    const kopfTag = erste && erste.r.art !== 'zeit' && !vorTrenner
+      ? `<div class="p trenner kopf-tag"><span class="tag">${esc(tagName(st[sichtbar] != null && !(this.lauf && sichtbar <= aktPi) ? st[sichtbar] : Date.now()))}</span><span class="um"></span></div>` : '';
+    const warSchalter = nWar ? `<div class="war-schalter" data-war="1">${this.warOffen ? '▾' : '▸'} ✓ ${nWar} gelaufen${this.warOffen ? ' – zuklappen' : ''}</div>` : '';
+    vs.classList.toggle('war-offen', !!this.warOffen);
+    vs.innerHTML = (steht ? `<div class="steht-hinweis">⏹ Generator ${esc(this.einst.nr)} steht – diese Liste startet nicht von selbst. Die Uhrzeiten gelten erst nach «Start».</div>` : '') + warSchalter + kopfTag + this.mitFixNachZeit(zeilenHtml, st);
+    this.zeigeKopfStatus(steht);
+    // Werkzeuge: «Einstellungen» offen, solange nichts läuft (dort sind Durchläufe und Start um); «Liste bearbeiten» offen, wenn die Liste leer ist
+    const zust = (this.lauf ? 'l' : 's') + (anzeigen.items.length ? '' : '0');
+    if (zust !== this.wzZustand) {
+      this.wzZustand = zust;
+      const we = $('.wz-einst', this.karte), wl = $('.wz-liste', this.karte);
+      if (we) we.open = !this.lauf;
+      if (wl && !anzeigen.items.length && !this.lauf) wl.open = true;
+    }
     const md = {};
     for (const it of anzeigen.items) if (it.r.art === 'zeit' && it.zeilenNr != null) {
       const ms = this.lauf ? (this.lauf.plan.schritte[it.start] || {}).zeitMs : zeiten[it.start];
@@ -2063,6 +2095,7 @@ class Generator {
     if (!erzwingen) {                                               // anderes Programm läuft (oder Zeitmarke erreicht): Liste einmal neu aufbauen
       const l = this.lauf, x = l && l.status !== 'wartet' && l.plan.schritte[l.schritt], pi = x && !x.marke ? x.pi : (x ? x.pi : -1);
       if (pi !== this.fqLaufPi) { this.pruefe(); return; }
+      this.zeigeKopfStatus(false);                                  // 0.9.36: «wartet bis …» → «läuft …»
     }
     const box = $('.fq', this.karte);
     if (!box || !this.fqDaten) return;
@@ -2132,6 +2165,22 @@ class Generator {
     } else if (this.fqAlle && n > 14) h += `<div class="r mehr" data-fq-alle="1"><span></span><span>weniger zeigen</span><span></span><span class="t"></span></div>`;
     return h;
   }
+  /** 0.9.36: Status-Pille im Kopf der Karte – läuft / wartet / pausiert / steht, mit «alles fertig». */
+  zeigeKopfStatus(steht) {
+    const el = $('.kopf-status', this.karte); if (!el) return;
+    const l = this.lauf;
+    let t = '', c = '';
+    if (l) {
+      const s = l.plan.schritte[l.schritt], it = s && l.items[s.pi];
+      let fertig = '';
+      try { const z = laufZeiten(l); fertig = z.listeEnde ? ` · fertig ${uhrKurz(z.listeEnde)}` : ''; } catch (e) { /* egal */ }
+      if (l.status === 'pause') { t = 'pausiert'; c = 'w'; }
+      else if (l.status === 'wartet') { t = l.startUmMs ? `wartet · Start ${uhrKurz(l.startUmMs)}` : 'wartet'; c = 'w'; }
+      else if (s && s.marke) { t = `wartet bis ${uhrKurz(s.zeitMs || Date.now())}${fertig}`; c = 'w'; }
+      else { const ein = l.einst[s && (s.ei ?? l.aktivEi)]; t = `läuft${fertig}`; c = it ? farbArt(it, ein && ein.e, s).replace('f-', '') : 'h'; }
+    } else if (steht) { t = 'steht'; c = 'steht'; }
+    el.hidden = !t; el.textContent = t; el.className = 'kopf-status ' + c;
+  }
   markiereAktiv() {
     const l = this.lauf, pi = l && l.plan.schritte[l.schritt] ? l.plan.schritte[l.schritt].pi : -1;
     const vs = $('.vorschau', this.karte);
@@ -2194,7 +2243,7 @@ class Generator {
     const ab = vs.getBoundingClientRect().top - this.karte.getBoundingClientRect().top;
     vs.style.maxHeight = Math.max(220, window.innerHeight - kopf - ab - 28) + 'px';
     const fp = $('.fq-panel', this.karte);                           // 0.9.32: Frequenzliste rechts bis zum Fensterrand
-    if (fp && window.innerWidth >= 980) fp.style.maxHeight = Math.max(200, window.innerHeight - kopf - (fp.getBoundingClientRect().top - this.karte.getBoundingClientRect().top) - 60) + 'px';
+    if (fp && window.innerWidth >= 980) fp.style.maxHeight = Math.min(380, Math.max(200, window.innerHeight - kopf - (fp.getBoundingClientRect().top - this.karte.getBoundingClientRect().top) - 60)) + 'px';   // 0.9.36: Werkzeuge darunter bleiben sichtbar
   }
 
   sperre(laufend) {

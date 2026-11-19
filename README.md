@@ -58,6 +58,18 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.36 (Brücke bleibt 1.2.1) – Karte neu geordnet: links Ablauf, rechts Jetzt, Werkzeuge eingeklappt
+
+- Markus 19.11.2026 21.10–21.17: Liste oben und Vorschau unten zeigten alles doppelt; «das Gesamtbild sollte Sinn machen … nicht chronologisch»
+  → Entwurf im Chat freigegeben («ja bitte versuch das mal»).
+- **Links «Ablauf»** (wie ein Kalender): Uhrzeit vorne, dann Nummer, Name, Dauer; darunter Preset und NF/HF/Dual. Zeitmarken sind schmale
+  Tagestrenner «Heute · Donnerstag 19.11. … Start um 21:00», «Morgen · Freitag 20.11.», sonst Wochentag. Gelaufenes eingeklappt («▸ ✓ 3 gelaufen»).
+  Uhrzeiten unter einem Trenner ohne Wochentag.
+- **Rechts «Jetzt»**: Preset, Meldungen, Status, Fortschritt, Start/Stopp, Vorspulen/Pause, Frequenzen.
+- **Darunter eingeklappt**: «✎ Liste bearbeiten» (Eingabefeld + Heute/Morgen aus Kontrollblatt + Leeren; offen, wenn die Liste leer ist),
+  «⚙ Einstellungen» («→ RADIX», Durchläufe, Start um, Preset für eigene Zeilen; offen, solange nichts läuft), Programme des Kunden, Protokoll.
+- **Kopf der Karte**: Pille «läuft · fertig Sa 21.09» (Programmfarbe), «wartet bis 21.00», «pausiert» oder rot «steht».
+
 ## Stand Version 0.9.35 (Brücke bleibt 1.2.1) – Dual/NF/HF ohne Verrutschen, Name bei [Dual]
 
 - Markus 19.11.2026 18.38: «wenn ich dual aus klicke verändert das das ganze bild oben und ich muss nach scrollen» · bei pr2274 stand nur die Nummer.

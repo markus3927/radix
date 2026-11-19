@@ -108,7 +108,7 @@
   .gen-innen{display:flex;flex-direction:column;gap:8px;min-width:0}
   .spalte{display:contents}
   /* Reihenfolge in der normalen Ansicht wie bisher: Preset, Kopplung, Liste, Vorschau, Einstellungen … */
-  .spalte.rechts > .preset-aktiv{order:1} .spalte.rechts > label.auto{order:2} .spalte.links > *{order:3} .spalte.rechts > *{order:4}
+  .spalte.rechts > .jetzt-box{order:1} .spalte.links > *{order:2} .spalte.rechts > *{order:4}
   /* Einzelansicht: nur der gewählte Generator, ganze Breite, zwei Spalten */
   body.einzel main{grid-template-columns:minmax(0,1fr)}
   body.einzel .gen:not(.gezeigt){display:none}
@@ -217,7 +217,7 @@
   .vorschau div.p.aktiv.f-v{background:rgba(106,27,154,.13);box-shadow:inset 4px 0 var(--mwv)}
   .vorschau div.p.marke.aktiv.f-w{background:#FFE9A8;box-shadow:inset 4px 0 var(--gold)}
   .vorschau div.p.fehler{background:var(--rot-bg);color:var(--rot)}
-  .vorschau div.p.marke{background:var(--gold-bg)} .vorschau div.p.marke .name{font-weight:700;color:var(--gold)}
+  .vorschau div.p.marke:not(.trenner){background:var(--gold-bg)} .vorschau div.p.marke .name{font-weight:700;color:var(--gold)}
   .vorschau code{font:600 12px Consolas,monospace;color:var(--royal-dark)}
   .vorschau .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
   .vorschau .zeit{color:var(--text-light);text-align:right}
@@ -253,6 +253,34 @@
   .fq .r.mehr{cursor:pointer;color:var(--royal-dark)} .fq .r.mehr:hover{text-decoration:underline}
   .fq .r:last-child{padding-bottom:8px}
   details.protokoll{opacity:.6} details.protokoll[open]{opacity:1}
+  /* 0.9.36 (Markus 19.11.2026: «das Gesamtbild sollte Sinn machen … nicht chronologisch»): links Ablauf nach Zeit, rechts Jetzt, Werkzeuge eingeklappt */
+  .ablauf-titel, .jetzt-titel{font-size:12px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--text-light)}
+  .jetzt-box{display:flex;flex-direction:column;gap:9px;background:#fff;border:1px solid var(--divider);border-radius:12px;padding:12px 14px}
+  .jetzt-box .fq-panel{margin-top:2px;border-radius:8px}
+  details.werkzeug{border:1px solid var(--divider);border-radius:10px;background:#fff}
+  details.werkzeug > summary{padding:9px 14px;cursor:pointer;font-weight:600;color:var(--royal-dark);list-style:none;user-select:none}
+  details.werkzeug > summary::-webkit-details-marker{display:none}
+  details.werkzeug > summary::after{content:"▸";float:right;color:var(--text-light)} details.werkzeug[open] > summary::after{content:"▾"}
+  details.werkzeug > .wz-innen, details.werkzeug > .menue-liste, details.werkzeug > pre, details.werkzeug > .proto-knopf{padding:0 14px 12px}
+  details.werkzeug .wz-innen{display:flex;flex-direction:column;gap:9px}
+  details.protokoll.werkzeug{opacity:.75} details.protokoll.werkzeug[open]{opacity:1}
+  .kopf-status{font-size:12.5px;font-weight:700;padding:3px 10px;border-radius:999px;background:var(--hell,#EEF3FF);color:var(--royal-dark);white-space:nowrap}
+  .kopf-status.k{background:rgba(200,16,46,.12);color:var(--kill)} .kopf-status.h{background:rgba(43,82,206,.12);color:var(--royal-dark)}
+  .kopf-status.m{background:rgba(27,127,59,.13);color:var(--mw)} .kopf-status.v{background:rgba(106,27,154,.12);color:var(--mwv)}
+  .kopf-status.w{background:var(--gold-bg);color:var(--gold)} .kopf-status.steht{background:var(--rot-bg);color:var(--rot)}
+  /* Ablauf: Uhrzeit vorne wie im Kalender */
+  .vorschau div.p{grid-template-columns:66px auto minmax(0,1fr) 78px}
+  .vorschau div.p > .uhr{grid-column:1;grid-row:1;text-align:left}
+  .vorschau div.p > code{grid-column:2;grid-row:1} .vorschau div.p > .name{grid-column:3;grid-row:1} .vorschau div.p > .zeit{grid-column:4;grid-row:1}
+  .vorschau div.p > .pinfo{grid-column:2/5;grid-row:2}
+  .vorschau div.p.trenner{display:flex;justify-content:space-between;align-items:baseline;background:#F4F7FC;border-top:1px solid var(--divider);padding:7px 10px 5px;position:sticky;top:0;z-index:1}
+  .vorschau div.p.trenner .tag{font-weight:700;color:var(--dunkel,#1B2F7A);font-size:13px}
+  .vorschau div.p.trenner .um{font-weight:700;color:var(--gold);font-size:12.5px}
+  .vorschau div.p.trenner.aktiv{background:var(--gold-bg);box-shadow:inset 4px 0 var(--gold)}
+  .vorschau div.p.trenner.war{opacity:1} .vorschau div.p.trenner.war .tag, .vorschau div.p.trenner.war .um{color:var(--text-light)}
+  .vorschau .war-schalter{padding:6px 10px;color:var(--text-light);cursor:pointer;font-size:12.5px;border-bottom:1px solid var(--royal-light)}
+  .vorschau .war-schalter:hover{color:var(--royal-dark)}
+  .vorschau:not(.war-offen) div.p.war:not(.trenner){display:none}
   .vorschau div.p.fixk{background:#eef3ff;opacity:.85} .vorschau div.p.fixk .name{font-weight:700;color:#2f5fc4}   /* 0.9.26 */
   .zusammenfassung{font-size:12.5px;color:var(--text-light)}
   .warnungen{font-size:12.5px;color:var(--rot);background:var(--rot-bg);border-radius:6px;padding:5px 8px}
@@ -341,39 +369,20 @@
       </span>
       <span class="kunde"></span>
       <span class="chip" title="USB-Chip und Verbindungszustand"></span>
+      <span class="kopf-status" hidden></span>
       <span class="spacer"></span>
       <button class="ghost klein btn-testen" title="Verbindet neu und zeigt die Kartennummer als Frequenz auf dem Display des angeschlossenen Generators (Ausgänge bleiben aus, darum leuchten keine Ausgangs-LEDs)">Testen</button>
     </div>
     <div class="gen-innen">
     <div class="spalte links">
-    <div class="listen-block">
-      <div class="label-reihe">
-        <label title="Eine Zeile pro Programm: pr0245 NF · pa60 · sm15 · eigene Frequenzzeile">Programme (eine Zeile pro Programm)</label>
-        <button class="ghost klein btn-heute" title="Ersetzt die Liste durch die heutige Zeile des Kontrollblatts">Heute aus Kontrollblatt</button>
-        <button class="ghost klein btn-morgen" title="Zuerst unten bei «Start um» die Startzeit für morgen eintragen. Hängt dann die Zeile von morgen aus dem Kontrollblatt an, mit dieser Uhrzeit davor.">Morgen aus Kontrollblatt</button>
-        <button class="ghost klein btn-leeren" title="Liste leeren (läuft der Generator, wird er zuerst gestoppt). Danach mit Start wieder von vorne.">Leeren</button>
-      </div>
-      <div class="liste-rahmen">
-        <div class="liste-bild" aria-hidden="true"></div>
-        <textarea class="liste" spellcheck="false" wrap="soft" placeholder="Beispiel (Liste ist leer):&#10;pr0245 NF&#10;pa30&#10;um 06:00&#10;437=240, 727=420"></textarea>
-        <div class="liste-balken" hidden></div>
-      </div>
-    </div>
     <div class="neu" hidden><span class="neu-text"></span><button class="ghost klein btn-anhaengen">Anhängen</button></div>
-    <details class="menue" hidden><summary>Programme des Kunden (Kontrollblatt)</summary><div class="menue-liste"></div></details>
+    <div class="ablauf-titel">Ablauf</div>
     <div class="vorschau"></div>
     </div>
     <div class="spalte rechts">
+    <div class="jetzt-box">
+    <div class="jetzt-titel">Jetzt</div>
     <div class="preset-aktiv"></div>
-    <label class="auto"><input type="checkbox" class="auto-cb"> «→ RADIX» im Kontrollblatt kommt hierher (Start von Hand)</label>
-    <div class="reihe">
-      <div><label>Preset für eigene Zeilen</label><input class="preset" list="preset-liste" placeholder="Healing (R) - JW" autocomplete="off"></div>
-    </div>
-    <div class="reihe">
-      <div><label>Durchläufe (0 = endlos)</label><input class="durchlaeufe" type="number" min="0" step="1"></div>
-      <div><label>Start um (leer = sofort)</label><input class="start-um" type="time"></div>
-    </div>
-    <div class="zusammenfassung"></div>
     <div class="warnungen"></div>
     <div class="status"></div>
     <div class="gx-test" hidden>
@@ -392,7 +401,39 @@
       <button class="ghost klein btn-pause" disabled title="Laufendes Programm anhalten (Ausgänge aus, Stelle bleibt). Dann beim laufenden Programm NF/HF/Dual umstellen und mit «▶ Weiter» an derselben Stelle fortsetzen.">⏸ Pause</button>
     </div>
     <div class="fq-panel"><div class="fq"></div></div>
-    <details class="protokoll"><summary>Protokoll (für Claude)</summary><div class="proto-knopf"><button class="ghost klein btn-kopieren" title="Ganzes Protokoll in die Zwischenablage, z. B. zum Einfügen im Chat">Kopieren</button></div><pre></pre></details>
+    </div>
+    <details class="werkzeug wz-liste"><summary>✎ Liste bearbeiten</summary>
+    <div class="wz-innen">
+    <div class="listen-block">
+      <div class="label-reihe">
+        <label title="Eine Zeile pro Programm: pr0245 NF · pa60 · sm15 · eigene Frequenzzeile">Eine Zeile pro Programm</label>
+        <button class="ghost klein btn-heute" title="Ersetzt die Liste durch die heutige Zeile des Kontrollblatts">Heute aus Kontrollblatt</button>
+        <button class="ghost klein btn-morgen" title="Zuerst bei «Start um» (Einstellungen) die Startzeit für morgen eintragen. Hängt dann die Zeile von morgen aus dem Kontrollblatt an, mit dieser Uhrzeit davor.">Morgen aus Kontrollblatt</button>
+        <button class="ghost klein btn-leeren" title="Liste leeren (läuft der Generator, wird er zuerst gestoppt). Danach mit Start wieder von vorne.">Leeren</button>
+      </div>
+      <div class="liste-rahmen">
+        <div class="liste-bild" aria-hidden="true"></div>
+        <textarea class="liste" spellcheck="false" wrap="soft" placeholder="Beispiel (Liste ist leer):&#10;pr0245 NF&#10;pa30&#10;um 06:00&#10;437=240, 727=420"></textarea>
+        <div class="liste-balken" hidden></div>
+      </div>
+    </div>
+    </div>
+    </details>
+    <details class="werkzeug wz-einst"><summary>⚙ Einstellungen</summary>
+    <div class="wz-innen">
+    <label class="auto"><input type="checkbox" class="auto-cb"> «→ RADIX» im Kontrollblatt kommt hierher (Start von Hand)</label>
+    <div class="reihe">
+      <div><label>Durchläufe (0 = endlos)</label><input class="durchlaeufe" type="number" min="0" step="1"></div>
+      <div><label>Start um (leer = sofort)</label><input class="start-um" type="time"></div>
+    </div>
+    <div class="reihe">
+      <div><label>Preset für eigene Zeilen</label><input class="preset" list="preset-liste" placeholder="Healing (R) - JW" autocomplete="off"></div>
+    </div>
+    <div class="zusammenfassung"></div>
+    </div>
+    </details>
+    <details class="menue werkzeug" hidden><summary>Programme des Kunden (Kontrollblatt)</summary><div class="menue-liste"></div></details>
+    <details class="protokoll werkzeug"><summary>Protokoll (für Claude)</summary><div class="proto-knopf"><button class="ghost klein btn-kopieren" title="Ganzes Protokoll in die Zwischenablage, z. B. zum Einfügen im Chat">Kopieren</button></div><pre></pre></details>
     </div>
     </div>
   </section>
