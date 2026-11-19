@@ -120,13 +120,16 @@
     body.einzel .spalte{display:flex;flex-direction:column;gap:9px;min-width:0}
     body.einzel .spalte.links > *, body.einzel .spalte.rechts > *{order:0}
     body.einzel textarea.liste{min-height:240px}
-    /* 0.9.38: Ablauf und Jetzt in derselben Zeile, gleich hoch; die Liste scrollt innen */
-    body.einzel .gen-innen{grid-template-rows:auto;row-gap:9px}
+    /* 0.9.39: Karte füllt das Fenster unter dem schmalen Kopf (--karte-h aus app.js), ruhig, unabhängig vom Inhalt.
+       Links Ablauf über die ganze Höhe, rechts Jetzt (wächst) und die Werkzeuge unten – beide Seiten enden bündig. */
+    body.einzel .gen.gezeigt{min-height:var(--karte-h,auto);scroll-margin-top:calc(var(--kopf-klein,var(--kopf,0px)) + 12px)}
+    body.einzel .gen-innen{flex:1 1 auto;grid-template-rows:1fr repeat(6,auto);row-gap:0;align-items:stretch}
     body.einzel .spalte{display:contents}
-    body.einzel .ablauf-box{grid-column:1;grid-row:1;align-self:stretch;min-height:420px;display:flex}
-    body.einzel .jetzt-box{grid-column:2;grid-row:1;align-self:stretch}
-    body.einzel .spalte.rechts > :not(.jetzt-box){grid-column:2}
+    body.einzel .ablauf-box{grid-column:1;grid-row:1/-1;display:flex;min-height:420px}
+    body.einzel .jetzt-box{grid-column:2;grid-row:1}
+    body.einzel .spalte.rechts > :not(.jetzt-box){grid-column:2;margin-top:9px}
     body.einzel .ablauf-box .vorschau{flex:1 1 0;min-height:0;max-height:none;contain:size}
+    body.einzel .jetzt-box .fq-panel{flex:1 1 0;min-height:150px;max-height:none;contain:size}
   }
   body.einzel .preset-aktiv{font-size:18px}
   body.einzel .status{font-size:15px}

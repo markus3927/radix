@@ -58,6 +58,13 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.39 (Brücke bleibt 1.2.1) – Karte füllt das Fenster, ruhige Höhe
+
+- Markus 19.11.2026 22.19/22.22: «linkes Feld unten bündig mit dem Protokoll» – «das Feld wird grösser und kleiner, das sollte still sein und bis ganz unten gehen, dass der Footer verschwindet wie bei den Nachbarn».
+- Einzelansicht breit: Die Karte reicht bis zum Fensterrand unter dem schmalen Kopf (`--karte-h`, `setzeKartenHoehe()`); die Höhe hängt nur vom Fenster ab, nie vom Inhalt. Der Fuss liegt unter dem Rand.
+- Links der Ablauf über die ganze Höhe, rechts «Jetzt» (die Frequenzliste wächst mit) und darunter die Werkzeuge – unten bündig mit dem Protokoll.
+- Springen zu einer Karte setzt sie direkt unter den schmalen Kopf (`scroll-margin` mit `--kopf-klein`). Schmale Ansicht unverändert.
+
 ## Stand Version 0.9.38 (Brücke bleibt 1.2.1) – Ablauf und Jetzt gleich gross
 
 - Markus 19.11.2026 22.08: «der Radius der Felder ist nicht gleich und die Höhe der nebeneinander liegenden Felder ist nicht gleich».

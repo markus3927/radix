@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.38';
+const VERSION = '0.9.39';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -2258,6 +2258,7 @@ class Generator {
     const vs = $('.vorschau', this.karte);
     if (!vs) return;
     if (!document.body.classList.contains('einzel') || !this.karte.classList.contains('gezeigt')) { vs.style.maxHeight = ''; return; }
+    if (window.innerWidth >= 980) { vs.style.maxHeight = ''; const f = $('.fq-panel', this.karte); if (f) f.style.maxHeight = ''; return; }   // 0.9.39: breit regelt das CSS (ruhige Höhe)
     const kopf = ($('#kopfbereich') || {}).offsetHeight || 0;
     const ab = vs.getBoundingClientRect().top - this.karte.getBoundingClientRect().top;
     vs.style.maxHeight = Math.max(220, window.innerHeight - kopf - ab - 28) + 'px';
@@ -2914,7 +2915,24 @@ function springeZu(nr) {
 /** Höhe des stehenbleibenden Kopfs, damit die Karte beim Springen nicht darunter verschwindet. */
 function setzeKopfHoehe() {
   document.documentElement.style.setProperty('--kopf', $('#kopfbereich').offsetHeight + 'px');
+  setzeKartenHoehe();
   alleKarten(g => g.vorschauHoehe && g.vorschauHoehe());          // 0.9.21: Kopf schmal/gross -> Vorschau bis zum Fensterrand
+}
+/** 0.9.39: Einzelansicht – die Karte reicht bis zum Fensterrand unter dem schmalen Kopf; der Fuss rutscht unter den Rand.
+ *  Gerechnet wird immer mit dem schmalen Kopf: die Höhe hängt nur vom Fenster ab, nie vom Inhalt oder vom Scrollen – sie bleibt ruhig.
+ *  Beim Springen zu einer Karte landet sie direkt unter dem schmalen Kopf (scroll-margin mit --kopf-klein). */
+function setzeKartenHoehe() {
+  const b = document.body, kb = $('#kopfbereich');
+  if (!kb) return;
+  let klein;
+  if (b.classList.contains('gescrollt')) klein = kb.offsetHeight;
+  else { b.classList.add('gescrollt'); klein = kb.offsetHeight; b.classList.remove('gescrollt'); }
+  const h = Math.max(560, window.innerHeight - klein - 26);
+  if (setzeKartenHoehe.w === window.innerWidth && Math.abs((setzeKartenHoehe.h || 0) - h) <= 8) return;   // kleine Kopf-Zuckungen ignorieren
+  setzeKartenHoehe.w = window.innerWidth; setzeKartenHoehe.h = h;
+  const r = document.documentElement.style;
+  r.setProperty('--kopf-klein', klein + 'px');
+  r.setProperty('--karte-h', h + 'px');
 }
 /** Beim Scrollen bleibt der Kopf stehen und wird schmal (kleines Logo); oben wieder gross. */
 function beobachteScrollen() {
