@@ -58,6 +58,11 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.41 (Brücke bleibt 1.2.1) – Ablauf: Tage und «Start um» gross und blau
+
+- Markus 19.11.2026 23.58: Tag («Heute · Donnerstag», «Morgen · Freitag») und «Start um» fast so gross wie das Preset, «Start um 11.00 Uhr», Zeilen blau statt gelb («das Gelb passt nicht»), «Start um» etwas grösser als die Programmzeilen.
+- Tag 16,5 px (Preset 18 px), «Start um» 14,5 px blau (Zeilen 12,5 px), Zeitmarken-Zeilen hellblau hinterlegt, wartende Zeitmarke blau markiert.
+
 ## Stand Version 0.9.40 (Brücke bleibt 1.2.1) – Karte passt ganz ins Fenster, ohne Scrollen
 
 - Markus 19.11.2026 22.38: «Jetzt sind die Felder rechts abgeschnitten und muss scrollen» – 0.9.39 rechnete mit dem schmalen Kopf.

@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.40';
+const VERSION = '0.9.41';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -1962,7 +1962,7 @@ class Generator {
         const ms = this.lauf ? (this.lauf.plan.schritte[it.start] || {}).zeitMs : zeiten[it.start];
         const wann = ms ? fmtStart(ms) : `${it.r.um} Uhr`;
         // 0.9.36: Zeitmarke = Tagestrenner im Ablauf («Heute · Donnerstag 19.11. · Start um 21:00»)
-        return `<div class="p marke trenner${this.lauf && i < aktPi ? ' war' : ''}" data-pi="${i}" title="${esc(`Start um ${wann}. Was darunter steht, startet erst dann. Läuft noch ein Programm davor, wird es beendet.`)}"><span class="tag">${esc(ms ? tagName(ms) : 'Zeitmarke')}</span><span class="um">Start um ${esc(it.r.um)}</span></div>`;
+        return `<div class="p marke trenner${this.lauf && i < aktPi ? ' war' : ''}" data-pi="${i}" title="${esc(`Start um ${wann}. Was darunter steht, startet erst dann. Läuft noch ein Programm davor, wird es beendet.`)}"><span class="tag">${esc(ms ? tagName(ms) : 'Zeitmarke')}</span><span class="um">Start um ${esc(String(it.r.um).replace(':', '.'))} Uhr</span></div>`;   // 0.9.41: «Start um 11.00 Uhr»
       }
       const nv = /^(pr\d{4}) (NF|HF)$/.exec(it.code || ''), andere = nv && (nv[2] === 'NF' ? 'HF' : 'NF');
       const wechsel = nv && !it.fehler && (i > aktPi || i === pausePi) && daten.finder && daten.finder.programme.has(`${nv[1]} ${andere}`)
