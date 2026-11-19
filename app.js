@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.34';
+const VERSION = '0.9.35';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -999,6 +999,8 @@ const EINMAL_MARKE = /\[1\s*[×x]\]/i, EINMAL_WEG = /\s*\[1\s*[×x]\]\s*/ig, EIN
  * wie bei den Zeilen aus dem Kontrollblatt. Zeilen mit Text, Zeitmarken und loop bleiben, wie sie sind.
  */
 function handyMitName(z) {
+  // 0.9.35 (Markus 19.11.2026: bei «pr2274 NF [Dual]» stand nur die Nummer): «[Dual]» abnehmen, Namen setzen, wieder anhängen
+  if (DUAL_MARKE.test(String(z || ''))) { const o = String(z).replace(DUAL_WEG, ' ').trim(), n = handyMitName(o); return n !== o ? `${n}  [Dual]` : String(z || '').trim(); }
   const t = String(z || '').trim();
   const m = /^((?:pr|pp)\s?\d{1,4}|(?:pa|sm)\s?\d{2})(?:\s+(NF|HF))?$/i.exec(t);
   if (!m) return t;
@@ -1561,7 +1563,7 @@ class Generator {
     const text = zeilen.join('\n');
     const vorher = this.einst.liste;
     this.setzeListe(text);
-    if (this.einst.liste !== vorher) { $('.liste', this.karte).value = text; this.log(`${DUAL_MARKE.test(zeilen[zeilenNr]) ? 'Dual ein' : 'Dual aus'}: ${zeilen[zeilenNr].split(/\s{2,}|\t/)[0]}`); }
+    if (this.einst.liste !== vorher) { const li = $('.liste', this.karte), top = li.scrollTop; li.value = text; li.scrollTop = top; this.zeigeBalken(); this.log(`${DUAL_MARKE.test(zeilen[zeilenNr]) ? 'Dual ein' : 'Dual aus'}: ${zeilen[zeilenNr].split(/\s{2,}|\t/)[0]}`); }
   }
 
   /** NF oder HF für eine Zeile der Programmliste festlegen (Knopf in der Vorschau). */
@@ -1575,8 +1577,10 @@ class Generator {
     const p = code && daten.finder ? daten.finder.programme.get(code) : null;
     zeilen[zeilenNr] = (p ? `${code}  ${p.name.replace(/^(pa|sm)\d{2}\s+/i, '')}` : z.replace(/^(\s*pr\s?\d{1,4})\b/i, `$1 ${v}`).replace(DUAL_WEG, ' ').replace(HANDY_WEG, ' ').replace(EINMAL_WEG, ' ').trimEnd()) + (DUAL_MARKE.test(z) ? '  [Dual]' : '') + (HANDY_MARKE.test(z) ? HANDY_ZEICHEN : '') + (EINMAL_MARKE.test(z) ? EINMAL_ZEICHEN : '');
     const text = zeilen.join('\n');
-    $('.liste', this.karte).value = text;
+    const li = $('.liste', this.karte), top = li.scrollTop;          // 0.9.35: Feld bleibt, wo es war
+    li.value = text; li.scrollTop = top;
     this.setzeListe(text);
+    li.scrollTop = top; this.zeigeBalken();
   }
 
   /** Einträge der heutigen Kontrollblatt-Zeile, die noch nicht in der Programmliste stehen. */
@@ -1976,6 +1980,7 @@ class Generator {
     // 0.9.33 (Markus 19.11.2026, Gen 3 stand seit dem Fieber-Stopp, Liste sah aber geplant aus): steht der Generator, Hinweis oben und Zeiten grau
     const steht = !this.lauf && anzeigen.items.length > 0;
     vs.classList.toggle('steht', steht);
+    const vsTop = vs.scrollTop;                                     // 0.9.35: Neuaufbau behält die Scroll-Stelle
     vs.innerHTML = (steht ? `<div class="steht-hinweis">⏹ Generator ${esc(this.einst.nr)} steht – diese Liste startet nicht von selbst. Die Uhrzeiten gelten erst nach «Start».</div>` : '') + this.mitFixNachZeit(zeilenHtml, st);
     const md = {};
     for (const it of anzeigen.items) if (it.r.art === 'zeit' && it.zeilenNr != null) {
@@ -1983,6 +1988,7 @@ class Generator {
       if (ms && md[it.zeilenNr] == null) md[it.zeilenNr] = ms;
     }
     this.markenDaten = { text: this.lauf ? this.lauf.listeText : this.einst.liste, md, steht };
+    vs.scrollTop = vsTop;
     this.zeigeFrequenzen(true);
     const m = this.meldung && this.meldung.bis > Date.now() ? this.meldung : null;
     w.textContent = [m ? m.text : '', ...anzeigen.warnungen.map(x => this.lauf ? 'Übersprungen, bis geklärt – ' + x : x)].filter(Boolean).join(' · ');
@@ -2138,8 +2144,11 @@ class Generator {
       for (const f of ['k', 'h', 'm', 'v', 'w']) row.classList.toggle('f-' + f, ja && f === farbe);
     }
     // 0.9.21: wechselt das laufende Programm, Vorschau und Liste dorthin scrollen (nicht, solange die Maus in der Vorschau ist)
-    const neu = pi !== this.balkenPi || (l && l.listeText) !== this.balkenText;
-    this.balkenPi = pi; this.balkenText = l && l.listeText;
+    // 0.9.35 (Markus 19.11.2026: «Dual aus» verschob das ganze Bild): nur springen, wenn wirklich ein anderes Programm läuft –
+    // nicht schon, weil sich der Text der Liste geändert hat (Dual, NF/HF, Name)
+    const zNr = l && l.plan.schritte[l.schritt] && l.items[l.plan.schritte[l.schritt].pi] ? l.items[l.plan.schritte[l.schritt].pi].zeilenNr : -1;
+    const neu = pi !== this.balkenPi || zNr !== this.balkenZeile;
+    this.balkenPi = pi; this.balkenZeile = zNr; this.balkenText = l && l.listeText;
     if (neu && akt && !vs.matches(':hover') && (akt.offsetTop < vs.scrollTop || akt.offsetTop + akt.offsetHeight > vs.scrollTop + vs.clientHeight))
       vs.scrollTop = Math.max(0, akt.offsetTop - 30);
     this.zeigeBalken(neu);

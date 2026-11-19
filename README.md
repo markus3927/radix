@@ -58,6 +58,13 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.35 (Brücke bleibt 1.2.1) – Dual/NF/HF ohne Verrutschen, Name bei [Dual]
+
+- Markus 19.11.2026 18.38: «wenn ich dual aus klicke verändert das das ganze bild oben und ich muss nach scrollen» · bei pr2274 stand nur die Nummer.
+- Klick auf «Dual», «Dual aus», «→ NF/HF»: Vorschau und Programmliste bleiben an ihrer Stelle (vorher sprang die Vorschau nach oben, beim laufenden
+  Generator auch das Feld zur laufenden Zeile). Gesprungen wird nur noch, wenn ein anderes Programm zu laufen beginnt.
+- Handy-Zeilen mit «[Dual]» (z. B. `pr2274 NF [Dual]`) bekommen jetzt auch den Namen aus dem Finder.
+
 ## Stand Version 0.9.34 (Brücke bleibt 1.2.1) – «um»-Zeile wie unten
 
 - Markus 19.11.2026 18.01: Datum und Zeit in der Programmliste «gleich wie unten, auch fett und gleiche Reihenfolge».
