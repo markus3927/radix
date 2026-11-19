@@ -58,6 +58,8 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.42 (Brücke bleibt 1.2.1) – «Start um … Uhr» im gleichen Blau wie Healing (#2B52CE)
+
 ## Stand Version 0.9.41 (Brücke bleibt 1.2.1) – Ablauf: Tage und «Start um» gross und blau
 
 - Markus 19.11.2026 23.58: Tag («Heute · Donnerstag», «Morgen · Freitag») und «Start um» fast so gross wie das Preset, «Start um 11.00 Uhr», Zeilen blau statt gelb («das Gelb passt nicht»), «Start um» etwas grösser als die Programmzeilen.

@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.41';
+const VERSION = '0.9.42';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
