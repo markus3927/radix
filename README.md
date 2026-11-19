@@ -58,6 +58,15 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.31 (Brücke bleibt 1.2.1) – Uhrzeit je Programm und Frequenzliste
+
+- Markus 19.11.2026: «Beim solo radix für plasma und contact hast du mir das mit der zeit eingebaut. Wie wäre es wenn du mir sowas auch im big radix einbaust?» – Entwurf 2 (in der Programmliste) freigegeben.
+- Jede Programmzeile in der Vorschau zeigt rechts fett die **Startzeit** (anderer Tag mit Wochentag, «Fr 01.02»), das laufende Programm «läuft bis 17.10».
+- Das **laufende Programm ist aufgeklappt**: Frequenzen pr0085 HF · 3/27, je Frequenz Nr · Programmfrequenz (Sweep «727 – 741 Hz», Dual «7.83 + 10 Hz», MW «MW 516.45») · Dauer · Uhrzeit.
+  Gelaufen ✓, laufend «noch m:ss» (pausiert: «pausiert»), was eine Zeitmarke abschneidet: «entfällt». Gezeigt: 2 gelaufene, die laufende, 4 kommende; «… weitere» zeigt alle, «weniger zeigen» wieder kurz.
+- Andere Programmzeile antippen = deren Frequenzen mit voraussichtlichen Uhrzeiten; nochmals antippen = zu. Immer nur eins offen. Wechselt das laufende Programm, ist wieder das laufende offen.
+- Kern: Plan-Schritte tragen zusätzlich `db`/`db2` (Programmfrequenz) bzw. `da` (Molekulargewicht) – nur Anzeige, Ablauf unverändert (21 360 Pläne mit 0.9.30 verglichen, alle gleich).
+
 ## Stand Version 0.9.30 (Brücke bleibt 1.2.1) – Schumann immer Healing
 
 - Markus 18.11.2026: sm60 auf Gen 2 zeigte «Killing (R) - JW». Ursache: Schumann übernahm das Preset des Nachbarprogramms (oben in der Liste: das danach, pr0438 Killing).

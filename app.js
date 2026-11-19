@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.30';
+const VERSION = '0.9.31';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -776,6 +776,21 @@ const fmtUhr = (ms) => { const d = new Date(ms), h = new Date(); const tag = d.t
  * Programms. Kommt vorher eine Zeitmarke, endet es dort (wie im Ablauf: die fällige Zeitmarke beendet das Programm).
  * Ende der ganzen Liste nur im letzten Durchlauf: jede Zeitmarke setzt die Uhr auf ihre Zeit (warten oder abbrechen), dann weiter mit den Dauern.
  */
+/** 0.9.31: kurze Uhrzeit für Listen «16.34», an einem anderen Tag «Fr 16.34». */
+const uhrKurz = (ms) => { const d = new Date(ms), h = new Date(); return (d.toDateString() === h.toDateString() ? '' : WOCHENTAGE[d.getDay()].slice(0, 2) + '\u00a0') + `${zwei(d.getHours())}.${zwei(d.getMinutes())}`; };
+const mmss = (sek) => { sek = Math.max(0, Math.ceil(sek)); const h = Math.floor(sek / 3600), m = Math.floor(sek % 3600 / 60), x = sek % 60; return h ? `${h}:${zwei(m)}:${zwei(x)}` : `${m}:${zwei(x)}`; };
+/** 0.9.31: Dauer einer Frequenz kurz: «3 min», «1 min 30 s», «45 s» (Bruchteile gerundet). */
+const fmtDauerKurz = (sek) => { sek = Math.round(sek); const m = Math.floor(sek / 60), x = sek % 60; return m ? (x ? `${m} min ${x} s` : `${m} min`) : `${x} s`; };
+const fqZahl = (hz) => (+(+hz).toFixed(hz >= 1000 ? 2 : 3)).toLocaleString('de-CH');
+/** 0.9.31: Programmfrequenz eines Schritts zum Anzeigen (Sweep «660 – 890 Hz», Dual «112 + 120 Hz», MW «MW 342,3»). */
+function fqText(x) {
+  if (x.pause) return 'Pause';
+  if (x.da) return `MW ${fqZahl(x.da)}`;
+  const a = x.sweep ? `${fqZahl(x.sweep.von)} – ${fqZahl(x.sweep.bis)}` : x.db != null ? fqZahl(x.db) : null;
+  if (a == null) return `Out1 ${fmtHz(x.f1)}`;
+  if (x.dual) { const b = x.sweep2 ? `${fqZahl(x.sweep2.von)} – ${fqZahl(x.sweep2.bis)}` : x.db2 != null ? fqZahl(x.db2) : null; if (b != null && b !== a) return `${a} + ${b} Hz`; }
+  return `${a} Hz`;
+}
 function laufZeiten(l) {
   const alle = l.plan.schritte, jetzt = Date.now(), s = alle[l.schritt];
   let j = l.schritt; while (j + 1 < alle.length && alle[j + 1].pi === s.pi && !alle[j + 1].marke) j++;
@@ -1320,7 +1335,16 @@ class Generator {
     au.onchange = () => { this.einst.auto = au.checked; this.uebernommen = null; this.uebernommenMorgen = null; this.morgenErsterBlick = true; speichereAlle(); this.aktualisiereKunde(); };
     $('.vorschau', k).onclick = (ev) => {
       const d = ev.target.closest('button[data-dual]'); if (d) { this.schalteDual(+d.dataset.dual); return; }
-      const b = ev.target.closest('button[data-z]'); if (b) this.setzeVariante(+b.dataset.z, b.dataset.v);
+      const b = ev.target.closest('button[data-z]'); if (b) { this.setzeVariante(+b.dataset.z, b.dataset.v); return; }
+      if (ev.target.closest('button')) return;
+      // 0.9.31: «… weitere» zeigt alle Frequenzen des Programms; Programmzeile antippen klappt ihre Frequenzen auf/zu (immer nur eine offen)
+      if (ev.target.closest('[data-fq-alle]')) { this.fqAlle = !this.fqAlle; this.zeigeFrequenzen(true); return; }
+      const p = ev.target.closest('div.p.auf');
+      if (p && !(getSelection() || '').toString()) {
+        const pi = +p.dataset.pi, jetztOffen = this.fqWahl != null ? this.fqWahl : this.fqLaufPi;
+        this.fqWahl = pi === jetztOffen ? -1 : pi; this.fqAlle = false;
+        this.pruefe();
+      }
     };
     $('.protokoll', k).ontoggle = () => { $('.protokoll pre', k).textContent = this.protokoll.join('\n'); };
     $('.btn-kopieren', k).onclick = () => this.kopiereProtokoll();
@@ -1881,6 +1905,12 @@ class Generator {
     const ab = !von && su ? naechsteUhrzeit(su, jetzt) : jetzt;
     const zeiten = this.lauf ? {} : markenZeiten(anzeigen.plan.schritte, von, ab);
     this.vorschauBis = this.lauf ? Infinity : Math.min(...Object.values(zeiten).filter(x => x > jetzt), ab > jetzt ? ab : Infinity);   // ab dann gilt ein anderes Datum
+    // 0.9.28: Startzeiten je Listenzeile · 0.9.31: schon hier, für die Uhrzeit in jeder Zeile und die Frequenzliste
+    let st = {}; try { st = this.startZeiten(anzeigen, zeiten, ab, von); } catch (e) { st = {}; }
+    this.fqDaten = { anzeigen, zeiten, st };
+    const lauftPi = this.lauf && this.lauf.status !== 'wartet' ? aktPi : -1;
+    if (lauftPi !== this.fqLaufPi) { this.fqLaufPi = lauftPi; this.fqWahl = null; this.fqAlle = false; }   // neues Programm läuft: wieder automatisch das laufende aufklappen
+    const offen = this.fqWahl != null ? this.fqWahl : lauftPi;
     const zeilenHtml = anzeigen.items.map((it, i) => {
       if (it.r.art === 'zeit') {
         const ms = this.lauf ? (this.lauf.plan.schritte[it.start] || {}).zeitMs : zeiten[it.start];
@@ -1898,13 +1928,19 @@ class Generator {
       const wob = it.wobble ? ` · <span class="w" title="Frequency Wobble, Dreieck ${it.wobble.stufen} Stufen, ${it.wobble.hz} Stufen/s – am Gerät noch nicht gegen Spooky2 geprüft">Wobble ${String(it.wobble.prozent).replace('.', ',')} % (vorläufig)</span>` : '';
       const wahl = /NF oder HF/.test(it.fehler || '') ? ` <button class="ghost klein" data-z="${it.zeilenNr}" data-v="NF">NF</button> <button class="ghost klein" data-z="${it.zeilenNr}" data-v="HF">HF</button>` : '';
       const hinweis = it.fehler ? esc(it.fehler) + wahl : (it.warnungen || []).filter(x => !NICHT_UNTERSTUETZT.test(x)).map(esc).join(' · ');
-      return `<div class="p${it.fehler ? ' fehler' : ''}" data-pi="${i}"><code>${esc(it.code)}</code><span class="name" title="${esc(it.zeile)}">${esc(it.name)}</span><span class="zeit">${it.sek != null ? fmtZeit(it.sek) : ''}</span>` +
-        `<span class="pinfo">${preset}${wob}${hinweis ? (preset ? ' · ' : '') + hinweis : ''}${wechsel}${dualKnopf}</span></div>`;
+      // 0.9.31 (Markus 19.11.2026): Startzeit fett vor der Dauer; das laufende Programm zeigt, bis wann es läuft
+      let uhr = '';
+      if (!it.fehler && i === lauftPi) { try { uhr = `<b class="uhr">läuft bis ${uhrKurz(laufZeiten(this.lauf).progEnde)}</b>`; } catch (e) { uhr = '<b class="uhr">läuft</b>'; } }
+      else if (!it.fehler && st[i] != null) uhr = `<b class="uhr">${uhrKurz(st[i])}</b>`;
+      const auf = !it.fehler && it.ende > it.start;
+      return `<div class="p${it.fehler ? ' fehler' : ''}${auf ? ' auf' : ''}${i === offen && auf ? ' offen' : ''}" data-pi="${i}"><code>${esc(it.code)}</code><span class="name" title="${esc(it.zeile)}">${esc(it.name)}</span><span class="zeit">${uhr}${it.sek != null ? fmtZeit(it.sek) : ''}</span>` +
+        `<span class="pinfo">${preset}${wob}${hinweis ? (preset ? ' · ' : '') + hinweis : ''}${wechsel}${dualKnopf}</span></div>` +
+        (i === offen && auf ? `<div class="fq" data-fq="${i}"></div>` : '');
     });
     // 0.9.28 (Markus 15.11.2026: «das wäre besser und übersichtlicher»): kommende Fixkacheln nach Uhrzeit zwischen die Programme der Liste
     // (bisher alle zuunterst, nach der ganzen Liste – bei langer Liste nur mit Scrollen zu sehen)
-    let st = {}; try { st = this.startZeiten(anzeigen, zeiten, ab, von); } catch (e) { st = {}; }
     vs.innerHTML = this.mitFixNachZeit(zeilenHtml, st);
+    this.zeigeFrequenzen(true);
     const m = this.meldung && this.meldung.bis > Date.now() ? this.meldung : null;
     w.textContent = [m ? m.text : '', ...anzeigen.warnungen.map(x => this.lauf ? 'Übersprungen, bis geklärt – ' + x : x)].filter(Boolean).join(' · ');
     w.className = 'warnungen' + (m && m.art === 'ok' && !anzeigen.warnungen.length ? ' ok' : '');
@@ -1964,6 +2000,84 @@ class Generator {
     });
     while (j < fx.length) aus.push(fx[j++].html);
     return aus.join('');
+  }
+  /**
+   * 0.9.31 (Markus 19.11.2026: «Beim solo radix … das mit der zeit eingebaut. Wie wäre es … auch im big radix», Entwurf 2 freigegeben):
+   * Frequenzliste unter der offenen Programmzeile – Nr · Programmfrequenz · Dauer · Uhrzeit. Gelaufen ✓, laufend «noch m:ss»,
+   * was nach der nächsten Zeitmarke käme, fällt weg («entfällt»). Gezeigt: 2 gelaufene, die laufende, 4 kommende; «… weitere» klappt alle auf.
+   * Ohne erzwingen höchstens einmal pro Sekunde und nur, wenn die Karte sichtbar ist.
+   */
+  zeigeFrequenzen(erzwingen = false) {
+    const jetztMs = Date.now();
+    if (!erzwingen && (jetztMs - (this.fqT || 0) < 1000 || (document.body.classList.contains('einzel') && gezeigt !== this))) return;
+    this.fqT = jetztMs;
+    if (!erzwingen) {                                               // anderes Programm läuft (oder Zeitmarke erreicht): Liste einmal neu aufbauen
+      const l = this.lauf, x = l && l.status !== 'wartet' && l.plan.schritte[l.schritt], pi = x && !x.marke ? x.pi : (x ? x.pi : -1);
+      if (pi !== this.fqLaufPi) { this.pruefe(); return; }
+    }
+    const vs = $('.vorschau', this.karte), box = vs && vs.querySelector('.fq');
+    if (!box || !this.fqDaten) return;
+    this.fqFarbe = 'h';
+    try { box.innerHTML = this.frequenzHtml(+box.dataset.fq, jetztMs); } catch (e) { box.innerHTML = ''; }
+    box.className = 'fq fa-' + this.fqFarbe;
+  }
+  frequenzHtml(pi, jetztMs) {
+    const { anzeigen, zeiten, st } = this.fqDaten, l = this.lauf;
+    const plan = l ? l.plan : anzeigen.plan, items = l ? l.items : anzeigen.items, it = items[pi];
+    if (!it || it.start == null || it.ende <= it.start) return '';
+    const s = plan.schritte, lauft = l && l.status !== 'wartet';
+    // Einträge: MW-Lücken (0,28 s) zählen zur folgenden Frequenz
+    const ein = []; let vor = 0, k0 = it.start;
+    for (let k = it.start; k < it.ende; k++) {
+      const x = s[k];
+      if (x.luecke) { vor += x.sek; continue; }
+      ein.push({ k0, k, sek: x.sek + vor, text: fqText(x) }); vor = 0; k0 = k + 1;
+    }
+    if (!ein.length) return '';
+    // nächste Zeitmarke nach dem Programm beendet es
+    let schluss = Infinity;
+    for (let k = it.ende; k < s.length; k++) if (s[k].marke) { const z = l ? s[k].zeitMs : zeiten[k]; if (z) schluss = z; break; }
+    // Startzeiten
+    let akt = -1, rest = 0;
+    if (lauft && l.schritt >= it.start && l.schritt < it.ende) {
+      akt = ein.findIndex(e => l.schritt >= e.k0 && l.schritt <= e.k);
+      let schonSek = 0; for (let k = ein[akt].k0; k < l.schritt; k++) schonSek += s[k].sek;
+      schonSek += l.tImSchritt || 0;
+      rest = Math.max(0, ein[akt].sek - schonSek);
+      let t = jetztMs - schonSek * 1000;
+      for (let j = akt; j < ein.length; j++) { ein[j].von = t; t += (j === akt ? ein[j].sek : ein[j].sek) * 1000; }
+    } else if (lauft && l.schritt >= it.ende && !(st[pi] != null)) {
+      akt = ein.length;                                               // schon gelaufen
+    } else if (st[pi] != null) {
+      let t = st[pi]; for (const e of ein) { e.von = t; t += e.sek * 1000; }
+    }
+    const pausiert = l && l.status === 'pause' && akt >= 0 && akt < ein.length;
+    const e0 = ein[0], einst = (l ? l.einst : anzeigen.einst)[s[e0.k].ei];
+    const farbe = farbArt(it, einst && einst.e, s[e0.k]); this.fqFarbe = farbe;
+    const n = ein.length, kopf = akt >= 0 && akt < n ? `${akt + 1}/${n}` : akt >= n ? `${n}/${n} gelaufen` : `${n} Frequenz${n === 1 ? '' : 'en'}`;
+    const zeile = (j) => {
+      const e = ein[j];
+      let cls = '', rechts = '';
+      if (akt >= 0 && j < akt) { cls = 'd'; rechts = '✓'; }
+      else if (j === akt) { cls = 'a'; rechts = pausiert ? 'pausiert' : 'noch ' + mmss(Math.min(rest, (schluss - jetztMs) / 1000)); }
+      else if (e.von != null && e.von >= schluss) { cls = 'x'; rechts = 'entfällt'; }
+      else if (e.von != null) rechts = uhrKurz(e.von);
+      return `<div class="r ${cls}"><span>${j + 1}</span><span>${esc(e.text)}</span><span>${fmtDauerKurz(e.sek)}</span><span class="t">${rechts}</span></div>`;
+    };
+    let von = 0, bis = n;
+    if (!this.fqAlle) {
+      if (akt >= 0 && akt < n) { von = Math.max(0, akt - 2); bis = Math.min(n, akt + 5); }
+      else if (akt >= n) { von = Math.max(0, n - 3); bis = n; }
+      else bis = Math.min(n, 6);
+    }
+    let h = `<div class="fk ${farbe}">Frequenzen ${esc(it.code)} · ${kopf}</div>`;
+    if (von > 0) h += `<div class="r mehr" data-fq-alle="1"><span></span><span>… ${von} ${akt >= 0 && von <= akt ? 'gelaufen' : 'davor'}</span><span></span><span class="t"></span></div>`;
+    for (let j = von; j < bis; j++) h += zeile(j);
+    if (bis < n) {
+      const letzte = ein[n - 1], ende = letzte.von != null ? Math.min(letzte.von + letzte.sek * 1000, schluss) : null;
+      h += `<div class="r mehr" data-fq-alle="1"><span></span><span>… ${n - bis} weitere</span><span></span><span class="t">${ende != null ? 'bis ' + uhrKurz(ende) : ''}</span></div>`;
+    } else if (this.fqAlle && n > 7) h += `<div class="r mehr" data-fq-alle="1"><span></span><span>weniger zeigen</span><span></span><span class="t"></span></div>`;
+    return h;
   }
   markiereAktiv() {
     const l = this.lauf, pi = l && l.plan.schritte[l.schritt] ? l.plan.schritte[l.schritt].pi : -1;
@@ -2551,6 +2665,7 @@ class Generator {
     const hinten = `Programm ${progNr(l.items, s.pi)}/${progAnz(l.items)} · Durchlauf ${l.durchlauf}${l.durchlaeufe ? '/' + l.durchlaeufe : ''} · ${!l.durchlaeufe ? 'endlos' : z.listeEnde ? 'alles fertig ' + fmtUhr(z.listeEnde) : 'noch ' + fmtZeit(z.restSek)}\n${was}`;
     this.setzeStatus(vorne, 'ok lauf-' + farbArt(it, ein && ein.e, s), hinten);   // 0.7.6: Laufschrift rot/blau/grün
     $('.balken > div', this.karte).style.width = `${Math.min(100, vorher / l.plan.gesamtSek * 100)}%`;
+    this.zeigeFrequenzen();
   }
 
   async stoppe(grund, fehler = false) {

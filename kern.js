@@ -280,6 +280,8 @@
             const paar = n && (n.art === 'hz' || n.art === 'sweep');
             const b = paar ? n : x;
             const s = { sek: x.sek, dual: true, text, wobble };
+            if (x.art !== 'sweep') { s.db = x.hz; if (x.mw) s.da = x.mw; }               // 0.9.31: Programmfrequenz für die Frequenzvorschau
+            if (paar && b.art !== 'sweep') s.db2 = b.hz;
             if (x.art === 'sweep') { s.sweep = { von: x.von, bis: x.bis }; s.f1 = f1Von(x.von); } else s.f1 = f1Von(x.hz);
             if (b.art === 'sweep') { s.sweep2 = { von: b.von, bis: b.bis }; s.f2 = inBereich(ziel(b.von), max2, e.out2.teilung); } else s.f2 = inBereich(ziel(b.hz), max2, e.out2.teilung);
             schritte.push(s);
@@ -291,7 +293,7 @@
             continue;
           }
           const f1 = f1Von(x.hz);
-          schritte.push({ sek: x.sek, f1, f2: f2Von(x.hz, f1), text, wobble });
+          schritte.push({ sek: x.sek, f1, f2: f2Von(x.hz, f1), text, wobble, db: x.hz, ...(x.mw ? { da: x.mw } : {}) });   // 0.9.31: db/da = Programmfrequenz bzw. Molekulargewicht (nur Anzeige)
         }
       }
       if (mitMW) for (let k = anfang; k < schritte.length; k++) schritte[k].mw = true;   // MW-Programm: Schritte nicht einzeln protokollieren
