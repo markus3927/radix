@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.32';
+const VERSION = '0.9.33';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -787,12 +787,14 @@ function kurzName(n) {
  * Bild hinter dem (durchsichtigen) Eingabefeld – gleiche Schrift und Umbrüche, nur Farben: Nummer blau, Name grau, «um 17:40» gelb hinterlegt,
  * laufende Zeile in Programmfarbe. Keine fette Schrift (sonst passt der Cursor nicht mehr auf den Text).
  */
-function listeBildHtml(text) {
-  return String(text).split('\n').map(z => {
-    let cls = '', inner;
+function listeBildHtml(text, opt = {}) {
+  // 0.9.33 (Markus 19.11.2026): «um 21:00» mit Wochentag und Datum rechts (wie unten), Gelaufenes grau
+  const md = opt.md || {}, bis = opt.bis ?? -1;
+  return String(text).split('\n').map((z, i) => {
+    let cls = i < bis ? ' war' : '', inner;
     const m = /^(\s*)((?:pr|pp)\d{4}(?:\s+(?:NF|HF))?|pa\d+|sm\d+)(.*)$/i.exec(z);
-    if (/^\s*um\s+\d{1,2}[:.]\d{2}/i.test(z)) { cls = ' zm'; inner = esc(z); }
-    else if (/^\s*loop-\d+/i.test(z)) { cls = ' loop'; inner = esc(z); }
+    if (/^\s*um\s+\d{1,2}[:.]\d{2}/i.test(z)) { cls += ' zm'; inner = esc(z) + (md[i] ? `<span class="zd${opt.steht ? ' grau' : ''}">${esc(fmtTag(md[i]))}</span>` : ''); }
+    else if (/^\s*loop-\d+/i.test(z)) { cls += ' loop'; inner = esc(z); }
     else if (m) inner = `${esc(m[1])}<span class="c">${esc(m[2])}</span><span class="n">${esc(m[3]).replace(/↻|\[1×\]|\[Dual\]/g, x => `<span class="r">${x}</span>`)}</span>`;
     else inner = `<span class="e">${esc(z)}</span>`;
     return `<div class="lz${cls}">${inner || '\u200b'}</div>`;
@@ -953,6 +955,8 @@ setInterval(() => {
   if (!vorschauGleich(v, laufbuch.vorschau) || (Object.keys(v).length && Date.now() - (laufbuch.vorschauT || 0) > 20 * 60e3)) laufbuchBald();
 }, 60e3);
 const zwei = (n) => String(n).padStart(2, '0');
+/** 0.9.33: «Donnerstag 19.11.26» (wie in der Zeile «Start um … Uhr am …» der Vorschau). */
+const fmtTag = (ms) => { const d = new Date(ms); return `${WOCHENTAGE[d.getDay()]} ${zwei(d.getDate())}.${zwei(d.getMonth() + 1)}.${zwei(d.getFullYear() % 100)}`; };
 const fmtStart = (ms) => { const d = new Date(ms); return `${zwei(d.getHours())}:${zwei(d.getMinutes())} Uhr am ${WOCHENTAGE[d.getDay()]} ${zwei(d.getDate())}.${zwei(d.getMonth() + 1)}.${zwei(d.getFullYear() % 100)}`; };
 
 /** Peptid-Liste (peptide.js): pp-Nummer -> [Spooky2-Name, Deutsch]. */
@@ -1943,7 +1947,7 @@ class Generator {
       if (it.r.art === 'zeit') {
         const ms = this.lauf ? (this.lauf.plan.schritte[it.start] || {}).zeitMs : zeiten[it.start];
         const wann = ms ? fmtStart(ms) : `${it.r.um} Uhr`;
-        return `<div class="p marke" data-pi="${i}"><code>⏰</code><span class="name">Start um ${wann}</span><span class="uhr"></span><span class="zeit"></span>` +
+        return `<div class="p marke${this.lauf && i < aktPi ? ' war' : ''}" data-pi="${i}"><code>⏰</code><span class="name">Start um ${wann}</span><span class="uhr"></span><span class="zeit"></span>` +
           `<span class="pinfo">Was darunter steht, startet erst um ${it.r.um} Uhr. Läuft dann noch ein Programm davor, wird es beendet.</span></div>`;
       }
       const nv = /^(pr\d{4}) (NF|HF)$/.exec(it.code || ''), andere = nv && (nv[2] === 'NF' ? 'HF' : 'NF');
@@ -1964,12 +1968,21 @@ class Generator {
       else if (!it.fehler && st[i] != null) uhr = uhrKurz(st[i]);
       const auf = !it.fehler && it.ende > it.start;
       const voll = it.name + (it.zeile && it.zeile.trim() !== String(it.code).trim() && !it.zeile.includes(it.name) ? `\n${it.zeile}` : '');
-      return `<div class="p${it.fehler ? ' fehler' : ''}${auf ? ' auf' : ''}${i === offen && auf ? ' offen' : ''}" data-pi="${i}" title="${esc(it.code + ' ' + voll)}"><code>${esc(it.code)}</code><span class="name">${esc(kurzName(it.name))}</span><span class="uhr${i === lauftPi ? ' laeuft' : ''}">${uhr}</span><span class="zeit">${it.sek != null ? fmtZeit(it.sek) : ''}</span>` +
+      return `<div class="p${it.fehler ? ' fehler' : ''}${auf ? ' auf' : ''}${i === offen && auf ? ' offen' : ''}${this.lauf && i < aktPi ? ' war' : ''}" data-pi="${i}" title="${esc(it.code + ' ' + voll)}"><code>${esc(it.code)}</code><span class="name">${esc(kurzName(it.name))}</span><span class="uhr${i === lauftPi ? ' laeuft' : ''}">${uhr}</span><span class="zeit">${it.sek != null ? fmtZeit(it.sek) : ''}</span>` +
         `<span class="pinfo">${preset}${wob}${hinweis ? (preset ? ' · ' : '') + hinweis : ''}${wechsel}${dualKnopf}</span></div>`;
     });
     // 0.9.28 (Markus 15.11.2026: «das wäre besser und übersichtlicher»): kommende Fixkacheln nach Uhrzeit zwischen die Programme der Liste
     // (bisher alle zuunterst, nach der ganzen Liste – bei langer Liste nur mit Scrollen zu sehen)
-    vs.innerHTML = this.mitFixNachZeit(zeilenHtml, st);
+    // 0.9.33 (Markus 19.11.2026, Gen 3 stand seit dem Fieber-Stopp, Liste sah aber geplant aus): steht der Generator, Hinweis oben und Zeiten grau
+    const steht = !this.lauf && anzeigen.items.length > 0;
+    vs.classList.toggle('steht', steht);
+    vs.innerHTML = (steht ? `<div class="steht-hinweis">⏹ Generator ${esc(this.einst.nr)} steht – diese Liste startet nicht von selbst. Die Uhrzeiten gelten erst nach «Start».</div>` : '') + this.mitFixNachZeit(zeilenHtml, st);
+    const md = {};
+    for (const it of anzeigen.items) if (it.r.art === 'zeit' && it.zeilenNr != null) {
+      const ms = this.lauf ? (this.lauf.plan.schritte[it.start] || {}).zeitMs : zeiten[it.start];
+      if (ms && md[it.zeilenNr] == null) md[it.zeilenNr] = ms;
+    }
+    this.markenDaten = { text: this.lauf ? this.lauf.listeText : this.einst.liste, md, steht };
     this.zeigeFrequenzen(true);
     const m = this.meldung && this.meldung.bis > Date.now() ? this.meldung : null;
     w.textContent = [m ? m.text : '', ...anzeigen.warnungen.map(x => this.lauf ? 'Übersprungen, bis geklärt – ' + x : x)].filter(Boolean).join(' · ');
@@ -2140,8 +2153,11 @@ class Generator {
     // 0.9.32: statt Balken über dem Feld färbt das Bild hinter dem Feld die laufende Zeile (stimmt auch bei umbrochenen Zeilen)
     const li = $('.liste', this.karte), bild = $('.liste-bild', this.karte);
     if (!li || !bild) return;
-    if (li.value !== this.bildText) { this.bildText = li.value; bild.innerHTML = listeBildHtml(li.value); this.bildAktiv = null; }
     const l = this.lauf, s = l && l.plan.schritte[l.schritt], it = s && l.items[s.pi];
+    const m = this.markenDaten, passt = m && li.value === m.text;
+    const opt = { md: passt ? m.md : {}, steht: passt && m.steht, bis: it && it.zeilenNr != null && li.value === l.listeText && l.status !== 'wartet' ? it.zeilenNr : -1 };
+    const schl = li.value + '\u0000' + JSON.stringify(opt);
+    if (schl !== this.bildText) { this.bildText = schl; bild.innerHTML = listeBildHtml(li.value, opt); this.bildAktiv = null; }
     let z = -1, cls = '';
     if (it && it.zeilenNr != null && li.value === l.listeText) {
       const ein = s.marke ? null : l.einst[s.ei ?? l.aktivEi];

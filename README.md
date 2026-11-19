@@ -58,6 +58,13 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.33 (Brücke bleibt 1.2.1) – «steht»-Hinweis, Datum bei Zeitmarken, Gelaufenes grau
+
+- Markus 19.11.2026: Gen 3 (Michelle) stand seit dem Fieber-Stopp, die Liste sah aber geplant aus («wie hätte ich das erkannt?»).
+- Steht ein Generator mit Liste: oben in der Vorschau rot «⏹ Generator 3 steht – diese Liste startet nicht von selbst», Startzeiten grau.
+- Programmliste: «um 21:00» zeigt rechts Wochentag und Datum («Donnerstag 19.11.26», wie «Start um … am …» unten; grau, wenn er steht).
+- Schon Gelaufenes ist grau – in der Programmliste (Zeilen vor der laufenden) und in der Vorschau (halb durchsichtig).
+
 ## Stand Version 0.9.32 (Brücke bleibt 1.2.1) – Liste modern, Startzeiten bündig, Frequenzen rechts
 
 - Markus 19.11.2026 17.04 zu 0.9.31: Liste «sieht so oldschool aus», ganzer Text nur mit Schieben, Startzeiten in gleicher Schrift; Startzeiten in der Vorschau
