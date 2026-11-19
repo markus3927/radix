@@ -58,6 +58,13 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.37 (Brücke bleibt 1.2.1) – jeder Tag mit eigenem Trenner
+
+- Markus 19.11.2026 21.58/22.00: «Fr 04.00 Antiaging» stand unter «Heute · Donnerstag», oben der gelaufene Trenner «Start um 15:00/17:40» – «verwirrt».
+- Jeder neue Tag bekommt im Ablauf einen Trenner – auch bei Fixkacheln und nach Mitternacht. Fixkacheln stehen zeitlich auch vor Zeitmarken richtig.
+- Trenner von Gelaufenem verschwinden mit dem eingeklappten Teil. Eine Zeitmarke am gleichen Tag wie darüber zeigt nur «⏰ Start um 11:00».
+- Uhrzeiten im Ablauf immer ohne Wochentag (der steht im Trenner).
+
 ## Stand Version 0.9.36 (Brücke bleibt 1.2.1) – Karte neu geordnet: links Ablauf, rechts Jetzt, Werkzeuge eingeklappt
 
 - Markus 19.11.2026 21.10–21.17: Liste oben und Vorschau unten zeigten alles doppelt; «das Gesamtbild sollte Sinn machen … nicht chronologisch»

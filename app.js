@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.36';
+const VERSION = '0.9.37';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -955,6 +955,7 @@ setInterval(() => {
   if (!vorschauGleich(v, laufbuch.vorschau) || (Object.keys(v).length && Date.now() - (laufbuch.vorschauT || 0) > 20 * 60e3)) laufbuchBald();
 }, 60e3);
 const zwei = (n) => String(n).padStart(2, '0');
+const nurUhr = (ms) => { const d = new Date(ms); return `${zwei(d.getHours())}.${zwei(d.getMinutes())}`; };
 const gleicherTag = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
 /** 0.9.36: Tagestrenner im Ablauf – «Heute · Donnerstag 19.11.», «Morgen · Freitag 20.11.», sonst «Samstag 21.11.». */
 function tagName(ms) {
@@ -1956,13 +1957,9 @@ class Generator {
     if (lauftPi !== this.fqLaufPi) { this.fqLaufPi = lauftPi; this.fqWahl = null; this.fqAlle = false; }   // neues Programm läuft: wieder automatisch das laufende aufklappen
     const offen = this.fqWahl != null ? this.fqWahl : lauftPi;
     { const it = anzeigen.items[offen]; this.fqPi = it && !it.fehler && it.ende > it.start ? offen : -1; }
-    // 0.9.36: Tag des zuletzt gezeigten Trenners – Uhrzeiten an diesem Tag ohne Wochentag
-    let tagZ = Date.now();
-    { const k = anzeigen.items.findIndex((x, i) => !(this.lauf && i < aktPi) && x.r.art !== 'zeit'); if (k >= 0 && st[k] != null && !(this.lauf && k <= aktPi)) tagZ = st[k]; }
     const zeilenHtml = anzeigen.items.map((it, i) => {
       if (it.r.art === 'zeit') {
         const ms = this.lauf ? (this.lauf.plan.schritte[it.start] || {}).zeitMs : zeiten[it.start];
-        if (ms) tagZ = ms;
         const wann = ms ? fmtStart(ms) : `${it.r.um} Uhr`;
         // 0.9.36: Zeitmarke = Tagestrenner im Ablauf («Heute · Donnerstag 19.11. · Start um 21:00»)
         return `<div class="p marke trenner${this.lauf && i < aktPi ? ' war' : ''}" data-pi="${i}" title="${esc(`Start um ${wann}. Was darunter steht, startet erst dann. Läuft noch ein Programm davor, wird es beendet.`)}"><span class="tag">${esc(ms ? tagName(ms) : 'Zeitmarke')}</span><span class="um">Start um ${esc(it.r.um)}</span></div>`;
@@ -1982,7 +1979,7 @@ class Generator {
       // Startzeit eigene Spalte (bündig), Name gekürzt, ganzer Name + Zeile im Popup
       let uhr = '';
       if (!it.fehler && i === lauftPi) { try { uhr = `bis ${uhrKurz(laufZeiten(this.lauf).progEnde)}`; } catch (e) { uhr = 'läuft'; } }
-      else if (!it.fehler && st[i] != null) uhr = gleicherTag(st[i], tagZ) ? uhrKurz(st[i]).replace(/^\S+\u00a0/, '').replace(/^.*\u00a0/, '') : uhrKurz(st[i]);   // 0.9.36: unter dem Tagestrenner ohne Wochentag
+      else if (!it.fehler && st[i] != null) uhr = nurUhr(st[i]);   // 0.9.37: jeder Tag hat seinen Trenner – Uhrzeit ohne Wochentag
       const auf = !it.fehler && it.ende > it.start;
       const voll = it.name + (it.zeile && it.zeile.trim() !== String(it.code).trim() && !it.zeile.includes(it.name) ? `\n${it.zeile}` : '');
       return `<div class="p${it.fehler ? ' fehler' : ''}${auf ? ' auf' : ''}${i === offen && auf ? ' offen' : ''}${this.lauf && i < aktPi ? ' war' : ''}" data-pi="${i}" title="${esc(it.code + ' ' + voll)}"><code>${esc(it.code)}</code><span class="name">${esc(kurzName(it.name))}</span><span class="uhr${i === lauftPi ? ' laeuft' : ''}">${uhr}</span><span class="zeit">${it.sek != null ? fmtZeit(it.sek) : ''}</span>` +
@@ -1994,17 +1991,39 @@ class Generator {
     const steht = !this.lauf && anzeigen.items.length > 0;
     vs.classList.toggle('steht', steht);
     const vsTop = vs.scrollTop;                                     // 0.9.35: Neuaufbau behält die Scroll-Stelle
-    // 0.9.36: Gelaufenes eingeklappt («✓ 3 gelaufen»), oben ein Tagestrenner, wenn der sichtbare Ablauf nicht mit einer Zeitmarke beginnt
-    const istWar = (x, i) => this.lauf && i < aktPi && x.r.art !== 'zeit';
-    const nWar = anzeigen.items.filter(istWar).length;
-    const sichtbar = anzeigen.items.findIndex((x, i) => this.warOffen ? true : !istWar(x, i));
-    const vorTrenner = anzeigen.items.slice(0, Math.max(0, sichtbar)).some(x => x.r.art === 'zeit');
-    const erste = anzeigen.items[sichtbar];
-    const kopfTag = erste && erste.r.art !== 'zeit' && !vorTrenner
-      ? `<div class="p trenner kopf-tag"><span class="tag">${esc(tagName(st[sichtbar] != null && !(this.lauf && sichtbar <= aktPi) ? st[sichtbar] : Date.now()))}</span><span class="um"></span></div>` : '';
+    // 0.9.36: Gelaufenes eingeklappt («✓ 3 gelaufen»)
+    // 0.9.37 (Markus 19.11.2026 21.58: «Fr 04.00 Antiaging» stand unter «Heute · Donnerstag», darüber der gelaufene Trenner 17:40 – «verwirrt»):
+    // jeder neue Tag bekommt seinen Trenner (auch Fixkacheln, Mitternacht); Trenner von Gelaufenem verschwinden mit dem eingeklappten Teil
+    const istWar = (x, i) => this.lauf && i < aktPi;
+    const nWar = anzeigen.items.filter((x, i) => istWar(x, i) && x.r.art !== 'zeit').length;
     const warSchalter = nWar ? `<div class="war-schalter" data-war="1">${this.warOffen ? '▾' : '▸'} ✓ ${nWar} gelaufen${this.warOffen ? ' – zuklappen' : ''}</div>` : '';
+    const eintraege = anzeigen.items.map((it, i) => {
+      const war = istWar(it, i);
+      if (it.r.art === 'zeit') { const ms = (this.lauf ? (this.lauf.plan.schritte[it.start] || {}).zeitMs : zeiten[it.start]) || null; return { h: zeilenHtml[i], ms, marke: true, war, t: war ? null : ms }; }
+      return { h: zeilenHtml[i], ms: war ? null : (this.lauf && i === aktPi ? Date.now() : st[i] ?? null), war, t: st[i] };
+    });
+    this.fixHtml();
+    const fx = this.fixZeilen || [], gemischt = [];
+    let j = 0;
+    eintraege.forEach(e => { if (e.t != null) while (j < fx.length && fx[j].startMs <= e.t) { gemischt.push({ h: fx[j].html, ms: fx[j].startMs }); j++; } gemischt.push(e); });
+    while (j < fx.length) { gemischt.push({ h: fx[j].html, ms: fx[j].startMs }); j++; }
+    let tag = null;
+    const teile = [];
+    for (const e of gemischt) {
+      if (e.war && !this.warOffen) { if (!e.marke) teile.push(e.h); continue; }    // eingeklappt (Zeile per CSS versteckt, Trenner weg)
+      if (e.marke) {                                                 // gleicher Tag wie darüber: nur «Start um 21:00», ohne den Tag zu wiederholen
+        const neuTag = e.ms ? new Date(e.ms).toDateString() : tag;
+        teile.push(neuTag === tag ? e.h.replace('class="p marke trenner', 'class="p marke trenner gleich') : e.h); tag = neuTag; continue;
+      }
+      const msT = e.ms ?? (e.war && tag === null ? Date.now() : null);
+      if (msT != null && new Date(msT).toDateString() !== tag) {
+        tag = new Date(msT).toDateString();
+        teile.push(`<div class="p trenner auto-tag"><span class="tag">${esc(tagName(msT))}</span><span class="um"></span></div>`);
+      }
+      teile.push(e.h);
+    }
     vs.classList.toggle('war-offen', !!this.warOffen);
-    vs.innerHTML = (steht ? `<div class="steht-hinweis">⏹ Generator ${esc(this.einst.nr)} steht – diese Liste startet nicht von selbst. Die Uhrzeiten gelten erst nach «Start».</div>` : '') + warSchalter + kopfTag + this.mitFixNachZeit(zeilenHtml, st);
+    vs.innerHTML = (steht ? `<div class="steht-hinweis">⏹ Generator ${esc(this.einst.nr)} steht – diese Liste startet nicht von selbst. Die Uhrzeiten gelten erst nach «Start».</div>` : '') + warSchalter + teile.join('');
     this.zeigeKopfStatus(steht);
     // Werkzeuge: «Einstellungen» offen, solange nichts läuft (dort sind Durchläufe und Start um); «Liste bearbeiten» offen, wenn die Liste leer ist
     const zust = (this.lauf ? 'l' : 's') + (anzeigen.items.length ? '' : '0');
@@ -2040,7 +2059,7 @@ class Generator {
     let k = []; try { k = fixKommendFuer(zahl(this)); } catch (e) { k = []; }
     const zeilen = k.map(f => {
       const codes = f.prog.map(p => p.code).join(', '), sek = Math.round((f.ende - f.startMs) / 1000);
-      return { startMs: f.startMs, html: `<div class="p fixk" title="${esc(f.name + ' · ' + fmtStart(f.startMs))}"><code>🗓</code><span class="name">${esc(f.name)} · Fixkachel</span><span class="uhr">${uhrKurz(f.startMs)}</span><span class="zeit">${fmtZeit(sek)}</span>` +
+      return { startMs: f.startMs, html: `<div class="p fixk" title="${esc(f.name + ' · ' + fmtStart(f.startMs))}"><code>🗓</code><span class="name">${esc(f.name)} · Fixkachel</span><span class="uhr">${nurUhr(f.startMs)}</span><span class="zeit">${fmtZeit(sek)}</span>` +
         `<span class="pinfo">Fixkachel, startet von selbst (läuft dann noch etwas, danach): ${esc(codes)}</span></div>` };
     }).sort((a, b) => a.startMs - b.startMs);
     const h = zeilen.map(z => z.html).join('');
