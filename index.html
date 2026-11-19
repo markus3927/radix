@@ -82,7 +82,7 @@
   body.gescrollt .marke b{font-size:19px} body.gescrollt .marke span{font-size:11.5px;margin-top:2px}
   body.gescrollt header button{padding:5px 13px}
   #leiste{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;padding:11px 14px 9px;background:linear-gradient(180deg,#2c49b3,#182f83);border-bottom:2px solid #42A5F5;box-shadow:0 3px 10px rgba(24,47,131,.3)}
-  #leiste button.lg{min-width:40px;padding:4px 8px;font-size:14px;border-radius:8px;color:var(--royal-dark);background:#fff;border-color:#9DBBE0;box-shadow:0 2px 0 #9DBBE0}
+  #leiste button.lg{min-width:40px;height:32px;box-sizing:border-box;padding:4px 8px;font-size:14px;border-radius:8px;color:var(--royal-dark);background:#fff;border-color:#9DBBE0;box-shadow:0 2px 0 #9DBBE0}
   /* 0.7.5: Killing pastellrot / Healing pastell-royalblau, je kräftig umrandet (heben sich von Leiste und Stopp ab) */
   #leiste button.lg.k{background:#FFC2C2;border:2px solid #FF1030;color:#7A0016;box-shadow:0 2px 0 #B0001C}
   #leiste button.lg.h{background:#C9D6FF;border:2px solid #4D8BFF;color:#0B2470;box-shadow:0 2px 0 #2A5FD0}
@@ -120,16 +120,20 @@
     body.einzel .spalte{display:flex;flex-direction:column;gap:9px;min-width:0}
     body.einzel .spalte.links > *, body.einzel .spalte.rechts > *{order:0}
     body.einzel textarea.liste{min-height:240px}
-    /* 0.9.39: Karte füllt das Fenster unter dem schmalen Kopf (--karte-h aus app.js), ruhig, unabhängig vom Inhalt.
+    /* 0.9.39/40: Karte füllt das Fenster bis zum unteren Rand (--karte-h aus app.js), ruhig, unabhängig vom Inhalt.
        Links Ablauf über die ganze Höhe, rechts Jetzt (wächst) und die Werkzeuge unten – beide Seiten enden bündig. */
-    body.einzel .gen.gezeigt{min-height:var(--karte-h,auto);scroll-margin-top:calc(var(--kopf-klein,var(--kopf,0px)) + 12px)}
-    body.einzel .gen-innen{flex:1 1 auto;grid-template-rows:1fr repeat(6,auto);row-gap:0;align-items:stretch}
+    body.einzel .gen.gezeigt{min-height:var(--karte-h,auto)}
+    body.einzel .gen.gezeigt:not(:has(details[open])){height:var(--karte-h,auto)}   /* zu: feste Höhe, Jetzt scrollt notfalls innen */
+    body.einzel .gen-innen{flex:1 1 0;min-height:0;grid-template-rows:minmax(0,1fr) repeat(6,auto);row-gap:0;align-items:stretch}
+    body.einzel .knopf-zeile{flex-direction:row;flex-wrap:wrap;justify-content:center;align-items:center;gap:8px 18px}   /* 0.9.40: eine Zeile, spart Höhe */
+    body.einzel .knopf-zeile .knoepfe{padding-bottom:0;margin-top:0}
+    body.einzel details.werkzeug > summary{padding:7px 14px}
     body.einzel .spalte{display:contents}
-    body.einzel .ablauf-box{grid-column:1;grid-row:1/-1;display:flex;min-height:420px}
-    body.einzel .jetzt-box{grid-column:2;grid-row:1}
-    body.einzel .spalte.rechts > :not(.jetzt-box){grid-column:2;margin-top:9px}
+    body.einzel .ablauf-box{grid-column:1;grid-row:1/-1;display:flex;min-height:300px}
+    body.einzel .jetzt-box{grid-column:2;grid-row:1;min-height:0;overflow:auto}
+    body.einzel .spalte.rechts > :not(.jetzt-box){grid-column:2;margin-top:8px}
     body.einzel .ablauf-box .vorschau{flex:1 1 0;min-height:0;max-height:none;contain:size}
-    body.einzel .jetzt-box .fq-panel{flex:1 1 0;min-height:150px;max-height:none;contain:size}
+    body.einzel .jetzt-box .fq-panel{flex:1 1 0;min-height:90px;max-height:none;contain:size}
   }
   body.einzel .preset-aktiv{font-size:18px}
   body.einzel .status{font-size:15px}
@@ -308,6 +312,7 @@
   .balken > div{height:100%;width:0;background:var(--royal);transition:width .25s}
   .knoepfe{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;padding-bottom:3px}
   .knoepfe.sprung{gap:8px;margin-top:-2px}
+  .knopf-zeile{display:flex;flex-direction:column;gap:9px}   /* 0.9.40: Start/Stopp und Sprung-Knöpfe */
   details.protokoll summary{font-size:12.5px;color:var(--text-light);cursor:pointer}
   details.protokoll pre{font:12px/1.4 Consolas,monospace;background:var(--royal-deep);color:#d7e6f5;border-radius:8px;padding:8px;max-height:420px;min-height:120px;overflow:auto;white-space:pre-wrap;margin:6px 0 0;resize:vertical}
   .proto-knopf{display:flex;justify-content:flex-end;margin-top:4px}
@@ -406,6 +411,7 @@
       <div class="gx-reihe"><input class="gx-befehl" spellcheck="false" autocomplete="off" placeholder=":w24=78,"><button class="ghost klein btn-gx-senden">Senden</button></div>
     </div>
     <div class="balken"><div></div></div>
+    <div class="knopf-zeile">
     <div class="knoepfe">
       <button class="btn-start">Start</button>
       <button class="btn-weiter ghost" hidden>Fortsetzen</button>
@@ -415,6 +421,7 @@
       <button class="ghost klein btn-naechste-f" disabled title="Laufende Frequenz (bzw. Pause) beenden und mit der nächsten weitermachen">⏭ Nächste Frequenz</button>
       <button class="ghost klein btn-naechstes-p" disabled title="Laufendes Programm beenden und mit dem nächsten in der Liste weitermachen">⏭ Nächstes Programm</button>
       <button class="ghost klein btn-pause" disabled title="Laufendes Programm anhalten (Ausgänge aus, Stelle bleibt). Dann beim laufenden Programm NF/HF/Dual umstellen und mit «▶ Weiter» an derselben Stelle fortsetzen.">⏸ Pause</button>
+    </div>
     </div>
     <div class="fq-panel"><div class="fq"></div></div>
     </div>

@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.39';
+const VERSION = '0.9.40';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -2883,7 +2883,7 @@ function zeige(g, merken = true) {
   if (!g) return;
   gezeigt = g;
   for (const x of generatoren) x.karte.classList.toggle('gezeigt', x === g);
-  requestAnimationFrame(() => { g.vorschauHoehe(); g.zeigeBalken(true); });   // 0.9.21: Karte jetzt sichtbar
+  requestAnimationFrame(() => { setzeKartenHoehe(); g.vorschauHoehe(); g.zeigeBalken(true); });   // 0.9.21: Karte jetzt sichtbar; 0.9.40 Höhe
   if (merken) { ansicht.nr = zahl(g); speichere(ANSICHT, ansicht); }
   aktualisiereLeiste();
 }
@@ -2900,7 +2900,8 @@ function setzeAnsicht(einzel) {
   $('#btn-ansicht').textContent = einzel ? 'Alle zeigen' : 'Nur gewählten';
   setzeKopfHoehe();
   alleKarten(g => { g.vorschauHoehe(); g.zeigeBalken(); });   // 0.9.21
-  if (gezeigt) gezeigt.karte.scrollIntoView({ block: 'start' });
+  setzeKartenHoehe();
+  if (gezeigt) zurKarte(gezeigt);
 }
 
 /** Zur Karte des Generators mit dieser Nummer gehen (Einzelansicht: nur sie zeigen) und sie kurz hervorheben. */
@@ -2908,7 +2909,7 @@ function springeZu(nr) {
   const g = generatoren.find(x => zahl(x) === Number(nr));
   if (!g) { setzeQuelle('#kontrolle-status', `Blatt ${nr} angeklickt – kein Generator mit Nummer ${nr} verbunden`, 'fehler'); return; }
   zeige(g);
-  g.karte.scrollIntoView({ behavior: ansicht.einzel ? 'auto' : 'smooth', block: 'start' });
+  zurKarte(g, ansicht.einzel ? 'auto' : 'smooth');
   g.karte.classList.remove('markiert'); void g.karte.offsetWidth; g.karte.classList.add('markiert');
 }
 
@@ -2918,21 +2919,26 @@ function setzeKopfHoehe() {
   setzeKartenHoehe();
   alleKarten(g => g.vorschauHoehe && g.vorschauHoehe());          // 0.9.21: Kopf schmal/gross -> Vorschau bis zum Fensterrand
 }
-/** 0.9.39: Einzelansicht – die Karte reicht bis zum Fensterrand unter dem schmalen Kopf; der Fuss rutscht unter den Rand.
- *  Gerechnet wird immer mit dem schmalen Kopf: die Höhe hängt nur vom Fenster ab, nie vom Inhalt oder vom Scrollen – sie bleibt ruhig.
- *  Beim Springen zu einer Karte landet sie direkt unter dem schmalen Kopf (scroll-margin mit --kopf-klein). */
+/** 0.9.40: Einzelansicht breit – die Karte passt ganz ins Fenster, wenn die Seite oben steht (grosser Kopf, Quellen-Kacheln):
+ *  von ihrer Oberkante bis zum Fensterrand, nichts abgeschnitten, kein Scrollen nötig; der Fuss liegt unter dem Rand.
+ *  Die Höhe hängt nur von Fenster, Kopf und Kacheln ab, nie vom Inhalt der Karte – sie bleibt ruhig. */
+function breitEinzel() { return document.body.classList.contains('einzel') && window.innerWidth >= 980; }
 function setzeKartenHoehe() {
-  const b = document.body, kb = $('#kopfbereich');
-  if (!kb) return;
-  let klein;
-  if (b.classList.contains('gescrollt')) klein = kb.offsetHeight;
-  else { b.classList.add('gescrollt'); klein = kb.offsetHeight; b.classList.remove('gescrollt'); }
-  const h = Math.max(560, window.innerHeight - klein - 26);
-  if (setzeKartenHoehe.w === window.innerWidth && Math.abs((setzeKartenHoehe.h || 0) - h) <= 8) return;   // kleine Kopf-Zuckungen ignorieren
+  const b = document.body, k = gezeigt && gezeigt.karte;
+  if (!k || !k.offsetParent) return;
+  const war = b.classList.contains('gescrollt');
+  if (war) b.classList.remove('gescrollt');                       // immer mit grossem Kopf rechnen (so steht die Seite oben)
+  const oben = k.getBoundingClientRect().top + window.scrollY;
+  if (war) b.classList.add('gescrollt');
+  const h = Math.max(480, Math.floor(window.innerHeight - oben - 14));
+  if (setzeKartenHoehe.w === window.innerWidth && Math.abs((setzeKartenHoehe.h || 0) - h) < 1) return;
   setzeKartenHoehe.w = window.innerWidth; setzeKartenHoehe.h = h;
-  const r = document.documentElement.style;
-  r.setProperty('--kopf-klein', klein + 'px');
-  r.setProperty('--karte-h', h + 'px');
+  document.documentElement.style.setProperty('--karte-h', h + 'px');
+}
+/** Zur gezeigten Karte: breit ganz nach oben (dort passt sie ganz), sonst Karte an den Kopf. */
+function zurKarte(g, behavior = 'auto') {
+  if (breitEinzel()) { window.scrollTo({ top: 0, behavior }); return; }
+  g.karte.scrollIntoView({ behavior, block: 'start' });
 }
 /** Beim Scrollen bleibt der Kopf stehen und wird schmal (kleines Logo); oben wieder gross. */
 function beobachteScrollen() {
@@ -3143,6 +3149,7 @@ async function init() {
   setzeAnsicht(ansicht.einzel);
   window.addEventListener('resize', () => { setzeKopfHoehe(); alleKarten(g => { g.vorschauHoehe(); g.zeigeBalken(); }); });   // 0.9.21
   beobachteScrollen();
+  if (window.ResizeObserver) { const ro = new ResizeObserver(() => setzeKartenHoehe()); for (const e of [$('#kopfbereich'), $('.quellen')]) if (e) ro.observe(e); }   // 0.9.40
   window.addEventListener('beforeunload', (ev) => { speichereAlle(); if (generatoren.some(g => g.lauf)) { ev.preventDefault(); ev.returnValue = ''; } });
   if (await verbindeBruecke()) {
     modus = 'bruecke';

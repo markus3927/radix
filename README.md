@@ -58,6 +58,14 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.40 (Brücke bleibt 1.2.1) – Karte passt ganz ins Fenster, ohne Scrollen
+
+- Markus 19.11.2026 22.38: «Jetzt sind die Felder rechts abgeschnitten und muss scrollen» – 0.9.39 rechnete mit dem schmalen Kopf.
+- Einzelansicht breit: Höhe = Fenster minus Oberkante der Karte bei Seite oben (grosser Kopf + Kacheln). Alles sichtbar, unten bündig, Fuss unter dem Rand. Springen geht breit nach ganz oben (`zurKarte`).
+- Karte zu (keine Werkzeuge offen): feste Höhe; reicht der Platz nicht, scrollt «Jetzt» innen. Mit offenem Werkzeug wächst die Karte.
+- Start/Stopp und Sprung-Knöpfe in einer Zeile (`.knopf-zeile`), Werkzeug-Zeilen etwas flacher.
+- Nummern-Leiste: Knöpfe fest 32 px hoch – vorher +2 px bei laufendem Generator (2-px-Rand), die ganze Seite hüpfte.
+
 ## Stand Version 0.9.39 (Brücke bleibt 1.2.1) – Karte füllt das Fenster, ruhige Höhe
 
 - Markus 19.11.2026 22.19/22.22: «linkes Feld unten bündig mit dem Protokoll» – «das Feld wird grösser und kleiner, das sollte still sein und bis ganz unten gehen, dass der Footer verschwindet wie bei den Nachbarn».
