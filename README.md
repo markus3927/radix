@@ -58,6 +58,17 @@ Läuft in Google Chrome oder Microsoft Edge, lässt sich als App installieren un
 15. **Generator-Nummer** mit ◀ ▶ ändern (tauscht wie bisher mit der Karte dieser Nummer). Im Test zeigt das Display gleich die neue
     Nummer. **Test beenden** (oder Stopp) beendet den Test, die Ausgänge bleiben aus.
 
+## Stand Version 0.9.32 (Brücke bleibt 1.2.1) – Liste modern, Startzeiten bündig, Frequenzen rechts
+
+- Markus 19.11.2026 17.04 zu 0.9.31: Liste «sieht so oldschool aus», ganzer Text nur mit Schieben, Startzeiten in gleicher Schrift; Startzeiten in der Vorschau
+  nicht untereinander; «den Platz gebrauchen wo das Protokoll ist»; Namen kurz, Rest bei Mouse over.
+- **Programmliste**: normale Schrift, lange Zeilen brechen um (kein seitliches Schieben). Farben aus einem Bild hinter dem durchsichtigen Feld:
+  Nummer blau, Name grau, «um 17:40» gelb hinterlegt, laufende Zeile in Programmfarbe (ersetzt den Balken von 0.9.21). Nur Farben, keine fette Schrift,
+  damit der Cursor genau auf dem Text bleibt.
+- **Vorschau**: eigene Spalte für die Startzeit (fett, bündig), daneben die Dauer. Namen gekürzt bis zur ersten Klammer bzw. « - », ganzer Name im Popup.
+- **Frequenzen rechts** unter den Knöpfen (wo das Protokoll war): laufendes Programm, oder das angetippte (Rahmen in der Liste, «↩ laufendes» zurück).
+  2 gelaufene, laufende, 10 kommende, «… weitere» = alle. Protokoll darunter, eingeklappt («für Claude»).
+
 ## Stand Version 0.9.31 (Brücke bleibt 1.2.1) – Uhrzeit je Programm und Frequenzliste
 
 - Markus 19.11.2026: «Beim solo radix für plasma und contact hast du mir das mit der zeit eingebaut. Wie wäre es wenn du mir sowas auch im big radix einbaust?» – Entwurf 2 (in der Programmliste) freigegeben.

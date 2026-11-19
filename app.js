@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.31';
+const VERSION = '0.9.32';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -776,6 +776,28 @@ const fmtUhr = (ms) => { const d = new Date(ms), h = new Date(); const tag = d.t
  * Programms. Kommt vorher eine Zeitmarke, endet es dort (wie im Ablauf: die fällige Zeitmarke beendet das Programm).
  * Ende der ganzen Liste nur im letzten Durchlauf: jede Zeitmarke setzt die Uhr auf ihre Zeit (warten oder abbrechen), dann weiter mit den Dauern.
  */
+/** 0.9.32: kurzer Programmname – bis zur ersten Klammer bzw. « - » («Gutartige Prostatavergrösserung (BPH) (…)» → «Gutartige Prostatavergrösserung»). */
+function kurzName(n) {
+  const s = String(n || ''), lauf = (/ · Lauf \d+\/\d+$/.exec(s) || [''])[0], ohne = lauf ? s.slice(0, -lauf.length) : s;
+  const k = ohne.split(/ \(| - | – /)[0].trim();
+  return (k.length >= 3 ? k : ohne) + lauf;
+}
+/**
+ * 0.9.32 (Markus 19.11.2026: Liste «sieht so oldschool aus», «für den ganzen Text müsste ich den Balken verschieben», «Startzeiten in der gleichen Schrift»):
+ * Bild hinter dem (durchsichtigen) Eingabefeld – gleiche Schrift und Umbrüche, nur Farben: Nummer blau, Name grau, «um 17:40» gelb hinterlegt,
+ * laufende Zeile in Programmfarbe. Keine fette Schrift (sonst passt der Cursor nicht mehr auf den Text).
+ */
+function listeBildHtml(text) {
+  return String(text).split('\n').map(z => {
+    let cls = '', inner;
+    const m = /^(\s*)((?:pr|pp)\d{4}(?:\s+(?:NF|HF))?|pa\d+|sm\d+)(.*)$/i.exec(z);
+    if (/^\s*um\s+\d{1,2}[:.]\d{2}/i.test(z)) { cls = ' zm'; inner = esc(z); }
+    else if (/^\s*loop-\d+/i.test(z)) { cls = ' loop'; inner = esc(z); }
+    else if (m) inner = `${esc(m[1])}<span class="c">${esc(m[2])}</span><span class="n">${esc(m[3]).replace(/↻|\[1×\]|\[Dual\]/g, x => `<span class="r">${x}</span>`)}</span>`;
+    else inner = `<span class="e">${esc(z)}</span>`;
+    return `<div class="lz${cls}">${inner || '\u200b'}</div>`;
+  }).join('');
+}
 /** 0.9.31: kurze Uhrzeit für Listen «16.34», an einem anderen Tag «Fr 16.34». */
 const uhrKurz = (ms) => { const d = new Date(ms), h = new Date(); return (d.toDateString() === h.toDateString() ? '' : WOCHENTAGE[d.getDay()].slice(0, 2) + '\u00a0') + `${zwei(d.getHours())}.${zwei(d.getMinutes())}`; };
 const mmss = (sek) => { sek = Math.max(0, Math.ceil(sek)); const h = Math.floor(sek / 3600), m = Math.floor(sek % 3600 / 60), x = sek % 60; return h ? `${h}:${zwei(m)}:${zwei(x)}` : `${m}:${zwei(x)}`; };
@@ -1338,13 +1360,17 @@ class Generator {
       const b = ev.target.closest('button[data-z]'); if (b) { this.setzeVariante(+b.dataset.z, b.dataset.v); return; }
       if (ev.target.closest('button')) return;
       // 0.9.31: «… weitere» zeigt alle Frequenzen des Programms; Programmzeile antippen klappt ihre Frequenzen auf/zu (immer nur eine offen)
-      if (ev.target.closest('[data-fq-alle]')) { this.fqAlle = !this.fqAlle; this.zeigeFrequenzen(true); return; }
+      // 0.9.32: Programmzeile antippen = ihre Frequenzen rechts zeigen; nochmals = wieder das laufende
       const p = ev.target.closest('div.p.auf');
       if (p && !(getSelection() || '').toString()) {
         const pi = +p.dataset.pi, jetztOffen = this.fqWahl != null ? this.fqWahl : this.fqLaufPi;
-        this.fqWahl = pi === jetztOffen ? -1 : pi; this.fqAlle = false;
+        this.fqWahl = pi === jetztOffen ? null : pi; this.fqAlle = false;
         this.pruefe();
       }
+    };
+    $('.fq', k).onclick = (ev) => {
+      if (ev.target.closest('[data-fq-alle]')) { this.fqAlle = !this.fqAlle; this.zeigeFrequenzen(true); return; }
+      if (ev.target.closest('[data-fq-laufend]')) { this.fqWahl = null; this.fqAlle = false; this.pruefe(); }
     };
     $('.protokoll', k).ontoggle = () => { $('.protokoll pre', k).textContent = this.protokoll.join('\n'); };
     $('.btn-kopieren', k).onclick = () => this.kopiereProtokoll();
@@ -1908,14 +1934,16 @@ class Generator {
     // 0.9.28: Startzeiten je Listenzeile · 0.9.31: schon hier, für die Uhrzeit in jeder Zeile und die Frequenzliste
     let st = {}; try { st = this.startZeiten(anzeigen, zeiten, ab, von); } catch (e) { st = {}; }
     this.fqDaten = { anzeigen, zeiten, st };
+    this.fqPi = -1;
     const lauftPi = this.lauf && this.lauf.status !== 'wartet' ? aktPi : -1;
     if (lauftPi !== this.fqLaufPi) { this.fqLaufPi = lauftPi; this.fqWahl = null; this.fqAlle = false; }   // neues Programm läuft: wieder automatisch das laufende aufklappen
     const offen = this.fqWahl != null ? this.fqWahl : lauftPi;
+    { const it = anzeigen.items[offen]; this.fqPi = it && !it.fehler && it.ende > it.start ? offen : -1; }
     const zeilenHtml = anzeigen.items.map((it, i) => {
       if (it.r.art === 'zeit') {
         const ms = this.lauf ? (this.lauf.plan.schritte[it.start] || {}).zeitMs : zeiten[it.start];
         const wann = ms ? fmtStart(ms) : `${it.r.um} Uhr`;
-        return `<div class="p marke" data-pi="${i}"><code>⏰</code><span class="name">Start um ${wann}</span><span class="zeit"></span>` +
+        return `<div class="p marke" data-pi="${i}"><code>⏰</code><span class="name">Start um ${wann}</span><span class="uhr"></span><span class="zeit"></span>` +
           `<span class="pinfo">Was darunter steht, startet erst um ${it.r.um} Uhr. Läuft dann noch ein Programm davor, wird es beendet.</span></div>`;
       }
       const nv = /^(pr\d{4}) (NF|HF)$/.exec(it.code || ''), andere = nv && (nv[2] === 'NF' ? 'HF' : 'NF');
@@ -1929,13 +1957,15 @@ class Generator {
       const wahl = /NF oder HF/.test(it.fehler || '') ? ` <button class="ghost klein" data-z="${it.zeilenNr}" data-v="NF">NF</button> <button class="ghost klein" data-z="${it.zeilenNr}" data-v="HF">HF</button>` : '';
       const hinweis = it.fehler ? esc(it.fehler) + wahl : (it.warnungen || []).filter(x => !NICHT_UNTERSTUETZT.test(x)).map(esc).join(' · ');
       // 0.9.31 (Markus 19.11.2026): Startzeit fett vor der Dauer; das laufende Programm zeigt, bis wann es läuft
+      // 0.9.32 (Markus 19.11.2026: «Startzeiten nicht gleich untereinander», «nur pp0140 Gutartige Prostatavergrösserung, den Rest bei Mouse over»):
+      // Startzeit eigene Spalte (bündig), Name gekürzt, ganzer Name + Zeile im Popup
       let uhr = '';
-      if (!it.fehler && i === lauftPi) { try { uhr = `<b class="uhr">läuft bis ${uhrKurz(laufZeiten(this.lauf).progEnde)}</b>`; } catch (e) { uhr = '<b class="uhr">läuft</b>'; } }
-      else if (!it.fehler && st[i] != null) uhr = `<b class="uhr">${uhrKurz(st[i])}</b>`;
+      if (!it.fehler && i === lauftPi) { try { uhr = `bis ${uhrKurz(laufZeiten(this.lauf).progEnde)}`; } catch (e) { uhr = 'läuft'; } }
+      else if (!it.fehler && st[i] != null) uhr = uhrKurz(st[i]);
       const auf = !it.fehler && it.ende > it.start;
-      return `<div class="p${it.fehler ? ' fehler' : ''}${auf ? ' auf' : ''}${i === offen && auf ? ' offen' : ''}" data-pi="${i}"><code>${esc(it.code)}</code><span class="name" title="${esc(it.zeile)}">${esc(it.name)}</span><span class="zeit">${uhr}${it.sek != null ? fmtZeit(it.sek) : ''}</span>` +
-        `<span class="pinfo">${preset}${wob}${hinweis ? (preset ? ' · ' : '') + hinweis : ''}${wechsel}${dualKnopf}</span></div>` +
-        (i === offen && auf ? `<div class="fq" data-fq="${i}"></div>` : '');
+      const voll = it.name + (it.zeile && it.zeile.trim() !== String(it.code).trim() && !it.zeile.includes(it.name) ? `\n${it.zeile}` : '');
+      return `<div class="p${it.fehler ? ' fehler' : ''}${auf ? ' auf' : ''}${i === offen && auf ? ' offen' : ''}" data-pi="${i}" title="${esc(it.code + ' ' + voll)}"><code>${esc(it.code)}</code><span class="name">${esc(kurzName(it.name))}</span><span class="uhr${i === lauftPi ? ' laeuft' : ''}">${uhr}</span><span class="zeit">${it.sek != null ? fmtZeit(it.sek) : ''}</span>` +
+        `<span class="pinfo">${preset}${wob}${hinweis ? (preset ? ' · ' : '') + hinweis : ''}${wechsel}${dualKnopf}</span></div>`;
     });
     // 0.9.28 (Markus 15.11.2026: «das wäre besser und übersichtlicher»): kommende Fixkacheln nach Uhrzeit zwischen die Programme der Liste
     // (bisher alle zuunterst, nach der ganzen Liste – bei langer Liste nur mit Scrollen zu sehen)
@@ -1959,7 +1989,7 @@ class Generator {
     let k = []; try { k = fixKommendFuer(zahl(this)); } catch (e) { k = []; }
     const zeilen = k.map(f => {
       const codes = f.prog.map(p => p.code).join(', '), sek = Math.round((f.ende - f.startMs) / 1000);
-      return { startMs: f.startMs, html: `<div class="p fixk"><code>🗓</code><span class="name">${esc(f.name)} · ${esc(fmtStart(f.startMs))}</span><span class="zeit">${fmtZeit(sek)}</span>` +
+      return { startMs: f.startMs, html: `<div class="p fixk" title="${esc(f.name + ' · ' + fmtStart(f.startMs))}"><code>🗓</code><span class="name">${esc(f.name)} · Fixkachel</span><span class="uhr">${uhrKurz(f.startMs)}</span><span class="zeit">${fmtZeit(sek)}</span>` +
         `<span class="pinfo">Fixkachel, startet von selbst (läuft dann noch etwas, danach): ${esc(codes)}</span></div>` };
     }).sort((a, b) => a.startMs - b.startMs);
     const h = zeilen.map(z => z.html).join('');
@@ -2015,10 +2045,13 @@ class Generator {
       const l = this.lauf, x = l && l.status !== 'wartet' && l.plan.schritte[l.schritt], pi = x && !x.marke ? x.pi : (x ? x.pi : -1);
       if (pi !== this.fqLaufPi) { this.pruefe(); return; }
     }
-    const vs = $('.vorschau', this.karte), box = vs && vs.querySelector('.fq');
+    const box = $('.fq', this.karte);
     if (!box || !this.fqDaten) return;
     this.fqFarbe = 'h';
-    try { box.innerHTML = this.frequenzHtml(+box.dataset.fq, jetztMs); } catch (e) { box.innerHTML = ''; }
+    let h = '';
+    if (this.fqPi >= 0) { try { h = this.frequenzHtml(this.fqPi, jetztMs); } catch (e) { h = ''; } }
+    if (!h) h = `<div class="fq-leer">${this.lauf ? '' : 'Programm in der Liste antippen – hier stehen dann seine Frequenzen mit Uhrzeit.'}</div>`;
+    if (h !== this.fqHtml) { box.innerHTML = h; this.fqHtml = h; }
     box.className = 'fq fa-' + this.fqFarbe;
   }
   frequenzHtml(pi, jetztMs) {
@@ -2066,17 +2099,18 @@ class Generator {
     };
     let von = 0, bis = n;
     if (!this.fqAlle) {
-      if (akt >= 0 && akt < n) { von = Math.max(0, akt - 2); bis = Math.min(n, akt + 5); }
+      if (akt >= 0 && akt < n) { von = Math.max(0, akt - 2); bis = Math.min(n, akt + 11); }
       else if (akt >= n) { von = Math.max(0, n - 3); bis = n; }
-      else bis = Math.min(n, 6);
+      else bis = Math.min(n, 12);
     }
-    let h = `<div class="fk ${farbe}">Frequenzen ${esc(it.code)} · ${kopf}</div>`;
+    const zurueck = this.fqWahl != null && this.fqLaufPi >= 0 && this.fqWahl !== this.fqLaufPi ? ' <span class="zurueck" data-fq-laufend="1" title="Wieder das laufende Programm zeigen">↩ laufendes</span>' : '';
+    let h = `<div class="fk ${farbe}" title="${esc(it.code + ' ' + it.name)}">Frequenzen ${esc(it.code)} · ${kopf}${zurueck}</div><div class="fname">${esc(kurzName(it.name))}</div>`;
     if (von > 0) h += `<div class="r mehr" data-fq-alle="1"><span></span><span>… ${von} ${akt >= 0 && von <= akt ? 'gelaufen' : 'davor'}</span><span></span><span class="t"></span></div>`;
     for (let j = von; j < bis; j++) h += zeile(j);
     if (bis < n) {
       const letzte = ein[n - 1], ende = letzte.von != null ? Math.min(letzte.von + letzte.sek * 1000, schluss) : null;
       h += `<div class="r mehr" data-fq-alle="1"><span></span><span>… ${n - bis} weitere</span><span></span><span class="t">${ende != null ? 'bis ' + uhrKurz(ende) : ''}</span></div>`;
-    } else if (this.fqAlle && n > 7) h += `<div class="r mehr" data-fq-alle="1"><span></span><span>weniger zeigen</span><span></span><span class="t"></span></div>`;
+    } else if (this.fqAlle && n > 14) h += `<div class="r mehr" data-fq-alle="1"><span></span><span>weniger zeigen</span><span></span><span class="t"></span></div>`;
     return h;
   }
   markiereAktiv() {
@@ -2103,23 +2137,28 @@ class Generator {
    * auf Zeitmarke). Während im Feld getippt wird (Text ≠ laufende Liste), ist er weg.
    */
   zeigeBalken(scrollen = false) {
-    const li = $('.liste', this.karte), b = $('.liste-balken', this.karte);
-    if (!li || !b) return;
+    // 0.9.32: statt Balken über dem Feld färbt das Bild hinter dem Feld die laufende Zeile (stimmt auch bei umbrochenen Zeilen)
+    const li = $('.liste', this.karte), bild = $('.liste-bild', this.karte);
+    if (!li || !bild) return;
+    if (li.value !== this.bildText) { this.bildText = li.value; bild.innerHTML = listeBildHtml(li.value); this.bildAktiv = null; }
     const l = this.lauf, s = l && l.plan.schritte[l.schritt], it = s && l.items[s.pi];
-    if (!it || it.zeilenNr == null || li.value !== l.listeText) { b.hidden = true; return; }
-    const cs = getComputedStyle(li), lh = parseFloat(cs.lineHeight) || 19.5, pt = parseFloat(cs.paddingTop) || 0;
-    if (scrollen && document.activeElement !== li) {
-      const ziel = pt + it.zeilenNr * lh;
-      if (ziel < li.scrollTop || ziel + lh > li.scrollTop + li.clientHeight) li.scrollTop = Math.max(0, ziel - lh);
+    let z = -1, cls = '';
+    if (it && it.zeilenNr != null && li.value === l.listeText) {
+      const ein = s.marke ? null : l.einst[s.ei ?? l.aktivEi];
+      z = it.zeilenNr; cls = s.marke ? 'w' : farbArt(it, ein && ein.e, s);
     }
-    const oben = li.offsetTop + li.clientTop, y = oben + pt + it.zeilenNr * lh - li.scrollTop;
-    const y1 = Math.max(y, oben), y2 = Math.min(y + lh, oben + li.clientHeight);
-    if (y2 - y1 < 2) { b.hidden = true; return; }
-    const ein = s.marke ? null : l.einst[s.ei ?? l.aktivEi];
-    b.className = 'liste-balken ' + (s.marke ? 'w' : farbArt(it, ein && ein.e, s));
-    b.style.top = y1 + 'px'; b.style.height = (y2 - y1) + 'px';
-    b.style.left = (li.offsetLeft + li.clientLeft) + 'px'; b.style.width = li.clientWidth + 'px';
-    b.hidden = false;
+    const key = z + '|' + cls;
+    if (key !== this.bildAktiv) {
+      for (const d of bild.querySelectorAll('.lz.aktiv')) d.classList.remove('aktiv', 'k', 'h', 'm', 'v', 'w');
+      const d = z >= 0 ? bild.children[z] : null;
+      if (d) d.classList.add('aktiv', cls);
+      this.bildAktiv = key;
+    }
+    if (scrollen && z >= 0 && document.activeElement !== li) {
+      const d = bild.children[z];
+      if (d && (d.offsetTop < li.scrollTop || d.offsetTop + d.offsetHeight > li.scrollTop + li.clientHeight)) li.scrollTop = Math.max(0, d.offsetTop - d.offsetHeight - 6);
+    }
+    bild.scrollTop = li.scrollTop;
   }
   /** 0.9.21: In der Einzelansicht reicht die Vorschau bis zum Fensterrand – sie scrollt für sich, die Liste darüber bleibt sichtbar. */
   vorschauHoehe() {
@@ -2129,6 +2168,8 @@ class Generator {
     const kopf = ($('#kopfbereich') || {}).offsetHeight || 0;
     const ab = vs.getBoundingClientRect().top - this.karte.getBoundingClientRect().top;
     vs.style.maxHeight = Math.max(220, window.innerHeight - kopf - ab - 28) + 'px';
+    const fp = $('.fq-panel', this.karte);                           // 0.9.32: Frequenzliste rechts bis zum Fensterrand
+    if (fp && window.innerWidth >= 980) fp.style.maxHeight = Math.max(200, window.innerHeight - kopf - (fp.getBoundingClientRect().top - this.karte.getBoundingClientRect().top) - 60) + 'px';
   }
 
   sperre(laufend) {
