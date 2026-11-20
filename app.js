@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.44';
+const VERSION = '0.9.45';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -2790,7 +2790,9 @@ class Generator {
   zeigeFortschritt() {
     const l = this.lauf; if (!l) return;
     const s = l.plan.schritte[l.schritt], it = l.items[s.pi];
-    if (s.marke) { this.setzeStatus(`Wartet bis ${fmtStart(s.zeitMs)}, Ausgänge aus`, 'warnung', `Start in ${fmtZeit((s.zeitMs - Date.now()) / 1000)}`); return; }
+    // 0.9.45 (Markus 20.11.2026, Gen 5 Olga: «das was gelaufen ist sollte doch grau sein»): auch beim Warten auf eine Zeitmarke den Ablauf
+    // nachführen – bisher blieb er auf dem Stand vom letzten Programm stehen (gelaufener Block nicht grau, «bis 06.08 Uhr» noch markiert)
+    if (s.marke) { this.setzeStatus(`Wartet bis ${fmtStart(s.zeitMs)}, Ausgänge aus`, 'warnung', `Start in ${fmtZeit((s.zeitMs - Date.now()) / 1000)}`); this.zeigeFrequenzen(); return; }
     const vorher = l.plan.schritte.slice(0, l.schritt).reduce((a, x) => a + x.sek, 0) + l.tImSchritt;
     const was = s.luecke && l.f1 != null ? `Out1 ${fmtHz(l.f1)} · Out2 ${fmtHz(l.f2)}` : s.pause ? 'Pause (0 V, Ausgänge an)' : `Out1 ${fmtHz(l.f1)} · Out2 ${fmtHz(l.f2)}`;   // MW-Lücke: Anzeige bleibt ruhig
     const ein = l.einst[s.ei ?? l.aktivEi];
@@ -2883,7 +2885,7 @@ function zeige(g, merken = true) {
   if (!g) return;
   gezeigt = g;
   for (const x of generatoren) x.karte.classList.toggle('gezeigt', x === g);
-  requestAnimationFrame(() => { setzeKartenHoehe(); g.vorschauHoehe(); g.zeigeBalken(true); });   // 0.9.21: Karte jetzt sichtbar; 0.9.40 Höhe
+  requestAnimationFrame(() => { setzeKartenHoehe(); try { g.pruefe(); } catch (e) { /* egal */ } g.vorschauHoehe(); g.zeigeBalken(true); });   // 0.9.21: Karte jetzt sichtbar; 0.9.40 Höhe · 0.9.45: Ablauf frisch (war im Hintergrund nicht nachgeführt)
   if (merken) { ansicht.nr = zahl(g); speichere(ANSICHT, ansicht); }
   aktualisiereLeiste();
 }
