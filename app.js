@@ -2,7 +2,7 @@
  * Idee, Konzept & Architektur Markus Rufer · Technische Umsetzung. Claude by Anthropic
  */
 'use strict';
-const VERSION = '0.9.45';
+const VERSION = '0.9.46';
 // 0.8.8: Fensterleiste oben hellgrau wie Kontrollblatt und Frequenz-Finder (statt Blau aus dem Manifest).
 // Ein <meta name="theme-color"> geht in Chrome/Edge dem Manifest vor.
 (() => { try {
@@ -266,12 +266,17 @@ async function laufbuchBeimStart() {
       laufbuch.knopf.onclick = async () => {
         if (await h.requestPermission({ mode: 'readwrite' }) === 'granted') {
           laufbuch.frei = true; setzeAktion(laufbuch.knopf, 'Datei wählen'); laufbuch.knopf.onclick = laufbuchWaehlen;
-          await laufbuchSchreiben(); alleKarten(g => g.pruefe());
+          await laufbuchSchreiben(); await laufbuchLesen();
         }
       };
-    } else if (laufbuch.offen.length) laufbuchBald();
+    } else { if (laufbuch.offen.length) laufbuchBald(); await laufbuchLesen(); }
   }
   laufbuchStand();
+}
+/** 0.9.46: Einträge aus der Datei lesen (nur fürs Anzeigen «heute gelaufen»). */
+async function laufbuchLesen() {
+  try { const t = await (await laufbuch.handle.getFile()).text(); const j = t.trim() ? JSON.parse(t) : {}; if (Array.isArray(j.eintraege)) laufbuch.alle = j.eintraege; } catch (e) { /* egal */ }
+  try { alleKarten(g => g.pruefe()); } catch (e) { /* Karten noch nicht da */ }
 }
 /** Programmstart notieren (wartet im Browser, bis er in der Datei steht). */
 function laufbuchNotiere(e) {
@@ -297,6 +302,7 @@ async function laufbuchSchreiben() {
     const w = await laufbuch.handle.createWritable();
     await w.write(JSON.stringify({ radix: VERSION, stand: new Date().toISOString(), hinweis: 'Schreibt nur RADIX (jeder Programmstart, ab 0.9.19 auch normale Listen). Die Kontrollapp liest diese Datei.', eintraege, auftraege, vorschau, vorschauStand: Date.now(), plan: (() => { try { return planAlle(); } catch (e) { return {}; } })(), ...(laufbuch.aktiv ? { aktiv: laufbuch.aktiv, aktivZeit: laufbuch.aktivZeit } : {}) }, null, 1));
     laufbuch.vorschau = vorschau; laufbuch.vorschauT = Date.now();
+    laufbuch.alle = eintraege;                                     // 0.9.46: fürs «heute gelaufen» in der Karte
     await w.close();
     const ids = new Set(mit.map(e => e.id));
     laufbuch.offen = laufbuch.offen.filter(e => !ids.has(e.id));
@@ -745,6 +751,40 @@ function markenSichern(l) {
   const m = {};
   (l.plan.schritte || []).forEach((x, k) => { if (x.marke && x.zeitMs) m[k] = x.zeitMs; });
   return m;
+}
+/**
+ * 0.9.46 (Markus 21.11.2026, Gen 6 Linda: etwas im Kontrollblatt angehängt, danach lief die Liste neu an und wartete auf «So 05:00» –
+ * «jetzt ist der ganze samstag weg. das sollte nicht so sein»): Wird dieselbe Liste wieder gestartet (Stopp → Start, Neuladen → Start
+ * statt Weiter), behält sie den Zeitplan von heute. Rückgabe: Schritt der nächsten noch kommenden Zeitmarke (Zeiten der Zeitmarken
+ * aus «marken» gesetzt) oder -1 = wie bisher von vorne. Nur, wenn heute (≤ 24 h) schon eine Zeitmarke dieser Liste vorbei ist.
+ */
+function wiederAb(s, marken, jetzt) {
+  if (!s || !marken) return -1;
+  const ks = Object.keys(marken).map(Number);
+  if (!ks.length || ks.some(k => !s[k] || !s[k].marke || !(marken[k] > 0))) return -1;   // passt nicht zur Liste
+  const vorbei = ks.filter(k => marken[k] <= jetzt);
+  if (!vorbei.length || jetzt - Math.max(...vorbei.map(k => marken[k])) > 864e5) return -1;
+  const ziel = ks.filter(k => marken[k] > jetzt).sort((a, b) => a - b)[0];
+  if (ziel == null || ziel === 0) return -1;
+  for (const k of ks) s[k].zeitMs = marken[k];
+  return ziel;
+}
+/**
+ * 0.9.46 (Markus 21.11.2026: «bei manuela und den anderen sehe ich nicht mehr was gelaufen ist. so wie bei mir auf gen 1»): Was heute
+ * auf diesem Generator lief, bevor der laufende Durchlauf begann (Liste ersetzt, neuer Durchlauf der Endlosschleife), aus dem Laufbuch.
+ */
+function heuteGelaufen(alle, nr, ab, jetzt = Date.now()) {
+  if (!Array.isArray(alle) || !ab) return [];
+  const mitternacht = new Date(jetzt).setHours(0, 0, 0, 0), n = Number(nr);
+  const gesehen = new Set();
+  return alle.filter(e => e && Number(e.gen) === n && e.t >= mitternacht && e.t < ab - 2000 && !gesehen.has(e.id) && gesehen.add(e.id))
+    .sort((a, b) => a.t - b.t);
+}
+/** 0.9.46: Stand von vor 0.9.46 (ohne «gestartet»): Zeitpunkt, zu dem heute ein Handy-Auftrag «ersetzen» die Liste neu gestartet hat, sonst null. */
+function ersetztHeute(nr, jetzt = Date.now()) {
+  const mitternacht = new Date(jetzt).setHours(0, 0, 0, 0);
+  const t = (auftrag.quittungen || []).filter(q => Number(q.gen) === Number(nr) && /-ersetzen$/.test(q.id || '') && q.t >= mitternacht && ['gestartet', 'laeuft'].includes(q.status)).map(q => q.t);
+  return t.length ? Math.max(...t) - 60000 : null;                  // Quittung «läuft» kommt ~30 s nach dem Start
 }
 /** 0.9.17: zuletzt verpasste Zeitmarke ab dem gespeicherten Schritt, die nachgeholt wird (höchstens NACHHOLEN_MAX her), sonst -1. */
 function nachholSchritt(s, von, stand, jetzt) {
@@ -1272,6 +1312,7 @@ class Generator {
     this.geleert = g.geleert || null;                                      // { blatt, datum, anzahl } – beim Leeren: was bis dahin in der Zeile stand, gilt als erledigt
     this.uebernommenMorgen = g.uebernommenMorgen || null;                  // 0.6.8: { blatt, datum (von morgen), anzahl, marke } – Zeile von morgen
     this.fortsetzen = g.lauf && g.lauf.liste === this.einst.liste ? g.lauf : null;   // gespeicherter Stand nach Neuladen
+    this.zuletzt = g.zuletzt || null;                                      // 0.9.46: Zeitplan des zuletzt gestoppten Laufs { liste, marken, t }
   }
   /** Felder der Karte mit den Einstellungen füllen. */
   zeigeEinst() {
@@ -1309,7 +1350,7 @@ class Generator {
   }
   daten() {
     const l = this.lauf;
-    return { ...this.einst, uebernommen: this.uebernommen, uebernommenMorgen: this.uebernommenMorgen, geleert: this.geleert, lauf: l && l.status !== 'fertig' ? { schritt: l.schritt, tImSchritt: l.tImSchritt, durchlauf: l.durchlauf, status: l.status, startUm: l.startUmMs, liste: l.listeText, geloggt: l.geloggt || null, marken: markenSichern(l), t: Date.now() } : (this.fortsetzen || null) };   // 0.9.17: marken, t · 0.9.20: ungenutzter Stand bleibt (2. Neuladen)
+    return { ...this.einst, uebernommen: this.uebernommen, uebernommenMorgen: this.uebernommenMorgen, geleert: this.geleert, lauf: l && l.status !== 'fertig' ? { schritt: l.schritt, tImSchritt: l.tImSchritt, durchlauf: l.durchlauf, status: l.status, startUm: l.startUmMs, liste: l.listeText, geloggt: l.geloggt || null, marken: markenSichern(l), t: Date.now(), gestartet: l.gestartet || null } : (this.fortsetzen || null), zuletzt: this.zuletzt || null };   // 0.9.46: gestartet, zuletzt   // 0.9.17: marken, t · 0.9.20: ungenutzter Stand bleibt (2. Neuladen)
   }
   /** Ganzes Protokoll in die Zwischenablage (zum Einfügen im Chat). */
   async kopiereProtokoll() {
@@ -1995,7 +2036,9 @@ class Generator {
     // 0.9.37 (Markus 19.11.2026 21.58: «Fr 04.00 Antiaging» stand unter «Heute · Donnerstag», darüber der gelaufene Trenner 17:40 – «verwirrt»):
     // jeder neue Tag bekommt seinen Trenner (auch Fixkacheln, Mitternacht); Trenner von Gelaufenem verschwinden mit dem eingeklappten Teil
     const istWar = (x, i) => this.lauf && i < aktPi;
-    const nWar = anzeigen.items.filter((x, i) => istWar(x, i) && x.r.art !== 'zeit').length;
+    // 0.9.46: was heute vor diesem Durchlauf lief (Liste ersetzt, neuer Durchlauf), aus dem Laufbuch – grau, nur zum Anschauen
+    const vorher = this.lauf ? heuteGelaufen(laufbuch.alle, this.einst.nr, this.lauf.gestartet) : [];
+    const nWar = anzeigen.items.filter((x, i) => istWar(x, i) && x.r.art !== 'zeit').length + vorher.length;
     const warSchalter = nWar ? `<div class="war-schalter" data-war="1">${this.warOffen ? '▾' : '▸'} ✓ ${nWar} gelaufen${this.warOffen ? ' – zuklappen' : ''}</div>` : '';
     const eintraege = anzeigen.items.map((it, i) => {
       const war = istWar(it, i);
@@ -2003,7 +2046,8 @@ class Generator {
       return { h: zeilenHtml[i], ms: war ? null : (this.lauf && i === aktPi ? Date.now() : st[i] ?? null), war, t: st[i] };
     });
     this.fixHtml();
-    const fx = this.fixZeilen || [], gemischt = [];
+    const fx = this.fixZeilen || [], gemischt = vorher.map(e => ({ war: true, ms: e.t, t: null,
+      h: `<div class="p war laufbuch" title="${esc(`${e.code}${e.var ? ' ' + e.var : ''} ${e.name || ''}\nGelaufen ${fmtStart(e.t)} (aus dem Laufbuch)`)}"><code>${esc(e.code + (e.var ? ' ' + e.var : ''))}</code><span class="name">${esc(kurzName(String(e.name || '').replace(/ - (NF|HF) \((Hz|kHz)\)$/, '')))}</span><span class="uhr">${nurUhr(e.t)}</span><span class="zeit">${e.sek != null ? fmtZeit(e.sek) : ''}</span><span class="pinfo">gelaufen (Laufbuch)</span></div>` }));
     let j = 0;
     eintraege.forEach(e => { if (e.t != null) while (j < fx.length && fx[j].startMs <= e.t) { gemischt.push({ h: fx[j].html, ms: fx[j].startMs }); j++; } gemischt.push(e); });
     while (j < fx.length) { gemischt.push({ h: fx[j].html, ms: fx[j].startMs }); j++; }
@@ -2382,6 +2426,10 @@ class Generator {
     const v = this.pruefe();
     if (!v) return;
     if (stand && stand.liste !== this.einst.liste) stand = null;
+    // 0.9.46: dieselbe Liste nochmals gestartet (nach Stopp oder Neuladen «Start» statt «Weiter»): Zeitplan von heute behalten
+    const frueher = stand || sofort || this.einst.startUm ? null
+      : this.fortsetzen && this.fortsetzen.liste === this.einst.liste && this.fortsetzen.marken ? this.fortsetzen
+      : this.zuletzt && this.zuletzt.liste === this.einst.liste ? this.zuletzt : null;
     this.fortsetzen = null;
     $('.btn-weiter', this.karte).hidden = true;
     let startUmMs = null;
@@ -2402,7 +2450,13 @@ class Generator {
       durchlaeufe: this.einst.durchlaeufe, zustand: K.neuerZustand(), status: startUmMs ? 'wartet' : 'einrichten',
       startUmMs, letzterTick: null, letzterTakt: null, beschaeftigt: false, aktivEi: null, aktivPi: null,
       geloggt: stand?.geloggt ?? null,                                // 0.7.9: «Durchlauf:Programm», das schon im Laufbuch steht
+      gestartet: stand ? (stand.gestartet || ersetztHeute(this.einst.nr)) : Date.now(),   // 0.9.46: Beginn dieses Durchlaufs (fürs «heute gelaufen»)
     };
+    if (frueher) {
+      const k = wiederAb(v.plan.schritte, frueher.marken, Date.now());
+      if (k > 0) { this.lauf.schritt = k; this.log(`⏰ Gleiche Liste wieder gestartet – Zeitplan von heute bleibt, weiter ab ${v.plan.schritte[k].um} (${fmtStart(v.plan.schritte[k].zeitMs)})`); }
+    }
+    this.zuletzt = null;
     this.rechneMarken(startUmMs || Date.now());
     if (stand) this.holeNach(stand);                                   // 0.9.17
     this.sperre(true);
@@ -2762,7 +2816,7 @@ class Generator {
         if (l.schritt >= l.plan.schritte.length) {
           l.schritt = 0;
           if (l.durchlaeufe && l.durchlauf >= l.durchlaeufe) { await this.stoppe('fertig'); return; }
-          l.durchlauf++;
+          l.durchlauf++; l.gestartet = Date.now();                    // 0.9.46
           this.log(`Durchlauf ${l.durchlauf} beginnt`);
           if (!this.einmalWeg()) { await this.stoppe('fertig'); return; }   // 0.9.20
           const ab = durchlaufAb(l.plan.schritte, Date.now());          // 0.9.8: frische Zeiten, nicht die von gestern
@@ -2807,6 +2861,7 @@ class Generator {
 
   async stoppe(grund, fehler = false) {
     const l = this.lauf;
+    if (l && l.plan && grund !== 'fertig') { try { this.zuletzt = { liste: l.listeText, marken: markenSichern(l), t: Date.now() }; } catch (e) { /* egal */ } }   // 0.9.46
     this.lauf = null;
     if (fehler) this.laufFehler = true;
     if (l && l.status !== 'wartet' && (!this.gx || this.verbunden)) {   // GX nicht verbunden (gesperrt): nichts senden, Anschluss bleibt zu
